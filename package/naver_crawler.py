@@ -362,17 +362,56 @@ class NaverCrawler:
         fl = v // 100 if v >= 100 else 1
         return -fl if basement else fl
 
-    def _resolve_specific_floor(self, floor: Any, total_floor: Any, hosu: Any = None) -> Any:
-        """'저/중/고' 같은 막연한 층 표기를 숫자 층으로 확정한다.
-        우선순위: 확정 호수의 층 → 총층 기준 대표층(저 20% / 중 50% / 고 80%). 이미 숫자면 그대로."""
+    def _format_hosu_candidates(self, candidates: List[str]) -> str:
+        """호수 후보(경우의 수)를 엑셀 셀 문자열로. 1개면 그대로, 여러 개면 층·호 순으로 쉼표 나열.
+        후보가 12개를 넘고 모두 3자리 이상 호이면 '3~5층 03/04/05호 (30개)' 형태로 줄인다."""
+        uniq = sorted(set(str(c).strip() for c in candidates if str(c).strip()))
+        if not uniq:
+            return ""
+        def _key(h: str):
+            fl = self._ho_floor_from_name(h)
+            d = re.sub(r"[^\d]", "", h)
+            return (fl if fl is not None else 10**6, int(d) if d else 10**9, h)
+        uniq.sort(key=_key)
+        if len(uniq) == 1:
+            return uniq[0]
+        if len(uniq) <= 12:
+            return ",".join(uniq)
+        floors = [self._ho_floor_from_name(h) for h in uniq]
+        nums = [int(re.sub(r"[^\d]", "", h) or 0) for h in uniq]
+        if all(f is not None for f in floors) and all(n >= 100 for n in nums):
+            lo, hi = min(floors), max(floors)
+            lines = sorted(set(f"{n % 100:02d}" for n in nums))
+            rng = f"{lo}층" if lo == hi else f"{lo}~{hi}층"
+            return f"{rng} {'/'.join(lines)}호 ({len(uniq)}개)"
+        return ",".join(uniq)
+
+    def _resolve_specific_floor(self, floor: Any, total_floor: Any, hosu: Any = None,
+                                hosu_floors: Optional[List[int]] = None) -> Any:
+        """'저/중/고' 같은 막연한 층 표기를 층(또는 층 범위)으로 바꾼다.
+        우선순위: 호수 후보들의 층 범위(한 층이면 그 층) → 총층 기준 저·중·고 구간(예: 1~5) → 대표층. 이미 숫자면 그대로."""
         text = str(floor or "").strip()
         if not text or re.search(r"\d", text):
             return floor
-        if hosu:
-            first = str(hosu).split(",")[0].strip()
-            hf = self._ho_floor_from_name(first)
-            if hf is not None:
-                return str(hf)
+        fls: List[int] = []
+        if hosu_floors:
+            fls = [int(f) for f in hosu_floors if f is not None]
+        elif hosu:
+            m_rng = re.match(r"\s*(-?\d+)(?:~(-?\d+))?층\s", str(hosu))
+            if m_rng:  # '3~5층 03/04호 (30개)' 요약 형태
+                fls = [int(m_rng.group(1)), int(m_rng.group(2) or m_rng.group(1))]
+            elif "(" not in str(hosu):
+                for part in str(hosu).split(","):
+                    hf = self._ho_floor_from_name(part.strip())
+                    if hf is not None:
+                        fls.append(hf)
+        if fls:
+            lo, hi = min(fls), max(fls)
+            return str(lo) if lo == hi else f"{lo}~{hi}"
+        rng = self._infer_floor_band_range(floor, total_floor)
+        if rng is not None:
+            lo, hi = rng
+            return str(lo) if lo == hi else f"{lo}~{hi}"
         bt = self._infer_floor_band_target(floor, total_floor)
         if bt is not None:
             return str(bt)
@@ -699,6 +738,7 @@ class NaverCrawler:
         sojaeji: Any = None,
     ) -> Optional[str]:
         article_no = find_key_in_nested_dict(c_info, "articleNo")
+        self._last_hosu_floors = []  # 이번 추론에서 나온 호수 후보들의 층 (extract_detail_v2 에서 해당층 범위 계산용)
         realestate_type_code = str(find_key_in_nested_dict(c_info, "realestateTypeCode") or "")
         article_url = (
             f"https://new.land.naver.com/{URL_REALESTATE_TYPE_DICT.get(realestate_type_code, 'complexes')}?articleNo={article_no}"
@@ -790,8 +830,18 @@ class NaverCrawler:
         data_complete = True
         for try_dong in dong_nm_variants:
             last_try = try_dong
-            unit_map = self._fetch_exclusive_unit_map(sigungu_cd, bjdong_cd, bun, ji, try_dong)
-            data_complete = bool(getattr(self, "_last_unit_fetch_complete", True))
+            best_partial: Dict[str, Dict[str, Any]] = {}
+            for _fetch_try in range(2):
+                unit_map = self._fetch_exclusive_unit_map(sigungu_cd, bjdong_cd, bun, ji, try_dong)
+                data_complete = bool(getattr(self, "_last_unit_fetch_complete", True))
+                if data_complete:
+                    break
+                if len(unit_map) > len(best_partial):
+                    best_partial = unit_map
+                unit_map = best_partial  # 두 번 다 부분 수신이면 더 많이 받은 쪽을 사용
+                # 공공데이터 API 503 등으로 일부 페이지만 받은 경우 잠시 쉬고 한 번 더 전체 조회 (후보 누락 방지)
+                self._hosu_debug_log(f"[호수 추론] 부분 수신 → 재조회 매물번호={article_no} 동명={try_dong!r} 시도={_fetch_try + 1}/2")
+                time.sleep(2.0)
             if unit_map:
                 if len(dong_nm_variants) > 1 and try_dong != dong_nm_variants[0]:
                     self._hosu_debug_log(
@@ -804,8 +854,16 @@ class NaverCrawler:
                 )
         if not unit_map and dong_nm:
             # 동명 필터 조회가 비면(API dongNm 필터가 간헐적으로 0건을 돌려줌) 지번 전체를 받아 동명을 직접 대조한다.
-            lot_units = self._fetch_exclusive_unit_map(sigungu_cd, bjdong_cd, bun, ji, None, num_rows=300)
-            data_complete = bool(getattr(self, "_last_unit_fetch_complete", True))
+            best_lot: Dict[str, Dict[str, Any]] = {}
+            for _fetch_try in range(2):
+                lot_units = self._fetch_exclusive_unit_map(sigungu_cd, bjdong_cd, bun, ji, None, num_rows=300)
+                data_complete = bool(getattr(self, "_last_unit_fetch_complete", True))
+                if data_complete:
+                    break
+                if len(lot_units) > len(best_lot):
+                    best_lot = lot_units
+                lot_units = best_lot
+                time.sleep(2.0)
             want = re.sub(r"[^\d]", "", dong_nm)
             matched: Dict[str, Dict[str, Any]] = {}
             for key, unit in lot_units.items():
@@ -930,40 +988,40 @@ class NaverCrawler:
             def _within(t) -> bool:
                 return area_tol is None or _area_gap(t[2]) <= area_tol
 
-            best = None
+            picked: List[tuple] = []
             stage = ""
             stage1 = [t for t in pool if _floor_ok(t[1]) and _within(t)]
             if stage1:
-                best = min(stage1, key=lambda t: (_area_gap(t[2]), t[1], _ho_int(t[0])))
+                gmin = min(_area_gap(t[2]) for t in stage1)
+                picked = [t for t in stage1 if abs(_area_gap(t[2]) - gmin) < 1e-6]
                 stage = "완화1(층 일치·면적 최근접)"
             else:
                 stage2 = [t for t in pool if _within(t)]
                 if stage2:
-                    best = min(stage2, key=lambda t: (
-                        _area_gap(t[2]),
-                        abs(t[1] - tgt_floor) if tgt_floor is not None else 0,
-                        t[1], _ho_int(t[0]),
-                    ))
+                    gmin = min(_area_gap(t[2]) for t in stage2)
+                    picked = [t for t in stage2 if abs(_area_gap(t[2]) - gmin) < 1e-6]
                     stage = "완화2(지번·동 전체·면적 최근접)"
-            if best is None:
+            if not picked:
                 self._hosu_debug_log(
                     f"[호수 추론] 완화 실패 매물번호={article_no} 사유=면적 허용치({area_tol}) 내 호 없음 목표면적={target_area} 후보={len(pool)}건"
                 )
                 return None
+            self._last_hosu_floors = [t[1] for t in picked]
+            result = self._format_hosu_candidates([t[0] for t in picked])
             self._hosu_debug_block("호수 추론 결과", {
                 "매물번호": article_no,
                 "단계": stage,
-                "확정 호수": best[0],
-                "호 층": best[1],
-                "호 면적": best[2],
+                "호수 후보(경우의 수)": result,
+                "후보 개수": len(picked),
+                "호 면적": picked[0][2],
                 "목표 전용면적": target_area,
                 "목표층": tgt_floor,
                 "검사 후보": len(pool),
             })
             self._hosu_debug_log(
-                f"[호수 추론] {stage} 매물번호={article_no} 호수={best[0]} 호면적={best[2]} 목표면적={target_area}"
+                f"[호수 추론] {stage} 매물번호={article_no} 호수={result} 호면적={picked[0][2]} 목표면적={target_area}"
             )
-            return best[0]
+            return result
         if not candidates:
             self._hosu_debug_log(
                 f"[호수 추론] 실패 매물번호={article_no} 사유=층·면적 조건 후 호수 후보 없음(후보 풀 비어 있음) 대장에서검사={total_checked}건 "
@@ -972,6 +1030,8 @@ class NaverCrawler:
             return None
         if len(candidates) == 1:
             result = candidates[0]
+            hf1 = self._ho_floor_from_name(result)
+            self._last_hosu_floors = [hf1] if hf1 is not None else []
             self._hosu_debug_block("호수 추론 결과", {
                 "매물번호": article_no,
                 "추정 호수": result,
@@ -980,26 +1040,17 @@ class NaverCrawler:
             })
             self._hosu_debug_log(f"[호수 추론] 성공 매물번호={article_no} 호수={result}")
             return result
-        # 복수 후보 → 1개로 확정: 목표층(숫자층 또는 저·중·고 대표층)에 가장 가까운 층 → 낮은 층 → 작은 호 번호 순
+        # 복수 후보 → 경우의 수를 그대로 표시 (층·호 순 나열, 많으면 층범위+라인 요약)
         uniq = sorted(set(candidates))
-        target_floor = floor_no if floor_no is not None else band_target_floor
-
-        def _rank(ho: str):
-            cf = self._ho_floor_from_name(ho)
-            dist = abs(cf - target_floor) if (cf is not None and target_floor is not None) else 10**6
-            digits = re.sub(r"[^\d]", "", ho)
-            return (dist, cf if cf is not None else 10**6, int(digits) if digits else 10**9, ho)
-
-        result = min(uniq, key=_rank)
+        self._last_hosu_floors = [f for f in (self._ho_floor_from_name(h) for h in uniq) if f is not None]
+        result = self._format_hosu_candidates(uniq)
         self._hosu_debug_block("호수 추론 결과", {
             "매물번호": article_no,
-            "후보 호수(복수)": ",".join(uniq),
+            "호수 후보(경우의 수)": result,
             "후보 개수": len(uniq),
-            "목표층": target_floor,
-            "확정 호수": result,
             "대장에서 검사한 호수": total_checked,
         })
-        self._hosu_debug_log(f"[호수 추론] 복수 후보 {len(uniq)}건 → 확정 매물번호={article_no} 호수={result} (후보={','.join(uniq)})")
+        self._hosu_debug_log(f"[호수 추론] 복수 후보 {len(uniq)}건 매물번호={article_no} 호수={result}")
         return result
 
     def get_r(self, si: str, gu: str, dong: str) -> List:
@@ -2836,8 +2887,11 @@ class NaverCrawler:
                 detail_addr=detail_addr,
                 sojaeji=sojaeji,
             )
-        # '저/중/고' 층 표기는 확정 호수(또는 총층 대표층)로 숫자 층으로 특정
-        floor = self._resolve_specific_floor(floor, total_floor, hosu)
+        # '저/중/고' 층 표기는 호수 후보들의 층 범위(없으면 총층 기준 저·중·고 구간)로 표시
+        floor = self._resolve_specific_floor(
+            floor, total_floor, hosu,
+            hosu_floors=list(getattr(self, "_last_hosu_floors", []) or []) if is_hosu_needed else None,
+        )
         if is_hosu_needed and not hosu:
             # 지번을 못 얻었거나 건축물대장에 전유부가 없는 건물(단독·다가구 등): 빈칸 대신 표시
             hosu = "확인불가"
