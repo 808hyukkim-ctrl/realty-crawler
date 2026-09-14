@@ -93,11 +93,11 @@ def parse_date_ymd(text: Any):
 
 def description_text_from_naver_row(row: Any, *, naver_row_has_hosu_column: bool = False) -> str:
     """네이버 extract_detail_v2 행에서 상세 텍스트 필터용 문자열(간략설명+설명)을 만든다.
-    naver_row_has_hosu_column=True: 호수가 11번째에 삽입된 행(길이 62 이상이면 간략/설명 인덱스 43,44).
+    naver_row_has_hosu_column=True: 호수가 인덱스 11에 삽입된 행(기본 60열 + 호수 = 61열 이상이면 간략/설명 인덱스 43,44).
     """
     if isinstance(row, (list, tuple)):
         if naver_row_has_hosu_column:
-            if len(row) >= 62:
+            if len(row) >= 61:
                 a = str(row[43]) if len(row) > 43 else ""
                 b = str(row[44]) if len(row) > 44 else ""
             else:

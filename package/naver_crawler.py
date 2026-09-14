@@ -345,6 +345,39 @@ class NaverCrawler:
             return [s, m.group(1)]
         return [s]
 
+    @staticmethod
+    def _ho_floor_from_name(ho: Any) -> Optional[int]:
+        """호명(예: '601호', 'B101', '지하102호')에서 층을 뽑는다. 지하는 음수 층."""
+        text = str(ho or "").strip()
+        if not text:
+            return None
+        basement = bool(re.search(r"[bB]|지하", text))
+        digits = re.sub(r"[^\d]", "", text)
+        if not digits:
+            return None
+        try:
+            v = int(digits)
+        except Exception:
+            return None
+        fl = v // 100 if v >= 100 else 1
+        return -fl if basement else fl
+
+    def _resolve_specific_floor(self, floor: Any, total_floor: Any, hosu: Any = None) -> Any:
+        """'저/중/고' 같은 막연한 층 표기를 숫자 층으로 확정한다.
+        우선순위: 확정 호수의 층 → 총층 기준 대표층(저 20% / 중 50% / 고 80%). 이미 숫자면 그대로."""
+        text = str(floor or "").strip()
+        if not text or re.search(r"\d", text):
+            return floor
+        if hosu:
+            first = str(hosu).split(",")[0].strip()
+            hf = self._ho_floor_from_name(first)
+            if hf is not None:
+                return str(hf)
+        bt = self._infer_floor_band_target(floor, total_floor)
+        if bt is not None:
+            return str(bt)
+        return floor
+
     def _to_floor_int(self, floor: Any) -> Optional[int]:
         text = str(floor or "").strip()
         m = re.search(r"-?\d+", text)
@@ -841,14 +874,26 @@ class NaverCrawler:
             })
             self._hosu_debug_log(f"[호수 추론] 성공 매물번호={article_no} 호수={result}")
             return result
-        result = ",".join(sorted(set(candidates)))
+        # 복수 후보 → 1개로 확정: 목표층(숫자층 또는 저·중·고 대표층)에 가장 가까운 층 → 낮은 층 → 작은 호 번호 순
+        uniq = sorted(set(candidates))
+        target_floor = floor_no if floor_no is not None else band_target_floor
+
+        def _rank(ho: str):
+            cf = self._ho_floor_from_name(ho)
+            dist = abs(cf - target_floor) if (cf is not None and target_floor is not None) else 10**6
+            digits = re.sub(r"[^\d]", "", ho)
+            return (dist, cf if cf is not None else 10**6, int(digits) if digits else 10**9, ho)
+
+        result = min(uniq, key=_rank)
         self._hosu_debug_block("호수 추론 결과", {
             "매물번호": article_no,
-            "추정 호수(복수, 쉼표 구분)": result,
-            "후보 개수": len(sorted(set(candidates))),
+            "후보 호수(복수)": ",".join(uniq),
+            "후보 개수": len(uniq),
+            "목표층": target_floor,
+            "확정 호수": result,
             "대장에서 검사한 호수": total_checked,
         })
-        self._hosu_debug_log(f"[호수 추론] 복수 후보 매물번호={article_no} 호수={result}")
+        self._hosu_debug_log(f"[호수 추론] 복수 후보 {len(uniq)}건 → 확정 매물번호={article_no} 호수={result} (후보={','.join(uniq)})")
         return result
 
     def get_r(self, si: str, gu: str, dong: str) -> List:
@@ -2673,6 +2718,7 @@ class NaverCrawler:
 
         article_url = f"https://new.land.naver.com/{URL_REALESTATE_TYPE_DICT.get(realestate_type_code, 'complexes')}?articleNo={atcl_no}"
 
+        hosu = None
         if is_hosu_needed:
             hosu = self._infer_hosu(
                 c_info,
@@ -2684,6 +2730,8 @@ class NaverCrawler:
                 detail_addr=detail_addr,
                 sojaeji=sojaeji,
             )
+        # '저/중/고' 층 표기는 확정 호수(또는 총층 대표층)로 숫자 층으로 특정
+        floor = self._resolve_specific_floor(floor, total_floor, hosu)
 
         article_img_url = f"{self.IMG_BASE_URL}{rep_img_url}" if rep_img_url else None
 

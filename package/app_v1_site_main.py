@@ -399,6 +399,15 @@ class OnhouseWorker(QObject):
             self.failed.emit(str(e))
 
 
+
+# 네이버 엑셀 출력 컬럼 순서 (사용자 지정, 2026-09-14)
+NAVER_EXCEL_COLUMNS = [
+    "매물번호", "세부주소", "호수", "종류", "거래방식", "매물명", "아파트동",
+    "공급/계약/대지", "전용/연", "해당층", "전체층", "매매/전세금", "월세", "관리비",
+    "방수", "화장실수", "입주가능일", "간략설명", "설명", "사용승인일",
+    "중개사무소", "중개사명", "중개사주소", "중개사전화", "중개사휴대폰",
+]
+
 class NaverWorker(QObject):
     progress = Signal(int, int)
     row_ready = Signal(tuple)
@@ -435,10 +444,11 @@ class NaverWorker(QObject):
 
     @staticmethod
     def _display_row_from_naver(row: Any) -> tuple:
-        # naver_crawler extract_detail_v2 리스트 인덱스: 지역 45, 종류 7, 거래 8, 매물명 9 (app_v1_main과 동일)
+        # naver_crawler extract_detail_v2 리스트 인덱스: 종류 7, 거래 8, 매물명 9, 소재지 45 (호수 컬럼 포함 행이면 46)
         if isinstance(row, (list, tuple)) and len(row) >= 9:
             no = NaverWorker._article_no_short_for_log(row[3]) if len(row) > 3 else "-"
-            region = str(row[45] if len(row) > 45 and row[45] else "")
+            _ri = 46 if len(row) >= 61 else 45
+            region = str(row[_ri] if len(row) > _ri and row[_ri] else "")
             if not region:
                 si = str(row[0]) if len(row) > 0 else ""
                 gu = str(row[1]) if len(row) > 1 else ""
@@ -472,7 +482,7 @@ class NaverWorker(QObject):
             def _detail_ok(row: Any) -> bool:
                 if not detail_filters.active:
                     return True
-                rooms, floor, approve, use = naver_detail_values(row)
+                rooms, floor, approve, use = naver_detail_values(row, has_hosu=True)
                 return detail_filters.passes(rooms=rooms, floor=floor, approve=approve, use=use)
 
             matched_rows: List[Any] = []
@@ -507,12 +517,12 @@ class NaverWorker(QObject):
                 max_rent_price=self.params.get("max_rent"),
                 min_area=self.params.get("min_area"),
                 max_area=self.params.get("max_area"),
-                is_hosu_needed=False
+                is_hosu_needed=True
             ):
                 if self._cancel:
                     break
                 if not _contains_any_keyword(
-                    description_text_from_naver_row(row, naver_row_has_hosu_column=False),
+                    description_text_from_naver_row(row, naver_row_has_hosu_column=True),
                     keywords,
                 ):
                     continue
@@ -536,41 +546,28 @@ class NaverWorker(QObject):
             from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 
             df = pd.DataFrame(matched_rows)
+            # extract_detail_v2(is_hosu_needed=True) 행 레이아웃: '호수'가 아파트동 다음(인덱스 11)에 삽입됨
             headers = [
                 "시", "구", "동", "매물번호", "이미지URL", "등록/확인일", "집주인/확인", "종류", "거래방식", "매물명", "아파트동",
+                "호수",
                 "공급/계약/대지", "전용/연", "건면적", "전용률", "용적률", "건폐율", "해당층", "전체층", "방향",
                 "매매/전세금", "월세", "평단가", "공시기준일", "공시가(최저)", "공시가(최고)", "권리금", "융자금",
                 "기보증금", "기월세", "프리미엄", "사업시행단계", "용도지역", "관리비", "방수", "화장실수", "난방",
                 "현재업종", "추천업종", "건축물용도", "지상층/지하층", "입주가능일", "간략설명", "설명", "소재지", "주소",
                 "세부주소", "위도/경도", "건설사", "사용승인일", "세대수", "동수", "주차가능수", "중개사수",
-                "중개사무소명", "중개사명", "중개사주소", "중개사등록번호", "중개사전화", "중개사휴대폰",
+                "중개사무소", "중개사명", "중개사주소", "중개사등록번호", "중개사전화", "중개사휴대폰",
             ]
             if df.shape[1] == len(headers):
                 df.columns = headers
-                # 소재지(정확한 주소)를 동과 매물번호 사이로, 세부주소(지번)를 매물번호 바로 다음으로 이동
-                cols = list(df.columns)
-                if "소재지" in cols and "매물번호" in cols:
-                    cols.remove("소재지")
-                    cols.insert(cols.index("매물번호"), "소재지")
-                if "세부주소" in cols and "매물번호" in cols:
-                    cols.remove("세부주소")
-                    cols.insert(cols.index("매물번호") + 1, "세부주소")
+                # 엑셀 출력 컬럼과 순서 (고정). 매물번호 셀은 저장 후 하이퍼링크(매물 링크)로 변환됨.
+                cols = [c for c in NAVER_EXCEL_COLUMNS if c in df.columns]
+                df = df[cols]
+            elif df.shape[1] == len(headers) - 1:
+                # 호수 없는 구버전 레이아웃 (안전장치)
+                df.columns = [h for h in headers if h != "호수"]
+                cols = [c for c in NAVER_EXCEL_COLUMNS if c in df.columns]
                 df = df[cols]
             df = df.map(lambda x: ILLEGAL_CHARACTERS_RE.sub(r"", x) if isinstance(x, str) else x)
-
-            # 값이 하나도 없는 컬럼은 제거 (엑셀에서 빈 여백칸 방지)
-            def _all_blank(series) -> bool:
-                for v in series:
-                    if v is None:
-                        continue
-                    if isinstance(v, float) and pd.isna(v):
-                        continue
-                    if isinstance(v, str) and not v.strip():
-                        continue
-                    return False
-                return True
-
-            df = df[[c for c in df.columns if not _all_blank(df[c])]]
             df.to_excel(out_path, index=False)
             self._apply_excel_hyperlinks(out_path)
             prefix = "중단 저장 완료" if self._cancel else "저장 완료"
