@@ -400,6 +400,10 @@ class OnhouseWorker(QObject):
 
 
 
+# 네이버 호수 특정(건축물대장 조회) 기본값. False면 호수 컬럼은 빈칸이고 수집이 훨씬 빠르다(건물 첫 조회 약 10초 → 0.3초).
+# 파라미터 hosu_enabled 가 넘어오면(UI 체크박스) 그 값을 우선한다.
+NAVER_HOSU_ENABLED = True
+
 # 네이버 엑셀 출력 컬럼 순서 (사용자 지정, 2026-09-14)
 NAVER_EXCEL_COLUMNS = [
     "매물번호", "세부주소", "호수", "종류", "거래방식", "매물명", "아파트동",
@@ -479,15 +483,17 @@ class NaverWorker(QObject):
                 uses=self.params.get("detail_uses"),
             )
 
+            hosu_on = bool(self.params.get("hosu_enabled", NAVER_HOSU_ENABLED))
+
             def _detail_ok(row: Any) -> bool:
                 if not detail_filters.active:
                     return True
-                rooms, floor, approve, use = naver_detail_values(row, has_hosu=True)
+                rooms, floor, approve, use = naver_detail_values(row, has_hosu=hosu_on)
                 return detail_filters.passes(rooms=rooms, floor=floor, approve=approve, use=use)
 
             matched_rows: List[Any] = []
             region_names = self.params.get("region_names", [])
-            self.status.emit(f"네이버: 매물 수집 중... ({len(region_names)}개 동 대상)")
+            self.status.emit(f"네이버: 매물 수집 중... ({len(region_names)}개 동 대상, 호수 특정 {'켬' if hosu_on else '끔'})")
 
             # for row in crawler.crawl_complexes_v2(
             #     realestate_type=self.params["realestate_type"],
@@ -517,12 +523,12 @@ class NaverWorker(QObject):
                 max_rent_price=self.params.get("max_rent"),
                 min_area=self.params.get("min_area"),
                 max_area=self.params.get("max_area"),
-                is_hosu_needed=True
+                is_hosu_needed=hosu_on
             ):
                 if self._cancel:
                     break
                 if not _contains_any_keyword(
-                    description_text_from_naver_row(row, naver_row_has_hosu_column=True),
+                    description_text_from_naver_row(row, naver_row_has_hosu_column=hosu_on),
                     keywords,
                 ):
                     continue
@@ -1239,6 +1245,10 @@ class MainWindow(QMainWindow, ScheduleMixin):
         # 건축물용도 다중선택 (체크 없음 = 전체). 네이버 상세의 '건축물용도' 컬럼과 부분일치로 비교. 맨 아래 배치.
         self.nv_use_group = UseCheckGroup("건축물용도 (체크한 용도만 수집, 체크 없으면 전체)", columns=6)
         v.addWidget(self.nv_use_group)
+        # 호수 특정 on/off. 끄면 호수 컬럼은 빈칸이고 수집이 훨씬 빠르다.
+        self.nv_hosu_check = QCheckBox("호수 특정 (건축물대장 조회 · 후보 여러 개면 모두 표시 · 건물 첫 조회 시 수 초 소요)")
+        self.nv_hosu_check.setChecked(NAVER_HOSU_ENABLED)
+        v.addWidget(self.nv_hosu_check)
 
         self._refresh_trade_controls()
         v.addStretch(1)
@@ -1914,6 +1924,7 @@ class MainWindow(QMainWindow, ScheduleMixin):
             "detail_floors": _rng(self.nv_sl_floor.values(), 0, 50),
             "detail_years": _rng(self.nv_sl_builtyear.values(), 1970, 2026),
             "detail_uses": self.nv_use_group.selected(),
+            "hosu_enabled": self.nv_hosu_check.isChecked(),
             "site_name": "네이버",
             "region_for_file": region_for_file,
             "timestamp": ts,

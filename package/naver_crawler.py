@@ -202,7 +202,7 @@ class NaverCrawler:
         })
         self.timeout_sec = 20
         self._bldrgst_max_attempts = max(1, int(os.getenv("BLDRGST_RETRY_ATTEMPTS", "6")))
-        self._bldrgst_retry_backoff_sec = float(os.getenv("BLDRGST_RETRY_BACKOFF_SEC", "1.5"))
+        self._bldrgst_retry_backoff_sec = float(os.getenv("BLDRGST_RETRY_BACKOFF_SEC", "0.5"))
         # 전용면적 API 페이지네이션 상한 (이상 응답 시 무한 루프 방지)
         self._bldrgst_excl_max_pages = max(1, int(os.getenv("BLDRGST_EXCL_MAX_PAGES", "500")))
         self.sess.headers.update({
@@ -569,6 +569,43 @@ class NaverCrawler:
             time.sleep(sleep_sec)
         return None
 
+    def _bldrgst_fetch_page(self, base_url: str, params: Dict[str, Any], page: int):
+        """건축물대장 한 페이지 요청·파싱. (ok, total, items) 반환. ok=False면 실패.
+        HTTP 오류뿐 아니라 200인데 본문이 비었거나 XML이 깨진 경우(공공데이터 API가 과부하 시 자주 그럼)도 재시도한다."""
+        q = dict(params)
+        q["pageNo"] = page
+        last_reason = ""
+        for attempt in range(1, self._bldrgst_max_attempts + 1):
+            resp = self._request_bldrgst_with_retry(base_url, q, page)
+            if resp is None:
+                last_reason = "요청 실패"
+            else:
+                resp_text = (resp.text or "").strip()
+                if resp.status_code != 200:
+                    last_reason = f"상태={resp.status_code}"
+                elif not resp_text:
+                    last_reason = "빈 본문"
+                else:
+                    try:
+                        root = ET.fromstring(resp_text)
+                    except Exception as pe:
+                        root = None
+                        last_reason = f"XML 파싱 오류 {pe}"
+                    if root is not None:
+                        result_code = (root.findtext(".//resultCode") or "").strip()
+                        if result_code and result_code not in ("00", "000"):
+                            last_reason = f"API 오류 코드={result_code} {(root.findtext('.//resultMsg') or '').strip()}"
+                        else:
+                            try:
+                                total = int(root.findtext(".//totalCount", "0") or 0)
+                            except Exception:
+                                total = 0
+                            return True, total, root.findall(".//item")
+            if attempt < self._bldrgst_max_attempts:
+                time.sleep(0.4 * attempt + random.uniform(0, 0.2))
+        self._hosu_debug_log(f"[건축물대장] 페이지 실패: 페이지={page} 사유={last_reason} (재시도 {self._bldrgst_max_attempts}회)")
+        return False, None, []
+
     def _fetch_exclusive_unit_map(
         self,
         sigungu_cd: str,
@@ -579,13 +616,15 @@ class NaverCrawler:
         num_rows: int = 100,
     ) -> Dict[str, Dict[str, Any]]:
         """건축물대장 전유부 호 목록. dong_nm 지정 시 key=호명, 미지정(지번 전체) 시 key='동명|호명' (동 간 호 충돌 방지).
-        각 값에는 area / mgmBldrgstPk / dongNm / hoNm 이 들어간다."""
+        각 값에는 area / mgmBldrgstPk / dongNm / hoNm 이 들어간다.
+        1페이지로 총건수를 얻고 나머지 페이지는 병렬(최대 4)로 받는다. (API는 numOfRows>100을 무시하고 100행씩 준다) 받은 행 수가 총건수에 못 미치면(일부 페이지 실패·API가
+        페이지 크기를 잘라 보낸 경우) 부분 수신으로 보고 캐시하지 않으며 self._last_unit_fetch_complete=False 로 알린다."""
+        self._last_unit_fetch_complete = False
         if not self._bldrgst_service_key:
             self._hosu_debug_log("[건축물대장] 건너뜀: 공공데이터 서비스키 없음")
             return {}
 
         cache_key = (sigungu_cd, bjdong_cd, bun, ji, dong_nm or "")
-        self._last_unit_fetch_complete = False
         if cache_key in self._exclusive_area_cache:
             self._last_unit_fetch_complete = True
             n = len(self._exclusive_area_cache[cache_key])
@@ -595,88 +634,59 @@ class NaverCrawler:
             return self._exclusive_area_cache[cache_key]
 
         self._hosu_debug_log(
-            f"[건축물대장] 전용면적 조회 시작 시군구={sigungu_cd} 법정동={bjdong_cd} 번={bun} 지={ji} 동명={dong_nm or '(미지정)'}"
+            f"[건축물대장] 전용면적 조회 시작 시군구={sigungu_cd} 법정동={bjdong_cd} 번={bun} 지={ji} 동명={dong_nm or '(미지정)'} 행/페이지={num_rows}"
         )
-        unit_map: Dict[str, Dict[str, Any]] = {}
-        page = 1
-        total = None
-        had_success_response = False
-        complete = False  # 마지막 페이지까지 정상 수신했을 때만 True (부분 수신 결과는 캐시·완화 추론에 쓰지 않음)
         base_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrExposPubuseAreaInfo"
-        while True:
-            if page > self._bldrgst_excl_max_pages:
-                self._hosu_debug_log(
-                    f"[건축물대장] 중단: 페이지 상한 도달 page={page} max={self._bldrgst_excl_max_pages}"
-                )
-                break
-            params = {
-                "serviceKey": self._bldrgst_service_key,
-                "sigunguCd": sigungu_cd,
-                "bjdongCd": bjdong_cd,
-                "platGbCd": "0",
-                "bun": bun,
-                "ji": ji,
-                "numOfRows": int(num_rows),
-                "pageNo": page,
-            }
-            if dong_nm and dong_nm != "1동":
-                params["dongNm"] = dong_nm
-            try:
-                # 건축물대장 API는 requests 방식으로 고정
-                resp = self._request_bldrgst_with_retry(base_url, params, page)
-                if resp is None:
-                    self._hosu_debug_log(f"[건축물대장] 중단: 재시도 후에도 요청 실패 페이지={page}")
-                    break
-                self._hosu_debug_log(f"[건축물대장] 응답 페이지={page} HTTP상태={resp.status_code}")
-                resp_text = (resp.text or "").strip()
-                self._hosu_debug_log(f"[건축물대장] 응답 본문 길이={len(resp_text)}바이트")
-                if resp.status_code != 200:
-                    preview = resp_text[:300].replace("\n", " ").replace("\r", " ")
-                    self._hosu_debug_log(
-                        f"[건축물대장] HTTP 비정상 본문 페이지={page} 상태={resp.status_code} 일부={preview}"
-                    )
+        params: Dict[str, Any] = {
+            "serviceKey": self._bldrgst_service_key,
+            "sigunguCd": sigungu_cd,
+            "bjdongCd": bjdong_cd,
+            "platGbCd": "0",
+            "bun": bun,
+            "ji": ji,
+            "numOfRows": int(num_rows),
+        }
+        if dong_nm and dong_nm != "1동":
+            params["dongNm"] = dong_nm
 
-                if not resp_text:
-                    self._hosu_debug_log("[건축물대장] 중단: 응답 본문 없음")
-                    break
+        t_start = time.time()
+        ok, total, items1 = self._bldrgst_fetch_page(base_url, params, 1)
+        if not ok:
+            self._hosu_debug_log(
+                f"[건축물대장] 조회 실패(1페이지) 시군구={sigungu_cd} 법정동={bjdong_cd} 번={bun} 지={ji}"
+            )
+            return {}
+        total = int(total or 0)
+        per_page = len(items1)  # API가 실제로 돌려준 페이지 크기 (요청값보다 작게 잘릴 수 있음)
+        pages_items: Dict[int, list] = {1: items1}
+        failed_pages: List[int] = []
+        if total > per_page and per_page > 0:
+            last_page = (total + per_page - 1) // per_page
+            if last_page > self._bldrgst_excl_max_pages:
+                self._hosu_debug_log(f"[건축물대장] 페이지 상한 적용 필요={last_page} 상한={self._bldrgst_excl_max_pages}")
+                last_page = self._bldrgst_excl_max_pages
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            workers = max(1, min(4, last_page - 1))
+            with ThreadPoolExecutor(max_workers=workers) as ex:
+                futs = {ex.submit(self._bldrgst_fetch_page, base_url, params, pg): pg for pg in range(2, last_page + 1)}
+                for fut in as_completed(futs):
+                    pg = futs[fut]
+                    try:
+                        ok_p, _t, items_p = fut.result()
+                    except Exception as e:
+                        ok_p, items_p = False, []
+                        self._hosu_debug_log(f"[건축물대장] 페이지 예외 페이지={pg} 내용={e}")
+                    if ok_p:
+                        pages_items[pg] = items_p
+                    else:
+                        failed_pages.append(pg)
 
-                try:
-                    root = ET.fromstring(resp_text)
-                except Exception as pe:
-                    preview = resp_text[:200].replace("\n", " ").replace("\r", " ")
-                    self._hosu_debug_log(
-                        f"[건축물대장] XML 파싱 실패 페이지={page} 오류={pe} 일부={preview}"
-                    )
-                    break
-                had_success_response = True
-            except Exception as e:
-                self._hosu_debug_log(f"[건축물대장] 예외 페이지={page} 내용={e}")
-                break
+        received = sum(len(v) for v in pages_items.values())
+        complete = (not failed_pages) and (received >= total or total == 0)
 
-            result_code = (root.findtext(".//resultCode") or "").strip()
-            result_msg = (root.findtext(".//resultMsg") or "").strip()
-            if result_code and result_code not in ("00", "000"):
-                self._hosu_debug_log(
-                    f"[건축물대장] API 오류 코드={result_code} 메시지={result_msg}"
-                )
-                break
-
-            if total is None:
-                try:
-                    total = int(root.findtext(".//totalCount", "0"))
-                except Exception:
-                    total = 0
-                self._hosu_debug_log(f"[건축물대장] 응답 총건수={total}")
-
-            items = root.findall(".//item")
-            if not items:
-                if total is not None and (page - 1) * int(num_rows) >= total:
-                    complete = True
-                self._hosu_debug_log(f"[건축물대장] 중단: 해당 페이지에 item 없음 페이지={page} (완료={complete})")
-                break
-
-            before = len(unit_map)
-            for item in items:
+        unit_map: Dict[str, Dict[str, Any]] = {}
+        for pg in sorted(pages_items):
+            for item in pages_items[pg]:
                 expos_type = (item.findtext("exposPubuseGbCdNm") or "").strip()
                 if expos_type != "전유":
                     continue
@@ -695,34 +705,18 @@ class NaverCrawler:
                     "dongNm": item_dong,
                     "hoNm": ho_nm,
                 }
-            self._hosu_debug_log(
-                f"[건축물대장] 페이지 처리 완료 페이지={page} 원본항목={len(items)} 이번에추가={len(unit_map) - before} 누적호수={len(unit_map)}"
-            )
-
-            if total is not None and page * int(num_rows) >= total:
-                complete = True
-                self._hosu_debug_log(f"[건축물대장] 전체 페이지 수집 완료 마지막페이지={page}")
-                break
-            page += 1
-            time.sleep(0.15)  # 연속 페이지 요청 완화 (공공데이터 API SERVICETIMEOUT 503 방지)
 
         self._last_unit_fetch_complete = bool(complete)
-        if had_success_response and unit_map and complete:
+        if complete and unit_map:
             self._exclusive_area_cache[cache_key] = unit_map
-        elif had_success_response and unit_map:
+        elif not complete:
             self._hosu_debug_log(
-                f"[건축물대장] 캐시 저장 안 함 (부분 수신: 일부 페이지 실패) 시군구={sigungu_cd} 법정동={bjdong_cd} 번={bun} 지={ji} 호수={len(unit_map)}건"
-            )
-        elif had_success_response:
-            self._hosu_debug_log(
-                f"[건축물대장] 캐시 저장 안 함 (유효 전유 호수 0건, 빈 결과는 캐시하지 않음) 시군구={sigungu_cd} 법정동={bjdong_cd} 번={bun} 지={ji}"
-            )
-        else:
-            self._hosu_debug_log(
-                f"[건축물대장] 캐시 저장 안 함 (성공 응답 없음) 시군구={sigungu_cd} 법정동={bjdong_cd} 번={bun} 지={ji}"
+                f"[건축물대장] 캐시 저장 안 함 (부분 수신) 총건수={total} 수신={received} 실패페이지={sorted(failed_pages)} 호수={len(unit_map)}건"
             )
         self._hosu_debug_log(
-            f"[건축물대장] 조회 종료 시군구={sigungu_cd} 법정동={bjdong_cd} 번={bun} 지={ji} 동명={dong_nm or '(미지정)'} 최종호수={len(unit_map)}건"
+            f"[건축물대장] 조회 종료 시군구={sigungu_cd} 법정동={bjdong_cd} 번={bun} 지={ji} 동명={dong_nm or '(미지정)'} "
+            f"총건수={total} 수신={received} 페이지={len(pages_items)}(+실패 {len(failed_pages)}) 최종호수={len(unit_map)}건 "
+            f"완전수신={complete} 소요={time.time() - t_start:.1f}s"
         )
         return unit_map
 
@@ -825,59 +819,73 @@ class NaverCrawler:
             "대장 API 동명 후보(순서대로)": dong_nm_variants,
         })
 
+        # 1차: 동명 필터로 조회(해당 동 행만 받아 페이지가 적음, 병렬). 완전 수신이면 그대로 사용.
+        # 2차: 1차가 비었거나 부분 수신이면 지번 전체를 받아(지번 단위 캐시) 동명을 프로그램 안에서 대조.
         unit_map: Dict[str, Dict[str, Any]] = {}
-        last_try: Optional[str] = None
+        last_try: Optional[str] = dong_nm
         data_complete = True
-        for try_dong in dong_nm_variants:
-            last_try = try_dong
-            best_partial: Dict[str, Dict[str, Any]] = {}
-            for _fetch_try in range(2):
-                unit_map = self._fetch_exclusive_unit_map(sigungu_cd, bjdong_cd, bun, ji, try_dong)
-                data_complete = bool(getattr(self, "_last_unit_fetch_complete", True))
-                if data_complete:
-                    break
-                if len(unit_map) > len(best_partial):
-                    best_partial = unit_map
-                unit_map = best_partial  # 두 번 다 부분 수신이면 더 많이 받은 쪽을 사용
-                # 공공데이터 API 503 등으로 일부 페이지만 받은 경우 잠시 쉬고 한 번 더 전체 조회 (후보 누락 방지)
-                self._hosu_debug_log(f"[호수 추론] 부분 수신 → 재조회 매물번호={article_no} 동명={try_dong!r} 시도={_fetch_try + 1}/2")
-                time.sleep(2.0)
-            if unit_map:
-                if len(dong_nm_variants) > 1 and try_dong != dong_nm_variants[0]:
-                    self._hosu_debug_log(
-                        f"[호수 추론] 동명 재시도 성공 매물번호={article_no} 사용동명={try_dong!r} 앞선시도(0건)={dong_nm_variants[0]!r}"
-                    )
-                break
-            if len(dong_nm_variants) > 1 and try_dong == dong_nm_variants[0]:
+        lot_units: Dict[str, Dict[str, Any]] = {}
+
+        def _match_dong(units: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+            if not dong_nm:
+                return dict(units)
+            want = re.sub(r"[^\d]", "", dong_nm)
+            want_txt = dong_nm.replace(" ", "")
+            out: Dict[str, Dict[str, Any]] = {}
+            for key, unit in units.items():
+                d = str(unit.get("dongNm") or "")
+                if want:
+                    ok = re.sub(r"[^\d]", "", d) == want
+                else:
+                    ok = d.replace(" ", "") == want_txt or d.replace(" ", "").rstrip("동") == want_txt.rstrip("동")
+                if ok:
+                    out[key] = unit
+            if not out:
+                dongs_in_lot = {str(u.get("dongNm") or "") for u in units.values()}
+                if dongs_in_lot <= {""} or (dong_nm == "1동" and len(dongs_in_lot) == 1):
+                    out = dict(units)  # 대장에 동 구분이 없는 단일 건물 → 전체 사용
                 self._hosu_debug_log(
-                    f"[호수 추론] 동명 재시도 매물번호={article_no} 동명={try_dong!r} 결과=0건 다음={dong_nm_variants[1:]!r}"
+                    f"[호수 추론] 동명 대조 매물번호={article_no} 동명={dong_nm!r} 대장동명목록={sorted(dongs_in_lot)[:12]} 일치={len(out)}건"
                 )
-        if not unit_map and dong_nm:
-            # 동명 필터 조회가 비면(API dongNm 필터가 간헐적으로 0건을 돌려줌) 지번 전체를 받아 동명을 직접 대조한다.
+            return out
+
+        if dong_nm:
+            for try_dong in dong_nm_variants:
+                last_try = try_dong
+                um = self._fetch_exclusive_unit_map(sigungu_cd, bjdong_cd, bun, ji, try_dong)
+                comp = bool(getattr(self, "_last_unit_fetch_complete", True))
+                if um and comp:
+                    unit_map, data_complete = um, True
+                    break
+                if len(um) > len(unit_map):
+                    unit_map, data_complete = um, comp
+            self._hosu_debug_log(
+                f"[호수 추론] 1차 동명 조회 매물번호={article_no} 동명={dong_nm!r} 호수={len(unit_map)}건 완전수신={data_complete}"
+            )
+
+        if (not unit_map) or (not data_complete):
             best_lot: Dict[str, Dict[str, Any]] = {}
+            lot_complete = False
             for _fetch_try in range(2):
-                lot_units = self._fetch_exclusive_unit_map(sigungu_cd, bjdong_cd, bun, ji, None, num_rows=300)
-                data_complete = bool(getattr(self, "_last_unit_fetch_complete", True))
-                if data_complete:
+                lot_units = self._fetch_exclusive_unit_map(sigungu_cd, bjdong_cd, bun, ji, None)
+                lot_complete = bool(getattr(self, "_last_unit_fetch_complete", True))
+                if lot_complete:
                     break
                 if len(lot_units) > len(best_lot):
                     best_lot = lot_units
                 lot_units = best_lot
-                time.sleep(2.0)
-            want = re.sub(r"[^\d]", "", dong_nm)
-            matched: Dict[str, Dict[str, Any]] = {}
-            for key, unit in lot_units.items():
-                d = str(unit.get("dongNm") or "")
-                ok = (re.sub(r"[^\d]", "", d) == want) if want else (d.replace(" ", "") == dong_nm.replace(" ", ""))
-                if ok:
-                    matched[key] = unit
+                self._hosu_debug_log(f"[호수 추론] 지번 전체 부분 수신 → 재조회 매물번호={article_no} 시도={_fetch_try + 1}/2")
+                time.sleep(1.0)
+            matched = _match_dong(lot_units) if lot_units else {}
+            if matched and (lot_complete or len(matched) > len(unit_map)):
+                unit_map, data_complete = matched, lot_complete
             self._hosu_debug_log(
-                f"[호수 추론] 지번 전체 대조 매물번호={article_no} 동명={dong_nm!r} 지번전체={len(lot_units)}건 동일치={len(matched)}건"
+                f"[호수 추론] 2차 지번 전체 조회 매물번호={article_no} 지번전체={len(lot_units)}건 동일치={len(matched)}건 완전수신={lot_complete} → 사용={len(unit_map)}건"
             )
-            unit_map = matched
+
         if not unit_map:
             self._hosu_debug_log(
-                f"[호수 추론] 실패 매물번호={article_no} 사유=건축물대장 전용면적 호 목록 없음 동명(정규화)={dong_nm} 시도한동명={dong_nm_variants} 마지막시도={last_try!r}"
+                f"[호수 추론] 실패 매물번호={article_no} 사유=건축물대장 전용면적 호 목록 없음 동명(정규화)={dong_nm} 지번전체={len(lot_units)}건"
             )
             return None
 

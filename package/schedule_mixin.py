@@ -179,6 +179,7 @@ class ScheduleMixin:
             "max_area": s.get("max_area"),
             "detail_keywords": s.get("detail_keywords", []),
             "detail_uses": s.get("detail_uses", []),
+            "hosu_enabled": bool(s.get("hosu_enabled", True)),
             "site_name": "네이버",
             "region_for_file": region_for_file,
             "timestamp": ts,
@@ -323,6 +324,7 @@ class ScheduleMixin:
             "max_area": max_area,
             "detail_keywords": _parse_keywords_csv(self.nv_detail_filter.text()),
             "detail_uses": self.nv_use_group.selected() if hasattr(self, "nv_use_group") else [],
+            "hosu_enabled": self.nv_hosu_check.isChecked() if hasattr(self, "nv_hosu_check") else True,
         }
 
     # ──────────────────────────────────────────────────────────────
