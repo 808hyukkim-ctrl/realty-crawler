@@ -405,7 +405,7 @@ class OnhouseWorker(QObject):
 NAVER_HOSU_ENABLED = True
 
 # 네이버 상세 텍스트 필터 — 자주 쓰는 키워드 체크박스 (체크한 것 + 입력한 키워드를 OR 로 검색)
-NAVER_KEYWORD_PRESETS = ["LH", "SH", "보증보험", "전세대출", "HUG", "허그", "대출", "애완", "반려", "동물"]
+NAVER_KEYWORD_PRESETS = ["LH", "SH", "보증보험", "전세대출", "HUG", "허그", "대출", "애완", "반려", "동물", "통임대", "통매매", "통건물", "건물전체"]
 # 엑셀에서 키워드가 들어간 설명 셀: 셀 배경 노란색, 키워드 글자는 빨간색 굵게
 KEYWORD_HIGHLIGHT_COLUMNS = ("간략설명", "설명")
 
