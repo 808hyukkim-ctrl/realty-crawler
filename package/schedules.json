@@ -1,0 +1,70 @@
+{
+  "jobs": [
+    {
+      "id": "e601b7ca-d888-483b-8b6d-7f4a14348b3b",
+      "name": "당근 자동 수집",
+      "site": "daangn",
+      "settings": {
+        "si": "전체",
+        "gun": "전체",
+        "gu": "전체",
+        "trade_type": "month",
+        "sales_type": "two_room",
+        "date_use": false,
+        "date_start": null,
+        "date_end": null,
+        "monthly_min": 0,
+        "monthly_max": 3000,
+        "deposit_min": 0,
+        "deposit_max": 50000,
+        "buy_min": 0,
+        "buy_max": 1000000,
+        "borrow_min": 0,
+        "borrow_max": 1000000,
+        "area_min": 0,
+        "area_max": 200,
+        "detail_keywords": []
+      },
+      "schedule_time": "09:00",
+      "days": [
+        "daily"
+      ],
+      "enabled": true,
+      "created_at": "2026-05-06T22:16:09",
+      "last_run_date": null
+    },
+    {
+      "id": "9c09b103-4791-408f-8312-f02740a4c050",
+      "name": "당근 자동 수집",
+      "site": "daangn",
+      "settings": {
+        "si": "전체",
+        "gun": "전체",
+        "gu": "전체",
+        "trade_type": "month",
+        "sales_type": "two_room,officetel",
+        "date_use": true,
+        "date_start": "20260408",
+        "date_end": "20260506",
+        "monthly_min": 0,
+        "monthly_max": 3000,
+        "deposit_min": 0,
+        "deposit_max": 50000,
+        "buy_min": 0,
+        "buy_max": 1000000,
+        "borrow_min": 0,
+        "borrow_max": 1000000,
+        "area_min": 0,
+        "area_max": 200,
+        "detail_keywords": []
+      },
+      "schedule_time": "09:00",
+      "days": [
+        "daily"
+      ],
+      "enabled": true,
+      "created_at": "2026-05-06T22:32:59",
+      "last_run_date": null
+    }
+  ]
+}

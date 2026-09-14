@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}새 사용자{% endblock %}
+{% block content %}
+<div class="form-box">
+  <h1>새 사용자 등록</h1>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post">
+    <label>아이디<input type="text" name="username" required autofocus></label>
+    <label>비밀번호<input type="password" name="password" required></label>
+    <label>이용권 기간
+      <select name="duration">
+        {% for key, (label, _delta) in duration_presets.items() %}
+        <option value="{{ key }}" {% if key == '1month' %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>메모<input type="text" name="memo" placeholder="선택 입력"></label>
+    <div class="form-actions">
+      <a href="{{ url_for('dashboard') }}" class="btn">취소</a>
+      <button type="submit" class="btn btn-primary">등록</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

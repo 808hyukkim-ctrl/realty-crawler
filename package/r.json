@@ -1,0 +1,4123 @@
+{
+    "houses": {
+        "withoutFee": {
+            "image": [
+                {
+                    "hidx": 18844640,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": true,
+                        "safeDirectTrade": false,
+                        "withoutFee": true,
+                        "withoutFeeDiscount": 10,
+                        "isZero": true,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": "D2",
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "agent",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": "2026-02-06 09:39:36",
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": null,
+                        "vaddr": 0,
+                        "subject": "o남산뷰o뻥뷰ooHUG보증보험oo탁 트인 뷰 넓은 2룸 ",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260205/18844640/69845b1ecfa2d_thumb.jpg",
+                        "created_at": "2026-02-05 17:55:58",
+                        "live_start_date": "2026-02-06 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 31.56,
+                        "supplied_pyeong": 9.54,
+                        "real_size": 25.06,
+                        "real_pyeong": 7.58,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "전세",
+                        "trade_type": "withoutFee",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 0,
+                        "deposit": 285000000,
+                        "maintenance_cost": 80000
+                    },
+                    "floor": {
+                        "target": 5,
+                        "total": 7,
+                        "floor_type": 1,
+                        "floor_text": "5층",
+                        "floor_text_detail": "5층/7층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5580424",
+                            "longitude": "126.9801356"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동1가",
+                            "aptName": null,
+                            "text": "중구 회현동1가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 374334921,
+                                "path": "https://img.peterpanz.com/photo/20260205/18844640/69845b1ecfa2d_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 374334924,
+                                "path": "https://img.peterpanz.com/photo/20260205/18844640/69845b1f927d1_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 374334927,
+                                "path": "https://img.peterpanz.com/photo/20260205/18844640/69845b203ee19_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 374334930,
+                                "path": "https://img.peterpanz.com/photo/20260205/18844640/69845b20c3d98_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 374334933,
+                                "path": "https://img.peterpanz.com/photo/20260205/18844640/69845b215631a_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 374334936,
+                                "path": "https://img.peterpanz.com/photo/20260205/18844640/69845b21ed2e6_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18909908,
+                    "attribute": {
+                        "created_device": "android",
+                        "naverVerification": false,
+                        "safeDirectTrade": false,
+                        "withoutFee": false,
+                        "withoutFeeDiscount": 0,
+                        "isZero": false,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": null,
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "user",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": null,
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": "",
+                        "vaddr": 1,
+                        "subject": "동암역도보(7분)조용한 주택가임.",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260220/18909908/c1b3c57aa0d21ab070238734fa9882ee_thumb.jpg",
+                        "created_at": "2026-02-20 17:10:20",
+                        "live_start_date": "2026-02-20 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 42.98,
+                        "supplied_pyeong": 13,
+                        "real_size": 42.98,
+                        "real_pyeong": 13,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "오픈형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "월세",
+                        "trade_type": "direct",
+                        "building_form": "다가구",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "다가구",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 380000,
+                        "deposit": 5000000,
+                        "maintenance_cost": 0
+                    },
+                    "floor": {
+                        "target": 1,
+                        "total": 3,
+                        "floor_type": 1,
+                        "floor_text": "1층",
+                        "floor_text_detail": "1층/3층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.56660499999999",
+                            "longitude": "126.978204"
+                        },
+                        "address": {
+                            "sido": "인천광역시",
+                            "sigungu": "부평구",
+                            "dong": "십정동",
+                            "aptName": null,
+                            "text": "부평구 십정동"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 375976997,
+                                "path": "https://img.peterpanz.com/photo/20260220/18909908/c1b3c57aa0d21ab070238734fa9882ee_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 375977000,
+                                "path": "https://img.peterpanz.com/photo/20260220/18909908/a251e559322d8735409473083b9d3314_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 375977003,
+                                "path": "https://img.peterpanz.com/photo/20260220/18909908/21ef2acb9768bf7440c34464495f0326_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 375977006,
+                                "path": "https://img.peterpanz.com/photo/20260220/18909908/b9db8c7d92449fe6f810dff7ece0662a_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 375977009,
+                                "path": "https://img.peterpanz.com/photo/20260220/18909908/17d81f61c7d906ca405a16f7edf9322b_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18857922,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": false,
+                        "safeDirectTrade": false,
+                        "withoutFee": false,
+                        "withoutFeeDiscount": 0,
+                        "isZero": false,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": "D2",
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "agent",
+                        "status_code": "0108",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": null,
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": null,
+                        "vaddr": 0,
+                        "subject": "남산view  대출 및 보증보험 0   완전풀옵션 ",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260208/18857922/698886667154d_thumb.jpg",
+                        "created_at": "2026-02-08 21:49:41",
+                        "live_start_date": "2026-02-08 21:51:27",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 37.71,
+                        "supplied_pyeong": 11.4,
+                        "real_size": 24.71,
+                        "real_pyeong": 7.47,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "전세",
+                        "trade_type": "agency",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 0,
+                        "deposit": 300000000,
+                        "maintenance_cost": 180000
+                    },
+                    "floor": {
+                        "target": 3,
+                        "total": 4,
+                        "floor_type": 2,
+                        "floor_text": "고층",
+                        "floor_text_detail": "고층/4층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5571835",
+                            "longitude": "126.9839417"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동2가",
+                            "aptName": null,
+                            "text": "중구 회현동2가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 1,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 375089098,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857922/698886667154d_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 375089101,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857922/69888665db330_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 375089104,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857922/69888666f3d76_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 375089107,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857922/698886676760f_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 375089110,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857922/69888667ee27a_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 375089113,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857922/6988866878e0b_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 375089116,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857922/69888668ddd30_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            },
+                            {
+                                "id": 375089119,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857922/6988866959d9e_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 8
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18779796,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": false,
+                        "safeDirectTrade": false,
+                        "withoutFee": false,
+                        "withoutFeeDiscount": 0,
+                        "isZero": false,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": "N",
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "agent",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": null,
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": true
+                    },
+                    "info": {
+                        "temp_address": null,
+                        "vaddr": 0,
+                        "subject": "역세권 남산타워뷰 보증보험 버팀목전세대출OK",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260123/18779796/6973405a94c2f_thumb.jpg",
+                        "created_at": "2026-01-23 18:33:14",
+                        "live_start_date": "2026-02-11 19:58:47",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 42.2,
+                        "supplied_pyeong": 12.76,
+                        "real_size": 25.06,
+                        "real_pyeong": 7.58,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "월세",
+                        "trade_type": "agency",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 300000,
+                        "deposit": 258000000,
+                        "maintenance_cost": 80000
+                    },
+                    "floor": {
+                        "target": 7,
+                        "total": 7,
+                        "floor_type": 2,
+                        "floor_text": "고층",
+                        "floor_text_detail": "고층/7층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5580424",
+                            "longitude": "126.9801356"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동1가",
+                            "aptName": null,
+                            "text": "중구 회현동1가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 372800600,
+                                "path": "https://img.peterpanz.com/photo/20260123/18779796/6973405a94c2f_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 372800603,
+                                "path": "https://img.peterpanz.com/photo/20260123/18779796/6973405b38df2_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 372800606,
+                                "path": "https://img.peterpanz.com/photo/20260123/18779796/6973405bb1165_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 372800609,
+                                "path": "https://img.peterpanz.com/photo/20260123/18779796/6973405c4c122_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 372800612,
+                                "path": "https://img.peterpanz.com/photo/20260123/18779796/6973405cbc1a2_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 372800615,
+                                "path": "https://img.peterpanz.com/photo/20260123/18779796/6973405d51c87_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 372800618,
+                                "path": "https://img.peterpanz.com/photo/20260123/18779796/6973405dd318b_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            },
+                            {
+                                "id": 372800621,
+                                "path": "https://img.peterpanz.com/photo/20260123/18779796/6973405e551ef_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 8
+                            },
+                            {
+                                "id": 372800624,
+                                "path": "https://img.peterpanz.com/photo/20260123/18779796/6973405ec2a6b_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 9
+                            },
+                            {
+                                "id": 372800627,
+                                "path": "https://img.peterpanz.com/photo/20260123/18779796/6973405f3f62a_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 10
+                            },
+                            {
+                                "id": 372800630,
+                                "path": "https://img.peterpanz.com/photo/20260123/18779796/6973405fc6913_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 11
+                            },
+                            {
+                                "id": 372800633,
+                                "path": "https://img.peterpanz.com/photo/20260123/18779796/6973406058630_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 12
+                            },
+                            {
+                                "id": 372800636,
+                                "path": "https://img.peterpanz.com/photo/20260123/18779796/69734060d1d4d_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 13
+                            },
+                            {
+                                "id": 372800639,
+                                "path": "https://img.peterpanz.com/photo/20260123/18779796/6973406172dea_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 14
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18847818,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": true,
+                        "safeDirectTrade": false,
+                        "withoutFee": true,
+                        "withoutFeeDiscount": 50,
+                        "isZero": true,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": "D2",
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "agent",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": "2026-02-06 13:14:47",
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": null,
+                        "vaddr": 0,
+                        "subject": "전호실보유o뷰맛집o보증보험가능o귀한구조o",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260206/18847818/69855da928901_thumb.jpg",
+                        "created_at": "2026-02-06 12:19:05",
+                        "live_start_date": "2026-02-06 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 41.77,
+                        "supplied_pyeong": 12.63,
+                        "real_size": 28.19,
+                        "real_pyeong": 8.52,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "전세",
+                        "trade_type": "withoutFee",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 0,
+                        "deposit": 350000000,
+                        "maintenance_cost": 0
+                    },
+                    "floor": {
+                        "target": 1,
+                        "total": 4,
+                        "floor_type": 1,
+                        "floor_text": "1층",
+                        "floor_text_detail": "1층/4층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5571835",
+                            "longitude": "126.9839417"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동2가",
+                            "aptName": null,
+                            "text": "중구 회현동2가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 374411486,
+                                "path": "https://img.peterpanz.com/photo/20260206/18847818/69855da928901_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 374411489,
+                                "path": "https://img.peterpanz.com/photo/20260206/18847818/69855da9e0d6b_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 374411492,
+                                "path": "https://img.peterpanz.com/photo/20260206/18847818/69855daa8245d_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 374411495,
+                                "path": "https://img.peterpanz.com/photo/20260206/18847818/69855dab1c789_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 374411498,
+                                "path": "https://img.peterpanz.com/photo/20260206/18847818/69855dabb59a5_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 374411501,
+                                "path": "https://img.peterpanz.com/photo/20260206/18847818/69855dacbd979_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 374411504,
+                                "path": "https://img.peterpanz.com/photo/20260206/18847818/69855dad556e2_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            },
+                            {
+                                "id": 374411507,
+                                "path": "https://img.peterpanz.com/photo/20260206/18847818/69855dae2d4d7_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 8
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18858059,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": false,
+                        "safeDirectTrade": false,
+                        "withoutFee": false,
+                        "withoutFeeDiscount": 0,
+                        "isZero": false,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": null,
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "user",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": null,
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": "",
+                        "vaddr": 0,
+                        "subject": "2룸  3.1억  완전신축  전세자금대출가능  4호선  회현역",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260209/18858059/6988a8da4125c_thumb.jpg",
+                        "created_at": "2026-02-09 00:16:42",
+                        "live_start_date": "2026-02-09 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 119.02,
+                        "supplied_pyeong": 36,
+                        "real_size": 28,
+                        "real_pyeong": 8.46,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "전세",
+                        "trade_type": "direct",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 0,
+                        "deposit": 300000000,
+                        "maintenance_cost": 85000
+                    },
+                    "floor": {
+                        "target": 3,
+                        "total": 6,
+                        "floor_type": 1,
+                        "floor_text": "3층",
+                        "floor_text_detail": "3층/6층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.557347",
+                            "longitude": "126.9801926"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동1가",
+                            "aptName": null,
+                            "text": "중구 회현동1가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 375558484,
+                                "path": "https://img.peterpanz.com/photo/20260209/18858059/6988a8da4125c_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 375558487,
+                                "path": "https://img.peterpanz.com/photo/20260209/18858059/6988a8dab141a_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 375558490,
+                                "path": "https://img.peterpanz.com/photo/20260209/18858059/6988a8db27698_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18857917,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": true,
+                        "safeDirectTrade": false,
+                        "withoutFee": false,
+                        "withoutFeeDiscount": 0,
+                        "isZero": false,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": "D2",
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "agent",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": "2026-02-09 10:08:59",
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": null,
+                        "vaddr": 0,
+                        "subject": "남산view  대출 및 보증보험 0   완전풀옵션 ",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260208/18857917/6988853f10871_thumb.jpg",
+                        "created_at": "2026-02-08 21:44:45",
+                        "live_start_date": "2026-02-09 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 41.77,
+                        "supplied_pyeong": 12.63,
+                        "real_size": 28.19,
+                        "real_pyeong": 8.52,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "전세",
+                        "trade_type": "agency",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 0,
+                        "deposit": 350000000,
+                        "maintenance_cost": 80000
+                    },
+                    "floor": {
+                        "target": 3,
+                        "total": 4,
+                        "floor_type": 2,
+                        "floor_text": "고층",
+                        "floor_text_detail": "고층/4층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5571835",
+                            "longitude": "126.9839417"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동2가",
+                            "aptName": null,
+                            "text": "중구 회현동2가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 1,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 375089071,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857917/6988853f10871_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 375089074,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857917/6988853e7a95c_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 375089077,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857917/6988853debf35_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 375089080,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857917/6988853d6cc38_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 375089083,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857917/6988853f82dd7_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 375089086,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857917/6988854004029_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 375089089,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857917/698885409536f_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            },
+                            {
+                                "id": 375089092,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857917/698885411881e_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 8
+                            },
+                            {
+                                "id": 375089095,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857917/69888541a75b6_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 9
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18857906,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": true,
+                        "safeDirectTrade": false,
+                        "withoutFee": false,
+                        "withoutFeeDiscount": 0,
+                        "isZero": false,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": "D2",
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "agent",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": "2026-02-09 10:12:27",
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": null,
+                        "vaddr": 0,
+                        "subject": "남산view  대출 및 보증보험 0   완전풀옵션 ",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260208/18857906/698882a52e66c_thumb.jpg",
+                        "created_at": "2026-02-08 21:33:41",
+                        "live_start_date": "2026-02-09 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 1,
+                        "supplied_size": 0,
+                        "supplied_pyeong": 0,
+                        "real_size": 23.21,
+                        "real_pyeong": 7.02,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형,복층",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "전세",
+                        "trade_type": "agency",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 0,
+                        "deposit": 370000000,
+                        "maintenance_cost": 80000
+                    },
+                    "floor": {
+                        "target": 4,
+                        "total": 4,
+                        "floor_type": 1,
+                        "floor_text": "4층",
+                        "floor_text_detail": "4층/4층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5571835",
+                            "longitude": "126.9839417"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동2가",
+                            "aptName": null,
+                            "text": "중구 회현동2가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 1,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 374660303,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857906/698882a52e66c_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 374660306,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857906/698882a5b754f_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 374660309,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857906/698882a638b8f_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 374660312,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857906/698882a6b163e_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 374660315,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857906/698882a72b9ee_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 374660318,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857906/698882a7ada11_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 374660321,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857906/698882a822976_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            },
+                            {
+                                "id": 374660324,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857906/698882a88ff0e_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 8
+                            },
+                            {
+                                "id": 374660327,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857906/698882a90ddc2_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 9
+                            },
+                            {
+                                "id": 374660330,
+                                "path": "https://img.peterpanz.com/photo/20260208/18857906/698882a994f93_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 10
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18943740,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": false,
+                        "safeDirectTrade": false,
+                        "withoutFee": false,
+                        "withoutFeeDiscount": 0,
+                        "isZero": false,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": null,
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "user",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": null,
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": "구분등기없음,층별 용도가 주거용",
+                        "vaddr": 0,
+                        "subject": "세세하우스 원룸, 신축(리모델링), 회현역 도보 6분, 조용한 주택가",
+                        "room_count": 1,
+                        "room_type": "원룸",
+                        "bedroom_count": 1,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260227/18943740/69a1149d38032_thumb.jpg",
+                        "created_at": "2026-02-27 12:50:53",
+                        "live_start_date": "2026-02-27 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 18.02,
+                        "supplied_pyeong": 5.45,
+                        "real_size": 18.02,
+                        "real_pyeong": 5.45,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "오픈형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "월세",
+                        "trade_type": "direct",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 680000,
+                        "deposit": 10000000,
+                        "maintenance_cost": 70000
+                    },
+                    "floor": {
+                        "target": 1,
+                        "total": 2,
+                        "floor_type": 1,
+                        "floor_text": "1층",
+                        "floor_text_detail": "1층/2층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5565639",
+                            "longitude": "126.9826199"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동1가",
+                            "aptName": null,
+                            "text": "중구 회현동1가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 376676343,
+                                "path": "https://img.peterpanz.com/photo/20260227/18943740/69a1149d38032_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 376676346,
+                                "path": "https://img.peterpanz.com/photo/20260227/18943740/69a1149dc958d_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 376676351,
+                                "path": "https://img.peterpanz.com/photo/20260227/18943740/69a1149e61273_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 376676360,
+                                "path": "https://img.peterpanz.com/photo/20260227/18943740/69a1149ee9588_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 376676369,
+                                "path": "https://img.peterpanz.com/photo/20260227/18943740/69a1149f69963_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 376676378,
+                                "path": "https://img.peterpanz.com/photo/20260227/18943740/69a1149fe5b97_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 376676387,
+                                "path": "https://img.peterpanz.com/photo/20260227/18943740/69a114a053666_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            },
+                            {
+                                "id": 376676391,
+                                "path": "https://img.peterpanz.com/photo/20260227/18943740/69a114a0d1bd8_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 8
+                            },
+                            {
+                                "id": 376676394,
+                                "path": "https://img.peterpanz.com/photo/20260227/18943740/69a114a167712_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 9
+                            },
+                            {
+                                "id": 376676397,
+                                "path": "https://img.peterpanz.com/photo/20260227/18943740/69a114a1e4b60_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 10
+                            },
+                            {
+                                "id": 376676400,
+                                "path": "https://img.peterpanz.com/photo/20260227/18943740/69a114a278b61_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 11
+                            },
+                            {
+                                "id": 376676403,
+                                "path": "https://img.peterpanz.com/photo/20260227/18943740/69a114a2f1aa6_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 12
+                            },
+                            {
+                                "id": 376676406,
+                                "path": "https://img.peterpanz.com/photo/20260227/18943740/69a114a37d29e_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 13
+                            },
+                            {
+                                "id": 376676409,
+                                "path": "https://img.peterpanz.com/photo/20260227/18943740/69a114a419717_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 14
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18906584,
+                    "attribute": {
+                        "created_device": "ios",
+                        "naverVerification": false,
+                        "safeDirectTrade": false,
+                        "withoutFee": false,
+                        "withoutFeeDiscount": 0,
+                        "isZero": false,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": null,
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "user",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": null,
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": null,
+                        "vaddr": 0,
+                        "subject": "4호선 명동역 도보 3분거리 귀한 원룸 월세매물",
+                        "room_count": 1,
+                        "room_type": "원룸",
+                        "bedroom_count": 1,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260220/18906584/50d8aaab0a8dd75a1ca350331caf31d5_thumb.jpg",
+                        "created_at": "2026-02-20 11:49:47",
+                        "live_start_date": "2026-02-20 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 19.84,
+                        "supplied_pyeong": 6,
+                        "real_size": 19.84,
+                        "real_pyeong": 6,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "오픈형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "월세",
+                        "trade_type": "direct",
+                        "building_form": "다가구",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "다가구",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 520000,
+                        "deposit": 30000000,
+                        "maintenance_cost": 80000
+                    },
+                    "floor": {
+                        "target": 2,
+                        "total": 3,
+                        "floor_type": 1,
+                        "floor_text": "2층",
+                        "floor_text_detail": "2층/3층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5601993",
+                            "longitude": "126.9839391"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동3가",
+                            "aptName": null,
+                            "text": "중구 회현동3가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 375795871,
+                                "path": "https://img.peterpanz.com/photo/20260220/18906584/50d8aaab0a8dd75a1ca350331caf31d5_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 375795874,
+                                "path": "https://img.peterpanz.com/photo/20260220/18906584/fa2e974bbf510fb3b08df2770a928581_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 375795877,
+                                "path": "https://img.peterpanz.com/photo/20260220/18906584/1a7029a33b994721543405b7ef29f1a7_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 375795880,
+                                "path": "https://img.peterpanz.com/photo/20260220/18906584/5af2e64081d434ed0adc6b1130f46547_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 375795883,
+                                "path": "https://img.peterpanz.com/photo/20260220/18906584/8f370f24315b11acdbc7fb3683298bbb_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 375795886,
+                                "path": "https://img.peterpanz.com/photo/20260220/18906584/33c524a62870b8e746b21e70631b9ad4_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 375795889,
+                                "path": "https://img.peterpanz.com/photo/20260220/18906584/bb161a18b4120f9de906a5c686bfae63_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            },
+                            {
+                                "id": 375795892,
+                                "path": "https://img.peterpanz.com/photo/20260220/18906584/cb6835fe5ccfbb3f0b6a833ca0eef44b_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 8
+                            },
+                            {
+                                "id": 375795895,
+                                "path": "https://img.peterpanz.com/photo/20260220/18906584/384060525a338b2e4f358c3182e58504_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 9
+                            },
+                            {
+                                "id": 375795898,
+                                "path": "https://img.peterpanz.com/photo/20260220/18906584/13ea0bf96a7159f536e9d757bfe729ef_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 10
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18822991,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": true,
+                        "safeDirectTrade": false,
+                        "withoutFee": true,
+                        "withoutFeeDiscount": 100,
+                        "isZero": true,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": "N",
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "agent",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": "2026-02-02 15:05:19",
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": true
+                    },
+                    "info": {
+                        "temp_address": "미등기",
+                        "vaddr": 0,
+                        "subject": "블루버드 명동역 신세계백화점 도보 10분 이내",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260128/18802360/6979cd3f6fcb0_thumb.jpg",
+                        "created_at": "2026-02-02 14:33:15",
+                        "live_start_date": "2026-02-02 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 0,
+                        "supplied_pyeong": 0,
+                        "real_size": 28.19,
+                        "real_pyeong": 8.52,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "전세",
+                        "trade_type": "withoutFee",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 0,
+                        "deposit": 370000000,
+                        "maintenance_cost": 0
+                    },
+                    "floor": {
+                        "target": 3,
+                        "total": 4,
+                        "floor_type": 2,
+                        "floor_text": "고층",
+                        "floor_text_detail": "고층/4층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5571835",
+                            "longitude": "126.9839417"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동2가",
+                            "aptName": null,
+                            "text": "중구 회현동2가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 373819726,
+                                "path": "https://img.peterpanz.com/photo/20260128/18802360/6979cd3f6fcb0_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 373819729,
+                                "path": "https://img.peterpanz.com/photo/20260128/18802360/6979cd4025c01_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 373819732,
+                                "path": "https://img.peterpanz.com/photo/20260128/18802360/6979cd40c1dfd_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 373819735,
+                                "path": "https://img.peterpanz.com/photo/20260128/18802360/6979cd41614b0_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 373819738,
+                                "path": "https://img.peterpanz.com/photo/20260128/18802360/6979cd41ee8d9_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 373819741,
+                                "path": "https://img.peterpanz.com/photo/20260128/18802360/6979cd4283c01_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 373819744,
+                                "path": "https://img.peterpanz.com/photo/20260128/18802360/6979cd431711c_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18823099,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": true,
+                        "safeDirectTrade": false,
+                        "withoutFee": true,
+                        "withoutFeeDiscount": 100,
+                        "isZero": true,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": "N",
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "agent",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": "2026-02-02 14:58:32",
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": true
+                    },
+                    "info": {
+                        "temp_address": null,
+                        "vaddr": 0,
+                        "subject": "블루버드 명동역  신세계백화점 도보 10분 이내 ",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260128/18801967/6979c00cd9f8c_thumb.jpg",
+                        "created_at": "2026-02-02 14:42:03",
+                        "live_start_date": "2026-02-02 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 0,
+                        "supplied_pyeong": 0,
+                        "real_size": 28.79,
+                        "real_pyeong": 8.7,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "전세",
+                        "trade_type": "withoutFee",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 0,
+                        "deposit": 330000000,
+                        "maintenance_cost": 0
+                    },
+                    "floor": {
+                        "target": 1,
+                        "total": 4,
+                        "floor_type": 2,
+                        "floor_text": "저층",
+                        "floor_text_detail": "저층/4층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5571835",
+                            "longitude": "126.9839417"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동2가",
+                            "aptName": null,
+                            "text": "중구 회현동2가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 373822109,
+                                "path": "https://img.peterpanz.com/photo/20260128/18801967/6979c00cd9f8c_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 373822112,
+                                "path": "https://img.peterpanz.com/photo/20260128/18801967/6979c00da9b36_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 373822115,
+                                "path": "https://img.peterpanz.com/photo/20260128/18801967/6979c00e4276e_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 373822118,
+                                "path": "https://img.peterpanz.com/photo/20260128/18801967/6979c00eeee66_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 373822121,
+                                "path": "https://img.peterpanz.com/photo/20260128/18801967/6979c00f9a58d_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 373822124,
+                                "path": "https://img.peterpanz.com/photo/20260128/18801967/6979c0103db11_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 373822127,
+                                "path": "https://img.peterpanz.com/photo/20260128/18801967/6979c010dce59_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            },
+                            {
+                                "id": 373822130,
+                                "path": "https://img.peterpanz.com/photo/20260128/18801967/6979c0116c077_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 8
+                            },
+                            {
+                                "id": 373822133,
+                                "path": "https://img.peterpanz.com/photo/20260128/18801967/6979c01200c9a_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 9
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18812897,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": true,
+                        "safeDirectTrade": false,
+                        "withoutFee": true,
+                        "withoutFeeDiscount": 100,
+                        "isZero": true,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": "N",
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "agent",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": "2026-01-30 17:08:55",
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": true
+                    },
+                    "info": {
+                        "temp_address": null,
+                        "vaddr": 0,
+                        "subject": "[명동역회현역] 더블역세권 통창 풀옵션 감성 인테리어 투룸",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260130/18812897/697c65e62dbfd_thumb.jpg",
+                        "created_at": "2026-01-30 17:03:50",
+                        "live_start_date": "2026-01-30 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 41.77,
+                        "supplied_pyeong": 12.63,
+                        "real_size": 28.19,
+                        "real_pyeong": 8.52,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "전세",
+                        "trade_type": "withoutFee",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 0,
+                        "deposit": 350000000,
+                        "maintenance_cost": 0
+                    },
+                    "floor": {
+                        "target": 1,
+                        "total": 4,
+                        "floor_type": 2,
+                        "floor_text": "저층",
+                        "floor_text_detail": "저층/4층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5571835",
+                            "longitude": "126.9839417"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동2가",
+                            "aptName": null,
+                            "text": "중구 회현동2가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 373576780,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812897/697c65e62dbfd_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 373576783,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812897/697c65e7093e1_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 373576786,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812897/697c65e7a6b99_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 373576789,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812897/697c65e849f86_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 373576792,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812897/697c65e8c9739_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 373576795,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812897/697c65e96e2e1_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 373576798,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812897/697c65ea18402_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            },
+                            {
+                                "id": 373576801,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812897/697c65eab117d_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 8
+                            },
+                            {
+                                "id": 373576804,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812897/697c65eb7129c_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 9
+                            },
+                            {
+                                "id": 373576807,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812897/697c65ec173a7_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 10
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18846343,
+                    "attribute": {
+                        "created_device": "ios",
+                        "naverVerification": false,
+                        "safeDirectTrade": false,
+                        "withoutFee": false,
+                        "withoutFeeDiscount": 0,
+                        "isZero": false,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": null,
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "user",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": null,
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": "층별 용도가 주거용",
+                        "vaddr": 0,
+                        "subject": "명동역 4번출구 도보4분 203",
+                        "room_count": 1,
+                        "room_type": "원룸",
+                        "bedroom_count": 1,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260206/18846343/c2d1efeab5313368c49cad7438df5cf1_thumb.jpg",
+                        "created_at": "2026-02-06 10:43:40",
+                        "live_start_date": "2026-02-06 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 12.23,
+                        "supplied_pyeong": 3.69,
+                        "real_size": 12.23,
+                        "real_pyeong": 3.69,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "오픈형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "월세",
+                        "trade_type": "direct",
+                        "building_form": "원룸",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "원룸",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 650000,
+                        "deposit": 10000000,
+                        "maintenance_cost": 60000
+                    },
+                    "floor": {
+                        "target": 2,
+                        "total": 4,
+                        "floor_type": 1,
+                        "floor_text": "2층",
+                        "floor_text_detail": "2층/4층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5588954",
+                            "longitude": "126.9836691"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동2가",
+                            "aptName": null,
+                            "text": "중구 회현동2가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 376070708,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846343/c2d1efeab5313368c49cad7438df5cf1_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 376070711,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846343/a20108719d69873f0d136b7ff4c7a89d_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 376070714,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846343/33a6397f39f0ca8be2088a9631f7cc46_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 376070717,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846343/d72f3ff1e1c95c8b034d9aefe5d377e5_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 376070720,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846343/54fe9931fa446275c0188db6dff6375c_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 376070723,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846343/90cda02abe847a2a52e9116a98a4037a_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 376070726,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846343/7dc5777b2b1999b10a3a874717866f99_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18932577,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": true,
+                        "safeDirectTrade": false,
+                        "withoutFee": false,
+                        "withoutFeeDiscount": 0,
+                        "isZero": false,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": "S",
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "agent",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": "2026-02-26 21:54:44",
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": "건축물대장 면적 확인요청",
+                        "vaddr": 0,
+                        "subject": "- 명동역  회현역 도보 10분  보증보험가입가능  풀옵션 전세 ",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260225/18932577/610ace9c2fa469934f0d942fab7dc9c4_thumb.jpg",
+                        "created_at": "2026-02-25 12:39:02",
+                        "live_start_date": "2026-02-27 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 36.25,
+                        "supplied_pyeong": 10.96,
+                        "real_size": 24.71,
+                        "real_pyeong": 7.47,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "전세",
+                        "trade_type": "agency",
+                        "building_form": "원룸",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "원룸",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 0,
+                        "deposit": 320000000,
+                        "maintenance_cost": 0
+                    },
+                    "floor": {
+                        "target": 3,
+                        "total": 4,
+                        "floor_type": 1,
+                        "floor_text": "3층",
+                        "floor_text_detail": "3층/4층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5571835",
+                            "longitude": "126.9839417"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동2가",
+                            "aptName": null,
+                            "text": "중구 회현동2가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 376621321,
+                                "path": "https://img.peterpanz.com/photo/20260225/18932577/610ace9c2fa469934f0d942fab7dc9c4_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 376621324,
+                                "path": "https://img.peterpanz.com/photo/20260225/18932577/907542429dc06fdde65e714d11637cea_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 376621327,
+                                "path": "https://img.peterpanz.com/photo/20260225/18932577/55ceaf823a4308b3461029f92aab6f39_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 376621330,
+                                "path": "https://img.peterpanz.com/photo/20260225/18932577/fe4c7854f317cfe413debab8c99949b4_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 376621333,
+                                "path": "https://img.peterpanz.com/photo/20260225/18932577/52fea9a8ec31ae5c6405ce4c4ff1301b_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 376621336,
+                                "path": "https://img.peterpanz.com/photo/20260225/18932577/00fb5428c7ce65afaa0608a784f3629b_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 376621339,
+                                "path": "https://img.peterpanz.com/photo/20260225/18932577/0538aa64fbe688439d890fe03d5a9d4f_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            },
+                            {
+                                "id": 376621342,
+                                "path": "https://img.peterpanz.com/photo/20260225/18932577/4e5e462589d1313741a085bf286f2e00_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 8
+                            },
+                            {
+                                "id": 376621345,
+                                "path": "https://img.peterpanz.com/photo/20260225/18932577/73f9112ef85943d569371e5006e86468_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 9
+                            },
+                            {
+                                "id": 376621348,
+                                "path": "https://img.peterpanz.com/photo/20260225/18932577/2fc24ac14c0a35d2dc866756bf183254_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 10
+                            },
+                            {
+                                "id": 376621351,
+                                "path": "https://img.peterpanz.com/photo/20260225/18932577/4649c9c14a57950f1bc0a422ce46eb6a_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 11
+                            },
+                            {
+                                "id": 376621354,
+                                "path": "https://img.peterpanz.com/photo/20260225/18932577/6e47e95c54b69ceb922af2221652aa87_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 12
+                            },
+                            {
+                                "id": 376621357,
+                                "path": "https://img.peterpanz.com/photo/20260225/18932577/849956a1d8a55f69adaf5cff8ca71c67_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 13
+                            },
+                            {
+                                "id": 376621360,
+                                "path": "https://img.peterpanz.com/photo/20260225/18932577/366fd132e6f7606ab2fbf8c778b59242_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 14
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18894201,
+                    "attribute": {
+                        "created_device": "android",
+                        "naverVerification": false,
+                        "safeDirectTrade": false,
+                        "withoutFee": false,
+                        "withoutFeeDiscount": 0,
+                        "isZero": false,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": null,
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "user",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": null,
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": "층별 용도가 주거용",
+                        "vaddr": 0,
+                        "subject": "회현역 도보7분거리 리모델링한 깨끗한원룸 ",
+                        "room_count": 1,
+                        "room_type": "1.5룸",
+                        "bedroom_count": 1,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260216/18894201/fcc42207b97dc53e758fd6420c9d094b_thumb.jpg",
+                        "created_at": "2026-02-16 10:17:08",
+                        "live_start_date": "2026-02-16 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 33.06,
+                        "supplied_pyeong": 10,
+                        "real_size": 33.06,
+                        "real_pyeong": 10,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "월세",
+                        "trade_type": "direct",
+                        "building_form": "원룸",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "원룸",
+                        "building_category": null,
+                        "building_code": "24",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 450000,
+                        "deposit": 50000000,
+                        "maintenance_cost": 80000
+                    },
+                    "floor": {
+                        "target": 1,
+                        "total": 4,
+                        "floor_type": 1,
+                        "floor_text": "1층",
+                        "floor_text_detail": "1층/4층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5563211",
+                            "longitude": "126.9808011"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동1가",
+                            "aptName": null,
+                            "text": "중구 회현동1가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 1,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 375497116,
+                                "path": "https://img.peterpanz.com/photo/20260216/18894201/fcc42207b97dc53e758fd6420c9d094b_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 375497119,
+                                "path": "https://img.peterpanz.com/photo/20260216/18894201/89e74d7c4beba1892fd0a360c733689d_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 375497122,
+                                "path": "https://img.peterpanz.com/photo/20260216/18894201/191074910a9b1cae6dc89c2fe702c484_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 375497125,
+                                "path": "https://img.peterpanz.com/photo/20260216/18894201/c8ad6691cff9a206f97cc406c360574f_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 375497128,
+                                "path": "https://img.peterpanz.com/photo/20260216/18894201/1a9591dce8d766791d5995f6a24979fd_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18804436,
+                    "attribute": {
+                        "created_device": "android",
+                        "naverVerification": false,
+                        "safeDirectTrade": false,
+                        "withoutFee": false,
+                        "withoutFeeDiscount": 0,
+                        "isZero": false,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": null,
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "user",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": null,
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": "",
+                        "vaddr": 1,
+                        "subject": "회현역 도보10분",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260129/18804436/44627e2dc509be01d3ab3d545b98d86c_thumb.jpg",
+                        "created_at": "2026-01-29 11:42:04",
+                        "live_start_date": "2026-01-29 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 45.29,
+                        "supplied_pyeong": 13.69,
+                        "real_size": 41.99,
+                        "real_pyeong": 12.7,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "오픈형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "월세",
+                        "trade_type": "direct",
+                        "building_form": "상가주택",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "상가주택",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 150000,
+                        "deposit": 180000000,
+                        "maintenance_cost": 0
+                    },
+                    "floor": {
+                        "target": 2,
+                        "total": 5,
+                        "floor_type": 1,
+                        "floor_text": "2층",
+                        "floor_text_detail": "2층/5층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5572276259336",
+                            "longitude": "126.97980108482642"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동1가",
+                            "aptName": null,
+                            "text": "중구 회현동1가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 373379632,
+                                "path": "https://img.peterpanz.com/photo/20260129/18804436/44627e2dc509be01d3ab3d545b98d86c_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 373379635,
+                                "path": "https://img.peterpanz.com/photo/20260129/18804436/a2d59aeb688edeabbf50ed307939ef36_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 373379638,
+                                "path": "https://img.peterpanz.com/photo/20260129/18804436/c671a18b5ff3eb874d3da34da1338b4b_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 373379641,
+                                "path": "https://img.peterpanz.com/photo/20260129/18804436/093e53d72c3c8e7e9e09a25c0fcf9dd7_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18835338,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": true,
+                        "safeDirectTrade": false,
+                        "withoutFee": true,
+                        "withoutFeeDiscount": 10,
+                        "isZero": true,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": "D2",
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "agent",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": "2026-02-04 13:13:48",
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": null,
+                        "vaddr": 0,
+                        "subject": "귀하다...VIP님 바로 이 집 잡아가세요ㅣ풀옵션HUG보증보험",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260101/18664897/695623113889c_thumb.jpg",
+                        "created_at": "2026-02-04 12:25:50",
+                        "live_start_date": "2026-02-04 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 0,
+                        "supplied_pyeong": 0,
+                        "real_size": 28.23,
+                        "real_pyeong": 8.53,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "전세",
+                        "trade_type": "withoutFee",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 0,
+                        "deposit": 300000000,
+                        "maintenance_cost": 80000
+                    },
+                    "floor": {
+                        "target": 2,
+                        "total": 6,
+                        "floor_type": 1,
+                        "floor_text": "2층",
+                        "floor_text_detail": "2층/6층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5571155",
+                            "longitude": "126.9805754"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동1가",
+                            "aptName": null,
+                            "text": "중구 회현동1가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 374109758,
+                                "path": "https://img.peterpanz.com/photo/20260101/18664897/695623113889c_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 374109761,
+                                "path": "https://img.peterpanz.com/photo/20260101/18664897/69562311d0368_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 374109764,
+                                "path": "https://img.peterpanz.com/photo/20260101/18664897/695623125ee60_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 374109767,
+                                "path": "https://img.peterpanz.com/photo/20260101/18664897/69562312ee357_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 374109770,
+                                "path": "https://img.peterpanz.com/photo/20260101/18664897/695623137ec9e_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 374109773,
+                                "path": "https://img.peterpanz.com/photo/20260101/18664897/695623141385f_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 374109776,
+                                "path": "https://img.peterpanz.com/photo/20260101/18664897/695623149c066_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18881721,
+                    "attribute": {
+                        "created_device": "ios",
+                        "naverVerification": true,
+                        "safeDirectTrade": false,
+                        "withoutFee": false,
+                        "withoutFeeDiscount": 0,
+                        "isZero": false,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": "M",
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "user",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": "2026-02-13 10:38:07",
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": true
+                    },
+                    "info": {
+                        "temp_address": null,
+                        "vaddr": 0,
+                        "subject": "명동역세권, 남산숲세권 ,숭의학세권 다 갖춘집",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260112/18711102/67e99afe0dae0e56646532450b8c9d40_thumb.jpg",
+                        "created_at": "2026-02-12 16:58:28",
+                        "live_start_date": "2026-02-13 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 1,
+                        "is_multilayer": 0,
+                        "supplied_size": 33.06,
+                        "supplied_pyeong": 10,
+                        "real_size": 29.75,
+                        "real_pyeong": 8.99,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "월세",
+                        "trade_type": "direct",
+                        "building_form": "원룸",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "원룸",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 750000,
+                        "deposit": 5000000,
+                        "maintenance_cost": 20000
+                    },
+                    "floor": {
+                        "target": 0,
+                        "total": 3,
+                        "floor_type": 1,
+                        "floor_text": "반지층",
+                        "floor_text_detail": "반지층/3층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5576708",
+                            "longitude": "126.9857521"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "예장동",
+                            "aptName": null,
+                            "text": "중구 예장동"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 375199871,
+                                "path": "https://img.peterpanz.com/photo/20260112/18711102/67e99afe0dae0e56646532450b8c9d40_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 375199874,
+                                "path": "https://img.peterpanz.com/photo/20260112/18711102/81aba22759b8ba81ef256c744382a23c_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 375199877,
+                                "path": "https://img.peterpanz.com/photo/20260112/18711102/86d284998cdc6035e624a2001e1bda40_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 375199880,
+                                "path": "https://img.peterpanz.com/photo/20260112/18711102/766da75d6128c49c33698234f6fdb257_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 375199883,
+                                "path": "https://img.peterpanz.com/photo/20260112/18711102/aecefa54d01499b964ae3f38df25991c_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 375199886,
+                                "path": "https://img.peterpanz.com/photo/20260112/18711102/0a56c5a2d59820a113838cd0964dc4cc_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 375199889,
+                                "path": "https://img.peterpanz.com/photo/20260112/18711102/69a598a1d867c93c6f76d3c0e43c8468_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            },
+                            {
+                                "id": 375199892,
+                                "path": "https://img.peterpanz.com/photo/20260112/18711102/e4e02fcbad257e1beecf222f73bed954_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 8
+                            },
+                            {
+                                "id": 375199895,
+                                "path": "https://img.peterpanz.com/photo/20260112/18711102/5e34f4471c2c99edb79a7c58e6a1489a_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 9
+                            },
+                            {
+                                "id": 375199898,
+                                "path": "https://img.peterpanz.com/photo/20260112/18711102/e400f2f9850fcd0389721d58a59dfd1e_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 10
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18914673,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": false,
+                        "safeDirectTrade": false,
+                        "withoutFee": false,
+                        "withoutFeeDiscount": 0,
+                        "isZero": false,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": null,
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "agent",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": null,
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": null,
+                        "vaddr": 0,
+                        "subject": "A. 완전신축. 대출가능. ",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260221/18914673/69994bdb735cb_thumb.jpg",
+                        "created_at": "2026-02-21 15:08:27",
+                        "live_start_date": "2026-02-21 15:08:41",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 0,
+                        "supplied_pyeong": 0,
+                        "real_size": 28.79,
+                        "real_pyeong": 8.7,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "전세",
+                        "trade_type": "agency",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 0,
+                        "deposit": 330000000,
+                        "maintenance_cost": 0
+                    },
+                    "floor": {
+                        "target": 1,
+                        "total": 4,
+                        "floor_type": 2,
+                        "floor_text": "저층",
+                        "floor_text_detail": "저층/4층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5571835",
+                            "longitude": "126.9839417"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동2가",
+                            "aptName": null,
+                            "text": "중구 회현동2가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 375982428,
+                                "path": "https://img.peterpanz.com/photo/20260221/18914673/69994bdb735cb_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 375982431,
+                                "path": "https://img.peterpanz.com/photo/20260221/18914673/69994bdbee02a_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 375982434,
+                                "path": "https://img.peterpanz.com/photo/20260221/18914673/69994bdc6ee1b_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 375982437,
+                                "path": "https://img.peterpanz.com/photo/20260221/18914673/69994bdcee79a_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 375982440,
+                                "path": "https://img.peterpanz.com/photo/20260221/18914673/69994bdd69b1f_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 375982443,
+                                "path": "https://img.peterpanz.com/photo/20260221/18914673/69994bde029be_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 375982446,
+                                "path": "https://img.peterpanz.com/photo/20260221/18914673/69994bde7ad38_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            },
+                            {
+                                "id": 375982449,
+                                "path": "https://img.peterpanz.com/photo/20260221/18914673/69994bdf058f2_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 8
+                            },
+                            {
+                                "id": 375982452,
+                                "path": "https://img.peterpanz.com/photo/20260221/18914673/69994bdf844b8_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 9
+                            },
+                            {
+                                "id": 375982455,
+                                "path": "https://img.peterpanz.com/photo/20260221/18914673/69994be0081a4_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 10
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18812947,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": true,
+                        "safeDirectTrade": false,
+                        "withoutFee": true,
+                        "withoutFeeDiscount": 100,
+                        "isZero": true,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": "N",
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "agent",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": "2026-01-30 17:12:20",
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": true
+                    },
+                    "info": {
+                        "temp_address": null,
+                        "vaddr": 0,
+                        "subject": "[명동역회현역] 더블역세권 풀옵션 감성 인테리어 투룸",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260130/18812947/697c66d07662c_thumb.jpg",
+                        "created_at": "2026-01-30 17:07:44",
+                        "live_start_date": "2026-01-30 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 36.61,
+                        "supplied_pyeong": 11.07,
+                        "real_size": 24.71,
+                        "real_pyeong": 7.47,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "전세",
+                        "trade_type": "withoutFee",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 0,
+                        "deposit": 320000000,
+                        "maintenance_cost": 0
+                    },
+                    "floor": {
+                        "target": 2,
+                        "total": 4,
+                        "floor_type": 2,
+                        "floor_text": "중층",
+                        "floor_text_detail": "중층/4층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5571835",
+                            "longitude": "126.9839417"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동2가",
+                            "aptName": null,
+                            "text": "중구 회현동2가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 373577922,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812947/697c66d07662c_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 373577925,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812947/697c66d11eb3e_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 373577928,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812947/697c66d1af450_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 373577931,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812947/697c66d22d954_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 373577934,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812947/697c66d2cb7de_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 373577937,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812947/697c66d3622a1_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 373577940,
+                                "path": "https://img.peterpanz.com/photo/20260130/18812947/697c66d3edc97_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18846125,
+                    "attribute": {
+                        "created_device": "ios",
+                        "naverVerification": false,
+                        "safeDirectTrade": false,
+                        "withoutFee": false,
+                        "withoutFeeDiscount": 0,
+                        "isZero": false,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": null,
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "user",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": null,
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": "층별 용도가 주거용",
+                        "vaddr": 0,
+                        "subject": "명동역 도보3분",
+                        "room_count": 1,
+                        "room_type": "원룸",
+                        "bedroom_count": 1,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260206/18846125/310988de2b9085f131016dcba1e8844e_thumb.jpg",
+                        "created_at": "2026-02-06 10:30:59",
+                        "live_start_date": "2026-02-06 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 9.92,
+                        "supplied_pyeong": 3,
+                        "real_size": 9.92,
+                        "real_pyeong": 3,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "오픈형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "월세",
+                        "trade_type": "direct",
+                        "building_form": "원룸",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "원룸",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 500000,
+                        "deposit": 8000000,
+                        "maintenance_cost": 50000
+                    },
+                    "floor": {
+                        "target": 1,
+                        "total": 4,
+                        "floor_type": 1,
+                        "floor_text": "1층",
+                        "floor_text_detail": "1층/4층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5588954",
+                            "longitude": "126.9836691"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동2가",
+                            "aptName": null,
+                            "text": "중구 회현동2가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 374380067,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846125/310988de2b9085f131016dcba1e8844e_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 374380070,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846125/2a9ce0aa9a05f3a3a48be92e8e43bc6d_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 374380073,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846125/5ceff21ca1d3b1106287216992a443fd_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 374380076,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846125/4341d567bc22296e94b7022d8939d90a_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 374380079,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846125/38f72e5db30aa7654bed1601ff8044ad_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 374380082,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846125/7686ab8ce1fb99df1e13f7eac8cd43f7_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 374380085,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846125/9e5d4cb391a4b3d21c69efe6601ef8bc_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            },
+                            {
+                                "id": 374380088,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846125/f0d623e5ea5cebc39c82282c011ac58e_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 8
+                            },
+                            {
+                                "id": 374380091,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846125/f292d5d9fa0e65f19ef950a9b114cd90_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 9
+                            },
+                            {
+                                "id": 374380094,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846125/a7be10fc31dd099150ec567210cb4ace_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 10
+                            },
+                            {
+                                "id": 374380097,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846125/45389a06b5007418e53b4b40d26bd66f_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 11
+                            },
+                            {
+                                "id": 374380100,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846125/4fcb212b2cb4d12730d6482704e1c553_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 12
+                            },
+                            {
+                                "id": 374380103,
+                                "path": "https://img.peterpanz.com/photo/20260206/18846125/d35d09ea266edab3e2774c91157b9864_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 13
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18802407,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": true,
+                        "safeDirectTrade": false,
+                        "withoutFee": true,
+                        "withoutFeeDiscount": 100,
+                        "isZero": true,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": "N",
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "agent",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": "2026-01-29 10:04:19",
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": true
+                    },
+                    "info": {
+                        "temp_address": "미등기",
+                        "vaddr": 0,
+                        "subject": "블루버드 명동역 신세계백화점 도보 10분 이내",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260128/18802407/6979cf7238088_thumb.jpg",
+                        "created_at": "2026-01-28 17:57:22",
+                        "live_start_date": "2026-01-29 00:00:00",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 0,
+                        "supplied_pyeong": 0,
+                        "real_size": 28.91,
+                        "real_pyeong": 8.74,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "월세",
+                        "trade_type": "withoutFee",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 100000,
+                        "deposit": 300000000,
+                        "maintenance_cost": 0
+                    },
+                    "floor": {
+                        "target": 3,
+                        "total": 4,
+                        "floor_type": 2,
+                        "floor_text": "고층",
+                        "floor_text_detail": "고층/4층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5571835",
+                            "longitude": "126.9839417"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동2가",
+                            "aptName": null,
+                            "text": "중구 회현동2가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 373322347,
+                                "path": "https://img.peterpanz.com/photo/20260128/18802407/6979cf7238088_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 373322350,
+                                "path": "https://img.peterpanz.com/photo/20260128/18802407/6979cf72d5b38_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 373322353,
+                                "path": "https://img.peterpanz.com/photo/20260128/18802407/6979cf7364503_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 373322356,
+                                "path": "https://img.peterpanz.com/photo/20260128/18802407/6979cf73ee8c2_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 373322359,
+                                "path": "https://img.peterpanz.com/photo/20260128/18802407/6979cf7470ddf_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 373322362,
+                                "path": "https://img.peterpanz.com/photo/20260128/18802407/6979cf74e6f78_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            },
+                            {
+                                "id": 373322365,
+                                "path": "https://img.peterpanz.com/photo/20260128/18802407/6979cf756751e_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 7
+                            },
+                            {
+                                "id": 373322368,
+                                "path": "https://img.peterpanz.com/photo/20260128/18802407/6979cf76070ff_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 8
+                            }
+                        ]
+                    }
+                },
+                {
+                    "hidx": 18910928,
+                    "attribute": {
+                        "created_device": "web",
+                        "naverVerification": false,
+                        "safeDirectTrade": false,
+                        "withoutFee": true,
+                        "withoutFeeDiscount": 50,
+                        "isZero": true,
+                        "isRentalManagement": false,
+                        "recommend": false,
+                        "isFa": null,
+                        "verificationType": "D2",
+                        "isReported": 0,
+                        "isMyReport": 0,
+                        "smartContract": 0,
+                        "userType": "agent",
+                        "status_code": "0103",
+                        "isOwnerConfirm": null,
+                        "naverUpdatedAt": null,
+                        "peterVerified": false,
+                        "hasOwner": false,
+                        "peterVerifiedCheckVacancyDate": "",
+                        "peterOwnerCheckedAt": null,
+                        "is_recommend": false,
+                        "is_jjin": false,
+                        "is_premium": 0,
+                        "hasOwnerMark": false
+                    },
+                    "info": {
+                        "temp_address": null,
+                        "vaddr": 0,
+                        "subject": "HUG보증보험o귀한 투룸o구조o풀옵션 동향으로 트인 뷰",
+                        "room_count": 2,
+                        "room_type": "투룸",
+                        "bedroom_count": 2,
+                        "store_count": null,
+                        "thumbnail": "https://img.peterpanz.com/photo/20260220/18910928/699847e044e48_thumb.jpg",
+                        "created_at": "2026-02-20 20:39:12",
+                        "live_start_date": "2026-02-20 20:39:31",
+                        "is_octop": 0,
+                        "is_half_underground": 0,
+                        "is_multilayer": 0,
+                        "supplied_size": 31.33,
+                        "supplied_pyeong": 9.47,
+                        "real_size": 26.3,
+                        "real_pyeong": 7.95,
+                        "total_floor_size": null,
+                        "total_floor_size_pyeong": 0,
+                        "site_size": null,
+                        "site_size_pyeong": 0,
+                        "building_size": null,
+                        "building_size_pyeong": 0,
+                        "naver_map": 1,
+                        "livingroom_text": "분리형",
+                        "special_pick": null
+                    },
+                    "type": {
+                        "contract_type": "전세",
+                        "trade_type": "withoutFee",
+                        "building_form": "빌라",
+                        "building_type": "빌라/주택",
+                        "building_type_text": "빌라",
+                        "building_category": null,
+                        "building_code": "",
+                        "isCafe": false,
+                        "fa3Code": 0
+                    },
+                    "price": {
+                        "monthly_fee": 0,
+                        "deposit": 300000000,
+                        "maintenance_cost": 80000
+                    },
+                    "floor": {
+                        "target": 4,
+                        "total": 6,
+                        "floor_type": 1,
+                        "floor_text": "4층",
+                        "floor_text_detail": "4층/6층"
+                    },
+                    "location": {
+                        "coordinate": {
+                            "latitude": "37.5571155",
+                            "longitude": "126.9805754"
+                        },
+                        "address": {
+                            "sido": "서울특별시",
+                            "sigungu": "중구",
+                            "dong": "회현동1가",
+                            "aptName": null,
+                            "text": "중구 회현동1가"
+                        }
+                    },
+                    "favorite": false,
+                    "recentView": false,
+                    "additional_options": {
+                        "is_new_building": 0,
+                        "have_parking_lot": 0,
+                        "is_full_option": 0,
+                        "have_elevator": 0,
+                        "support_loan": 0,
+                        "allow_pet": 0,
+                        "is_main_road": 0
+                    },
+                    "images": {
+                        "S": [
+                            {
+                                "id": 375902255,
+                                "path": "https://img.peterpanz.com/photo/20260220/18910928/699847e044e48_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 1
+                            },
+                            {
+                                "id": 375902258,
+                                "path": "https://img.peterpanz.com/photo/20260220/18910928/699847e0d7a19_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 2
+                            },
+                            {
+                                "id": 375902261,
+                                "path": "https://img.peterpanz.com/photo/20260220/18910928/699847e16d204_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 3
+                            },
+                            {
+                                "id": 375902264,
+                                "path": "https://img.peterpanz.com/photo/20260220/18910928/699847e1f1e72_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 4
+                            },
+                            {
+                                "id": 375902267,
+                                "path": "https://img.peterpanz.com/photo/20260220/18910928/699847e28bb41_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 5
+                            },
+                            {
+                                "id": 375902270,
+                                "path": "https://img.peterpanz.com/photo/20260220/18910928/699847e3253df_thumb.jpg",
+                                "type": "S",
+                                "is_complex_photo": 0,
+                                "order": 6
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    },
+    "agencyCount": 0,
+    "directCount": 0,
+    "peterVerifiedCount": 0,
+    "recommendCount": 0,
+    "withoutFeeCount": 24,
+    "jjinCount": 0,
+    "hasOwnerCount": 0,
+    "totalCount": 24,
+    "limitInfo": {
+        "deposit": {
+            "min": 5000000,
+            "max": 370000000
+        },
+        "monthlyFee": {
+            "min": 0,
+            "max": 750000
+        }
+    },
+    "currentPage": 1,
+    "searchVersion": "v5",
+    "orderId": "1772116818",
+    "debug": {
+        "search": {
+            "zoomLevel": 15,
+            "latitudeFrom": "37.5530647",
+            "latitudeTo": "37.5694842",
+            "longitudeFrom": "126.9755505",
+            "longitudeTo": "126.9909154",
+            "checkedBuildingType": [
+                "원/투룸"
+            ],
+            "checkedBuildingCategory": [],
+            "checkedContractType": [],
+            "checkedPtpNos": [],
+            "depositFrom": null,
+            "depositTo": null,
+            "monthlyFeeFrom": null,
+            "monthlyFeeTo": null,
+            "isIncludedMaintenance": false,
+            "priceFrom": null,
+            "priceTo": null,
+            "realSizeFrom": null,
+            "realSizeTo": null,
+            "siteSizeFrom": null,
+            "siteSizeTo": null,
+            "checkedRoomCountEtc": [],
+            "checkedRoomType": [],
+            "checkedIsMultilayer": [],
+            "checkedOptions": [],
+            "houseIds": [],
+            "dongIdx": 0,
+            "agentIdxs": [],
+            "uidx": 0,
+            "page": 1,
+            "rows": 50,
+            "orderId": "1772116818",
+            "responseVersion": "5.3",
+            "filterVersion": "5.1",
+            "for": null,
+            "countFilter": null,
+            "orderFirstBy": null,
+            "houseReformVersionTitle": "villa_building",
+            "checkedDebtType": [],
+            "sidx": 0,
+            "orderBy": "random",
+            "searchType": "area/pc",
+            "device": "web"
+        },
+        "countSql": "",
+        "sql": ""
+    }
+}

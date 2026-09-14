@@ -1,0 +1,20 @@
+{
+  "에어팟 프로2": {
+    "min_price": null,
+    "max_price": 100000,
+    "start_date": "2025-10-08",
+    "end_date": null
+  },
+  "프로2": {
+    "min_price": null,
+    "max_price": null,
+    "start_date": null,
+    "end_date": null
+  },
+  "s22울트라": {
+    "min_price": 100000,
+    "max_price": 350000,
+    "start_date": null,
+    "end_date": null
+  }
+}

@@ -1,0 +1,45 @@
+# ── 비밀정보 (절대 커밋 금지) ─────────────────────────────
+package/onhouse_credentials.json
+package/onhouse_contacts_cache.json
+package/telegram_config.json
+package/proxy.txt
+package/*_credentials.json
+license_worker/.dev.vars
+license_server/license.db
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+
+# ── 빌드 결과물 / 중간물 ───────────────────────────────────
+*.exe
+*.zip
+*.pkg
+*.pyz
+package/dist/
+package/dist_obf*/
+package/build/
+package/build_*/
+package/__pycache__/
+**/__pycache__/
+*.pyc
+*.spec.bak
+
+# ── 수집 결과 데이터 ──────────────────────────────────────
+data/
+package/data/
+*.xlsx
+*.csv
+package/html.html
+*.log
+
+# ── Node / Cloudflare worker ─────────────────────────────
+license_worker/node_modules/
+license_worker/.wrangler/
+
+# ── 편집기/OS ─────────────────────────────────────────────
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

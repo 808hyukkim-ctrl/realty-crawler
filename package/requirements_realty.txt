@@ -1,0 +1,6 @@
+# 당근 부동산 크롤러 의존성
+curl_cffi
+beautifulsoup4
+openpyxl
+tkcalendar
+PySide6

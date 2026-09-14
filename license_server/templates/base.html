@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}전국부동산매물수집기 라이선스 관리{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  {% if session.get('admin_id') %}
+  <header class="topbar">
+    <div class="brand">전국부동산매물수집기 · 라이선스 관리</div>
+    <nav>
+      <a href="{{ url_for('dashboard') }}">대시보드</a>
+      <a href="{{ url_for('account') }}">계정 설정</a>
+      <span class="who">{{ session.get('admin_username') }}님</span>
+      <a href="{{ url_for('logout') }}" class="logout">로그아웃</a>
+    </nav>
+  </header>
+  {% endif %}
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

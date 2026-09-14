@@ -1,0 +1,8 @@
+name = "realty-license-server"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "license_db"
+database_id = "562d4ba7-ab26-4958-b6b4-12ac11ef21dc"

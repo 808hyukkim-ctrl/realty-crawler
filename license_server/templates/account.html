@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}계정 설정{% endblock %}
+{% block content %}
+<div class="form-box">
+  <h1>관리자 비밀번호 변경</h1>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if success %}<p class="success">{{ success }}</p>{% endif %}
+  <form method="post">
+    <label>현재 비밀번호<input type="password" name="current_password" required></label>
+    <label>새 비밀번호<input type="password" name="new_password" required></label>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">변경</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
