@@ -201,8 +201,8 @@ class NaverCrawler:
             "X-Requested-With": "XMLHttpRequest",
         })
         self.timeout_sec = 20
-        self._bldrgst_max_attempts = max(1, int(os.getenv("BLDRGST_RETRY_ATTEMPTS", "3")))
-        self._bldrgst_retry_backoff_sec = float(os.getenv("BLDRGST_RETRY_BACKOFF_SEC", "1.2"))
+        self._bldrgst_max_attempts = max(1, int(os.getenv("BLDRGST_RETRY_ATTEMPTS", "6")))
+        self._bldrgst_retry_backoff_sec = float(os.getenv("BLDRGST_RETRY_BACKOFF_SEC", "1.5"))
         # 전용면적 API 페이지네이션 상한 (이상 응답 시 무한 루프 방지)
         self._bldrgst_excl_max_pages = max(1, int(os.getenv("BLDRGST_EXCL_MAX_PAGES", "500")))
         self.sess.headers.update({
@@ -537,13 +537,18 @@ class NaverCrawler:
         bun: str,
         ji: str,
         dong_nm: Optional[str] = None,
+        num_rows: int = 100,
     ) -> Dict[str, Dict[str, Any]]:
+        """건축물대장 전유부 호 목록. dong_nm 지정 시 key=호명, 미지정(지번 전체) 시 key='동명|호명' (동 간 호 충돌 방지).
+        각 값에는 area / mgmBldrgstPk / dongNm / hoNm 이 들어간다."""
         if not self._bldrgst_service_key:
             self._hosu_debug_log("[건축물대장] 건너뜀: 공공데이터 서비스키 없음")
             return {}
 
         cache_key = (sigungu_cd, bjdong_cd, bun, ji, dong_nm or "")
+        self._last_unit_fetch_complete = False
         if cache_key in self._exclusive_area_cache:
+            self._last_unit_fetch_complete = True
             n = len(self._exclusive_area_cache[cache_key])
             self._hosu_debug_log(
                 f"[건축물대장] 캐시 사용 시군구={sigungu_cd} 법정동={bjdong_cd} 번={bun} 지={ji} 동명={dong_nm or '(미지정)'} 호수={n}건"
@@ -557,6 +562,7 @@ class NaverCrawler:
         page = 1
         total = None
         had_success_response = False
+        complete = False  # 마지막 페이지까지 정상 수신했을 때만 True (부분 수신 결과는 캐시·완화 추론에 쓰지 않음)
         base_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrExposPubuseAreaInfo"
         while True:
             if page > self._bldrgst_excl_max_pages:
@@ -571,7 +577,7 @@ class NaverCrawler:
                 "platGbCd": "0",
                 "bun": bun,
                 "ji": ji,
-                "numOfRows": 100,
+                "numOfRows": int(num_rows),
                 "pageNo": page,
             }
             if dong_nm and dong_nm != "1동":
@@ -625,7 +631,9 @@ class NaverCrawler:
 
             items = root.findall(".//item")
             if not items:
-                self._hosu_debug_log(f"[건축물대장] 중단: 해당 페이지에 item 없음 페이지={page}")
+                if total is not None and (page - 1) * int(num_rows) >= total:
+                    complete = True
+                self._hosu_debug_log(f"[건축물대장] 중단: 해당 페이지에 item 없음 페이지={page} (완료={complete})")
                 break
 
             before = len(unit_map)
@@ -640,21 +648,32 @@ class NaverCrawler:
                     area = float(item.findtext("area") or "0")
                 except Exception:
                     continue
-                unit_map[ho_nm] = {
+                item_dong = (item.findtext("dongNm") or "").strip()
+                key = ho_nm if dong_nm else f"{item_dong}|{ho_nm}"
+                unit_map[key] = {
                     "area": area,
                     "mgmBldrgstPk": (item.findtext("mgmBldrgstPk") or "").strip(),
+                    "dongNm": item_dong,
+                    "hoNm": ho_nm,
                 }
             self._hosu_debug_log(
                 f"[건축물대장] 페이지 처리 완료 페이지={page} 원본항목={len(items)} 이번에추가={len(unit_map) - before} 누적호수={len(unit_map)}"
             )
 
-            if total is not None and page * 100 >= total:
+            if total is not None and page * int(num_rows) >= total:
+                complete = True
                 self._hosu_debug_log(f"[건축물대장] 전체 페이지 수집 완료 마지막페이지={page}")
                 break
             page += 1
+            time.sleep(0.15)  # 연속 페이지 요청 완화 (공공데이터 API SERVICETIMEOUT 503 방지)
 
-        if had_success_response and unit_map:
+        self._last_unit_fetch_complete = bool(complete)
+        if had_success_response and unit_map and complete:
             self._exclusive_area_cache[cache_key] = unit_map
+        elif had_success_response and unit_map:
+            self._hosu_debug_log(
+                f"[건축물대장] 캐시 저장 안 함 (부분 수신: 일부 페이지 실패) 시군구={sigungu_cd} 법정동={bjdong_cd} 번={bun} 지={ji} 호수={len(unit_map)}건"
+            )
         elif had_success_response:
             self._hosu_debug_log(
                 f"[건축물대장] 캐시 저장 안 함 (유효 전유 호수 0건, 빈 결과는 캐시하지 않음) 시군구={sigungu_cd} 법정동={bjdong_cd} 번={bun} 지={ji}"
@@ -768,9 +787,11 @@ class NaverCrawler:
 
         unit_map: Dict[str, Dict[str, Any]] = {}
         last_try: Optional[str] = None
+        data_complete = True
         for try_dong in dong_nm_variants:
             last_try = try_dong
             unit_map = self._fetch_exclusive_unit_map(sigungu_cd, bjdong_cd, bun, ji, try_dong)
+            data_complete = bool(getattr(self, "_last_unit_fetch_complete", True))
             if unit_map:
                 if len(dong_nm_variants) > 1 and try_dong != dong_nm_variants[0]:
                     self._hosu_debug_log(
@@ -781,6 +802,21 @@ class NaverCrawler:
                 self._hosu_debug_log(
                     f"[호수 추론] 동명 재시도 매물번호={article_no} 동명={try_dong!r} 결과=0건 다음={dong_nm_variants[1:]!r}"
                 )
+        if not unit_map and dong_nm:
+            # 동명 필터 조회가 비면(API dongNm 필터가 간헐적으로 0건을 돌려줌) 지번 전체를 받아 동명을 직접 대조한다.
+            lot_units = self._fetch_exclusive_unit_map(sigungu_cd, bjdong_cd, bun, ji, None, num_rows=300)
+            data_complete = bool(getattr(self, "_last_unit_fetch_complete", True))
+            want = re.sub(r"[^\d]", "", dong_nm)
+            matched: Dict[str, Dict[str, Any]] = {}
+            for key, unit in lot_units.items():
+                d = str(unit.get("dongNm") or "")
+                ok = (re.sub(r"[^\d]", "", d) == want) if want else (d.replace(" ", "") == dong_nm.replace(" ", ""))
+                if ok:
+                    matched[key] = unit
+            self._hosu_debug_log(
+                f"[호수 추론] 지번 전체 대조 매물번호={article_no} 동명={dong_nm!r} 지번전체={len(lot_units)}건 동일치={len(matched)}건"
+            )
+            unit_map = matched
         if not unit_map:
             self._hosu_debug_log(
                 f"[호수 추론] 실패 매물번호={article_no} 사유=건축물대장 전용면적 호 목록 없음 동명(정규화)={dong_nm} 시도한동명={dong_nm_variants} 마지막시도={last_try!r}"
@@ -810,7 +846,9 @@ class NaverCrawler:
 
         candidates = []
         total_checked = 0
-        for ho_nm, unit in unit_map.items():
+        pool: List[tuple] = []  # (호명, 호층, 면적) — 완화 단계용 전체 후보
+        for key, unit in unit_map.items():
+            ho_nm = str(unit.get("hoNm") or key)
             total_checked += 1
             if (not basement_expected) and re.search(r"[bB]", str(ho_nm or "")):
                 continue
@@ -823,6 +861,7 @@ class NaverCrawler:
             except Exception:
                 continue
             ho_floor = ho_int // 100 if ho_int >= 100 else 1
+            pool.append((ho_nm if ho_nm.endswith("호") else f"{ho_nm}호", ho_floor, area))
             if floor_no is not None and ho_floor != floor_no:
                 continue
             if target_area is not None:
@@ -858,9 +897,76 @@ class NaverCrawler:
                 )
                 candidates = []
 
+        if not candidates and pool and not data_complete:
+            self._hosu_debug_log(
+                f"[호수 추론] 완화 생략 매물번호={article_no} 사유=건축물대장 부분 수신(일부 페이지 실패) → 잘못된 호 확정 방지"
+            )
+        if not candidates and pool and data_complete:
+            # 완화 1단계: 층 조건(숫자층 또는 저·중·고 구간)은 유지하고 면적은 가장 가까운 호를 택한다.
+            # 완화 2단계: 층 일치 호가 없으면 지번·동 전체에서 면적 차이 → 목표층 거리 → 호 번호 순으로 택한다.
+            # 두 단계 모두 면적 차이가 허용치(3㎡ 또는 목표면적의 8% 중 큰 값)를 넘으면 확정하지 않는다.
+            tgt_floor = floor_no if floor_no is not None else band_target_floor
+            area_tol = max(3.0, 0.08 * float(target_area)) if target_area is not None else None
+
+            def _floor_ok(fl: int) -> bool:
+                if floor_no is not None:
+                    return fl == floor_no
+                if band_floor_range is not None:
+                    return band_floor_range[0] <= fl <= band_floor_range[1]
+                return True
+
+            def _area_gap(a: Any) -> float:
+                if target_area is None or a is None:
+                    return 0.0
+                try:
+                    return abs(float(a) - float(target_area))
+                except Exception:
+                    return 10**6
+
+            def _ho_int(h: str) -> int:
+                d = re.sub(r"[^\d]", "", h)
+                return int(d) if d else 10**9
+
+            def _within(t) -> bool:
+                return area_tol is None or _area_gap(t[2]) <= area_tol
+
+            best = None
+            stage = ""
+            stage1 = [t for t in pool if _floor_ok(t[1]) and _within(t)]
+            if stage1:
+                best = min(stage1, key=lambda t: (_area_gap(t[2]), t[1], _ho_int(t[0])))
+                stage = "완화1(층 일치·면적 최근접)"
+            else:
+                stage2 = [t for t in pool if _within(t)]
+                if stage2:
+                    best = min(stage2, key=lambda t: (
+                        _area_gap(t[2]),
+                        abs(t[1] - tgt_floor) if tgt_floor is not None else 0,
+                        t[1], _ho_int(t[0]),
+                    ))
+                    stage = "완화2(지번·동 전체·면적 최근접)"
+            if best is None:
+                self._hosu_debug_log(
+                    f"[호수 추론] 완화 실패 매물번호={article_no} 사유=면적 허용치({area_tol}) 내 호 없음 목표면적={target_area} 후보={len(pool)}건"
+                )
+                return None
+            self._hosu_debug_block("호수 추론 결과", {
+                "매물번호": article_no,
+                "단계": stage,
+                "확정 호수": best[0],
+                "호 층": best[1],
+                "호 면적": best[2],
+                "목표 전용면적": target_area,
+                "목표층": tgt_floor,
+                "검사 후보": len(pool),
+            })
+            self._hosu_debug_log(
+                f"[호수 추론] {stage} 매물번호={article_no} 호수={best[0]} 호면적={best[2]} 목표면적={target_area}"
+            )
+            return best[0]
         if not candidates:
             self._hosu_debug_log(
-                f"[호수 추론] 실패 매물번호={article_no} 사유=층·면적 조건 후 호수 후보 없음 대장에서검사={total_checked}건 "
+                f"[호수 추론] 실패 매물번호={article_no} 사유=층·면적 조건 후 호수 후보 없음(후보 풀 비어 있음) 대장에서검사={total_checked}건 "
                 f"층숫자={floor_no} 저중고층범위={band_floor_range} 저중고대표층={band_target_floor} 목표면적={target_area}"
             )
             return None
@@ -2732,6 +2838,9 @@ class NaverCrawler:
             )
         # '저/중/고' 층 표기는 확정 호수(또는 총층 대표층)로 숫자 층으로 특정
         floor = self._resolve_specific_floor(floor, total_floor, hosu)
+        if is_hosu_needed and not hosu:
+            # 지번을 못 얻었거나 건축물대장에 전유부가 없는 건물(단독·다가구 등): 빈칸 대신 표시
+            hosu = "확인불가"
 
         article_img_url = f"{self.IMG_BASE_URL}{rep_img_url}" if rep_img_url else None
 
