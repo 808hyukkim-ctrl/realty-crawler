@@ -322,7 +322,7 @@ class ScheduleMixin:
             "max_warr": max_warr,
             "min_area": min_area,
             "max_area": max_area,
-            "detail_keywords": _parse_keywords_csv(self.nv_detail_filter.text()),
+            "detail_keywords": self._naver_keywords() if hasattr(self, "_naver_keywords") else _parse_keywords_csv(self.nv_detail_filter.text()),
             "detail_uses": self.nv_use_group.selected() if hasattr(self, "nv_use_group") else [],
             "hosu_enabled": self.nv_hosu_check.isChecked() if hasattr(self, "nv_hosu_check") else True,
         }

@@ -19,6 +19,7 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -140,6 +141,15 @@ class LicenseLoginDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("로그인")
         self.setModal(True)
+        # 다른 창 뒤에 숨지 않도록 항상 위 + 최소화(-) 버튼 제공
+        self.setWindowFlags(
+            Qt.WindowType.Window
+            | Qt.WindowType.WindowTitleHint
+            | Qt.WindowType.WindowSystemMenuHint
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowCloseButtonHint
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
         self.resize(420, 240)
         self._verified = False
         self._cred_path = cred_path
@@ -226,6 +236,17 @@ def run_licensed_app(
     qapp = app or QApplication(sys.argv)
 
     dlg = LicenseLoginDialog(cred_path=_cred_store_path(base_dir))
+
+    def _bring_front():
+        try:
+            dlg.showNormal()
+            dlg.raise_()
+            dlg.activateWindow()
+        except Exception:
+            pass
+
+    QTimer.singleShot(0, _bring_front)
+    QTimer.singleShot(400, _bring_front)  # onefile exe 압축 해제 직후 포커스를 다른 창에 뺏기는 경우 대비
     if not (dlg.exec() == QDialog.DialogCode.Accepted and dlg.verified):
         sys.exit(0)
 
@@ -241,4 +262,6 @@ def run_licensed_app(
     if not app_icon.isNull():
         win.setWindowIcon(app_icon)
     win.show()
+    win.raise_()
+    win.activateWindow()
     sys.exit(qapp.exec())

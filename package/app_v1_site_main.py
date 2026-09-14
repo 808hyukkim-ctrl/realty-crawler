@@ -404,6 +404,11 @@ class OnhouseWorker(QObject):
 # 파라미터 hosu_enabled 가 넘어오면(UI 체크박스) 그 값을 우선한다.
 NAVER_HOSU_ENABLED = True
 
+# 네이버 상세 텍스트 필터 — 자주 쓰는 키워드 체크박스 (체크한 것 + 입력한 키워드를 OR 로 검색)
+NAVER_KEYWORD_PRESETS = ["LH", "SH", "보증보험", "전세대출", "HUG", "허그", "대출"]
+# 엑셀에서 키워드가 들어간 설명 셀: 셀 배경 노란색, 키워드 글자는 빨간색 굵게
+KEYWORD_HIGHLIGHT_COLUMNS = ("간략설명", "설명")
+
 # 네이버 엑셀 출력 컬럼 순서 (사용자 지정, 2026-09-14)
 NAVER_EXCEL_COLUMNS = [
     "매물번호", "세부주소", "호수", "종류", "거래방식", "매물명", "아파트동",
@@ -576,12 +581,64 @@ class NaverWorker(QObject):
             df = df.map(lambda x: ILLEGAL_CHARACTERS_RE.sub(r"", x) if isinstance(x, str) else x)
             df.to_excel(out_path, index=False)
             self._apply_excel_hyperlinks(out_path)
+            if keywords:
+                self._apply_keyword_highlight(out_path, keywords)
             prefix = "중단 저장 완료" if self._cancel else "저장 완료"
             self.finished.emit(f"{prefix}: {out_path} ({len(matched_rows)}건)")
         except Exception as e:
             self.failed.emit(str(e))
         finally:
             self._phase = "idle"
+
+    @staticmethod
+    def _apply_keyword_highlight(path: str, keywords: List[str]) -> None:
+        """설명 컬럼에서 키워드가 들어간 셀: 배경 노란색, 키워드 글자만 빨간색 굵게(리치 텍스트).
+        엑셀은 글자 단위 배경색(형광펜)을 지원하지 않아 글자색으로 표시한다."""
+        kws = [str(k).strip() for k in (keywords or []) if str(k).strip()]
+        if not kws:
+            return
+        try:
+            import openpyxl
+            from openpyxl.cell.rich_text import CellRichText, TextBlock
+            from openpyxl.cell.text import InlineFont
+            from openpyxl.styles import PatternFill
+            from openpyxl.styles.colors import Color
+        except Exception:
+            return
+        pattern = re.compile("|".join(re.escape(k) for k in sorted(kws, key=len, reverse=True)), re.IGNORECASE)
+        red_bold = InlineFont(b=True, color=Color(rgb="FFFF0000"))
+        yellow = PatternFill(fill_type="solid", fgColor="FFFFFF00")
+        try:
+            wb = openpyxl.load_workbook(path)
+            ws = wb.active
+            target_cols = [
+                ci for ci in range(1, ws.max_column + 1)
+                if str(ws.cell(row=1, column=ci).value or "").strip() in KEYWORD_HIGHLIGHT_COLUMNS
+            ]
+            if not target_cols:
+                wb.close()
+                return
+            for r in range(2, ws.max_row + 1):
+                for ci in target_cols:
+                    cell = ws.cell(row=r, column=ci)
+                    text = cell.value
+                    if not isinstance(text, str) or not text or not pattern.search(text):
+                        continue
+                    parts: list = []
+                    pos = 0
+                    for m in pattern.finditer(text):
+                        if m.start() > pos:
+                            parts.append(text[pos:m.start()])
+                        parts.append(TextBlock(red_bold, m.group(0)))
+                        pos = m.end()
+                    if pos < len(text):
+                        parts.append(text[pos:])
+                    cell.value = CellRichText(parts)
+                    cell.fill = yellow
+            wb.save(path)
+            wb.close()
+        except Exception as e:
+            print(f"[엑셀] 키워드 강조 실패: {e}")
 
     @staticmethod
     def _apply_excel_hyperlinks(path: str) -> None:
@@ -1235,12 +1292,28 @@ class MainWindow(QMainWindow, ScheduleMixin):
         nv_dgrid.setHorizontalSpacing(16)
         nv_dgrid.setVerticalSpacing(4)
         v.addWidget(nv_detail_box)
-        text_box = QGroupBox("상세 텍스트 필터")
+        text_box = QGroupBox("상세 텍스트 필터 (입력 키워드 + 체크 키워드 중 하나라도 설명에 있으면 수집 · 엑셀에서 키워드 강조)")
         fr = QHBoxLayout(text_box)
+        fr.setSpacing(12)
+        left = QWidget()
+        lf = QHBoxLayout(left)
+        lf.setContentsMargins(0, 0, 0, 0)
         self.nv_detail_filter = QLineEdit()
-        self.nv_detail_filter.setPlaceholderText("설명 키워드,콤마로구분 (예: 역세권,전세대출)")
-        fr.addWidget(QLabel("키워드"))
-        fr.addWidget(self.nv_detail_filter, 1)
+        self.nv_detail_filter.setPlaceholderText("설명 키워드,콤마로구분 (예: 역세권,신축)")
+        lf.addWidget(QLabel("키워드"))
+        lf.addWidget(self.nv_detail_filter, 1)
+        right = QWidget()
+        rg = QGridLayout(right)
+        rg.setContentsMargins(0, 0, 0, 0)
+        rg.setHorizontalSpacing(10)
+        rg.setVerticalSpacing(2)
+        self.nv_kw_checks: Dict[str, QCheckBox] = {}
+        for i, kw in enumerate(NAVER_KEYWORD_PRESETS):
+            cb = QCheckBox(kw)
+            self.nv_kw_checks[kw] = cb
+            rg.addWidget(cb, i // 4, i % 4)
+        fr.addWidget(left, 1)
+        fr.addWidget(right, 1)
         v.addWidget(text_box)
         # 건축물용도 다중선택 (체크 없음 = 전체). 네이버 상세의 '건축물용도' 컬럼과 부분일치로 비교. 맨 아래 배치.
         self.nv_use_group = UseCheckGroup("건축물용도 (체크한 용도만 수집, 체크 없으면 전체)", columns=6)
@@ -1834,6 +1907,17 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self.worker_thread.finished.connect(self._cleanup_worker)
         self.worker_thread.start()
 
+    def _naver_keywords(self) -> List[str]:
+        """입력 키워드 + 체크된 키워드 (중복 제거, 순서 유지)."""
+        out: List[str] = []
+        for k in _parse_keywords_csv(self.nv_detail_filter.text()):
+            if k and k.lower() not in [x.lower() for x in out]:
+                out.append(k)
+        for kw, cb in getattr(self, "nv_kw_checks", {}).items():
+            if cb.isChecked() and kw.lower() not in [x.lower() for x in out]:
+                out.append(kw)
+        return out
+
     def _start_naver(self):
         nv_sis = self.nv_cb_si.checked_data()
         nv_guns = self.nv_cb_gun.checked_data()
@@ -1919,7 +2003,7 @@ class MainWindow(QMainWindow, ScheduleMixin):
             "max_rent": max_rent,
             "min_area": min_area,
             "max_area": max_area,
-            "detail_keywords": _parse_keywords_csv(self.nv_detail_filter.text()),
+            "detail_keywords": self._naver_keywords(),
             "detail_rooms": _rng(self.nv_sl_rooms.values(), 0, 10),
             "detail_floors": _rng(self.nv_sl_floor.values(), 0, 50),
             "detail_years": _rng(self.nv_sl_builtyear.values(), 1970, 2026),

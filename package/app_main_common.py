@@ -42,10 +42,11 @@ def parse_keywords_csv(raw: str) -> List[str]:
 
 
 def contains_any_keyword(text: Any, keywords: List[str]) -> bool:
+    """키워드 중 하나라도 본문에 있으면 True (OR). 영문 대소문자는 무시한다 (lh == LH)."""
     if not keywords:
         return True
-    t = str(text or "")
-    return any(k in t for k in keywords)
+    t = str(text or "").lower()
+    return any(str(k).lower() in t for k in keywords if str(k).strip())
 
 
 def parse_saved_output_path_from_finish_message(msg: str) -> Optional[str]:
