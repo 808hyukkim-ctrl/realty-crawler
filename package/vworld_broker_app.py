@@ -319,6 +319,9 @@ class MainWindow(QMainWindow):
         self.de_to = QDateEdit(QDate.currentDate())
         self.de_to.setCalendarPopup(True)
         self.de_to.setDisplayFormat("yyyy-MM-dd")
+        for _de in (self.de_from, self.de_to):
+            _de.setMinimumWidth(170)   # 날짜 마지막 글자가 잘리지 않도록
+            _de.setMinimumHeight(34)
         self.de_from.setEnabled(False)
         self.de_to.setEnabled(False)
         self.chk_open = QCheckBox("영업중만")
@@ -414,6 +417,39 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(page, "수집 조건")
         self.tabs.addTab(send_page, "보내기 · 자동화")
         self._apply_style()
+        self.setStyleSheet(
+            self.styleSheet()
+            + """
+            QDateEdit {
+                min-width: 170px;
+                padding: 6px 30px 6px 10px;
+                color: #111827;
+                background: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+            }
+            QDateEdit::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: center right;
+                width: 24px;
+                border-left: 1px solid #cbd5e1;
+            }
+            QListWidget {
+                background: #ffffff;
+                color: #111827;
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+            }
+            QListWidget::item {
+                color: #111827;
+                padding: 3px 4px;
+            }
+            QListWidget::item:selected {
+                background: #dbe4f5;
+                color: #111827;
+            }
+            """
+        )
 
     # ---------- 도우미 ----------
     def _append(self, line: str) -> None:
