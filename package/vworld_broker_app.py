@@ -61,6 +61,29 @@ PERIODS = [
 ]
 
 
+def resource_path(name: str) -> str:
+    """PyInstaller 로 묶인 경우 임시 해제 폴더에서 찾는다."""
+    base = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, name)
+
+
+def builtin_regions() -> Dict[str, List[str]]:
+    """프로그램에 들어 있는 전국 시도·시군구 목록 (파일을 받기 전에도 고를 수 있게)."""
+    import json
+
+    for cand in (resource_path("vworld_regions_builtin.json"),
+                 os.path.join(base_dir(), "vworld_regions_builtin.json")):
+        try:
+            if os.path.exists(cand):
+                with open(cand, "r", encoding="utf-8") as f:
+                    d = json.load(f)
+                if d:
+                    return d
+        except Exception:
+            pass
+    return {}
+
+
 def base_dir() -> str:
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
@@ -297,12 +320,21 @@ class MainWindow(QMainWindow):
         self.btn_sido_all.clicked.connect(lambda: self.lst_sido.check_all(False))
         self.btn_gun_all = QPushButton("시군구 전체 해제")
         self.btn_gun_all.clicked.connect(lambda: self.lst_gun.check_all(False))
+        self.btn_gun_pick_all = QPushButton("보이는 시군구 전체 선택")
+        self.btn_gun_pick_all.clicked.connect(lambda: self.lst_gun.check_all(True))
+        self.ed_gun_find = QLineEdit()
+        self.ed_gun_find.setPlaceholderText("시군구 찾기 (예: 강남)")
+        self.ed_gun_find.textChanged.connect(self._filter_gun)
         rg.addWidget(QLabel("시 · 도"), 0, 0)
         rg.addWidget(QLabel("시 · 군 · 구  (시도를 고르면 채워집니다)"), 0, 1)
         rg.addWidget(self.lst_sido, 1, 0)
         rg.addWidget(self.lst_gun, 1, 1)
-        rg.addWidget(self.btn_sido_all, 2, 0)
-        rg.addWidget(self.btn_gun_all, 2, 1)
+        rg.addWidget(self.ed_gun_find, 2, 1)
+        gunrow = QHBoxLayout()
+        gunrow.addWidget(self.btn_gun_pick_all)
+        gunrow.addWidget(self.btn_gun_all)
+        rg.addWidget(self.btn_sido_all, 3, 0)
+        rg.addLayout(gunrow, 3, 1)
         rg.setColumnStretch(0, 1)
         rg.setColumnStretch(1, 2)
         v.addWidget(reg)
@@ -482,13 +514,24 @@ class MainWindow(QMainWindow):
         guns: List[str] = []
         for s in picked:
             guns.extend(self.region_cache.get(s, []))
-        self.lst_gun.set_items(sorted(set(guns)))
+        keep = self.lst_gun.checked()
+        self.lst_gun.set_items(sorted(set(guns)), checked=keep)
+        if hasattr(self, "ed_gun_find"):
+            self._filter_gun(self.ed_gun_find.text())
+
+    def _filter_gun(self, text: str) -> None:
+        t = (text or "").strip()
+        for i in range(self.lst_gun.count()):
+            it = self.lst_gun.item(i)
+            it.setHidden(bool(t) and t not in it.text())
 
     def _load_region_cache(self) -> None:
-        d = read_json(os.path.join(self.base_dir, "vworld_regions.json"))
+        d = read_json(os.path.join(self.base_dir, "vworld_regions.json")) or builtin_regions()
         if d:
             self.region_cache = d
             self._on_sido_changed()
+            if getattr(self, "_pending_regions", None):
+                self.lst_gun.set_checked(self._pending_regions[1])
 
     def _load_regions_from_file(self) -> None:
         path = vb.find_local_file(self.ed_folder.text())

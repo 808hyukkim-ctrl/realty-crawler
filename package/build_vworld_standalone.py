@@ -75,6 +75,7 @@ def main() -> int:
     cmd = [
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile", "--windowed",
         "--name", exe_name,
+        "--add-data", f"{os.path.join(PROJECT_DIR, 'vworld_regions_builtin.json')}{os.pathsep}.",
         "--icon", os.path.join(PROJECT_DIR, "asset", "CodeCoon_profile.ico"),
         "--distpath", args.out,
         "--workpath", WORK_DIR,

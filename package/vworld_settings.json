@@ -4,9 +4,14 @@
   "vw_pw": "",
   "folder": "C:\\Users\\loanyfn\\Desktop\\독립버전크롤링\\package\\자료",
   "sidos": [
-    "서울특별시"
+    "서울특별시",
+    "부산광역시",
+    "경기도"
   ],
-  "sigungus": [],
+  "sigungus": [
+    "강남구",
+    "성남시 분당구"
+  ],
   "period_idx": 7,
   "date_from": "2026-09-14",
   "date_to": "2026-09-21",
