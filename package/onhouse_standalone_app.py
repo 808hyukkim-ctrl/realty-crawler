@@ -541,6 +541,8 @@ class MainWindow(QMainWindow):
         self.worker: Optional[Worker] = None
         self.worker_thread: Optional[QThread] = None
         self._current_job_name: str = ""
+        self._batch_queue: List[ScheduledJob] = []
+        self._batch_mode: bool = False
 
         self.bbox: Dict[str, Dict[str, float]] = self._load_bbox()
         self._build_region_maps()
@@ -1046,6 +1048,37 @@ class MainWindow(QMainWindow):
             self._refresh_schedule_list()
         self._start(auto=True)
 
+    # ---------- 무인 실행 (윈도우 작업 스케줄러용) ----------
+    def run_batch(self, job_name: Optional[str] = None) -> None:
+        """--run-all / --run-job 으로 실행. 저장된 예약 조건으로 수집하고 끝나면 프로그램을 닫는다."""
+        self._batch_mode = True
+        jobs = [j for j in self.schedules.get_all() if j.enabled]
+        if job_name:
+            jobs = [j for j in jobs if j.name == job_name]
+        if not jobs:
+            self._append_log(
+                f"무인 실행: 실행할 예약이 없습니다"
+                + (f" (이름 '{job_name}')" if job_name else " — 프로그램에서 예약을 먼저 만들어 두세요")
+            )
+            QTimer.singleShot(1500, QApplication.quit)
+            return
+        if not self.ed_id.text().strip() or not self.ed_pw.text().strip():
+            self._append_log("무인 실행: 저장된 아이디/비밀번호가 없습니다 — 프로그램에서 '아이디/비밀번호 저장'을 체크하세요.")
+            QTimer.singleShot(1500, QApplication.quit)
+            return
+        self._batch_queue = jobs
+        self._append_log(f"무인 실행 시작: 예약 {len(jobs)}개")
+        self._batch_next()
+
+    def _batch_next(self) -> None:
+        if not self._batch_queue:
+            self._append_log("무인 실행 완료 — 프로그램을 종료합니다.")
+            QTimer.singleShot(1500, QApplication.quit)
+            return
+        job = self._batch_queue.pop(0)
+        self._append_log(f"무인 실행: [{job.name}]")
+        self._run_job(job, mark=False)
+
     def _check_schedules(self):
         if self.worker_thread and self.worker_thread.isRunning():
             return
@@ -1154,10 +1187,15 @@ class MainWindow(QMainWindow):
         self.lbl_status.setText(msg)
         self._append_log(msg)
         self.progress.setValue(100)
+        if self._batch_mode:
+            QTimer.singleShot(2000, self._batch_next)
 
     def _on_failed(self, msg: str):
         self.lbl_status.setText(f"오류: {msg}")
         self._append_log(f"오류: {msg}")
+        if self._batch_mode:
+            QTimer.singleShot(2000, self._batch_next)
+            return
         # 예약 실행 중 모달 창이 뜨면 다음 예약이 막히므로, 사람이 시작한 경우에만 팝업
         if not self.sched_timer.isActive() or QApplication.activeWindow() is self:
             QMessageBox.critical(self, "오류", msg)
@@ -1187,9 +1225,23 @@ class MainWindow(QMainWindow):
 
 
 def main():
+    argv = sys.argv[1:]
+    batch = "--run-all" in argv
+    job_name: Optional[str] = None
+    if "--run-job" in argv:
+        i = argv.index("--run-job")
+        if i + 1 < len(argv):
+            job_name = argv[i + 1]
+            batch = True
+
     app = QApplication.instance() or QApplication(sys.argv)
     w = MainWindow()
-    w.show()
+    if batch:
+        # 작업 스케줄러가 부른 경우: 창은 최소화로 띄우고(로그 확인용) 끝나면 스스로 종료
+        w.showMinimized()
+        QTimer.singleShot(800, lambda: w.run_batch(job_name))
+    else:
+        w.show()
     sys.exit(app.exec())
 
 
