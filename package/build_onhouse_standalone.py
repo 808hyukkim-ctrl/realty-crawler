@@ -18,7 +18,7 @@ import time
 from datetime import datetime
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
-SOURCE_FILES = ("onhouse_standalone_app.py", "onhouse_crawler.py", "app_main_common.py", "schedule_manager.py")
+SOURCE_FILES = ("onhouse_standalone_app.py", "onhouse_crawler.py", "app_main_common.py", "schedule_manager.py", "auto_send.py")
 ENTRY = "onhouse_standalone_app.py"
 EXE_NAME = "온하우스매물수집기_독립버전"
 OBF_DIR = os.path.join(PROJECT_DIR, "dist_obf_onhouse")

@@ -45,6 +45,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+import auto_send
 from app_main_common import MultiSelectCombo
 from onhouse_crawler import OnhouseCrawler
 from schedule_manager import DAY_NAMES, ScheduleManager, ScheduledJob
@@ -439,6 +440,14 @@ class Worker(QObject):
             )
             crawler.crawl_details_to_excel(rows=all_rows, output_path=out_path)
             prefix = "중단 저장 완료" if stopped else "저장 완료"
+            send_cfg = self.p.get("send") or {}
+            if send_cfg.get("mail_on") or send_cfg.get("tg_on"):
+                self.log.emit("자동 전송 중...")
+                caption = (
+                    f"[온하우스] {self.p['region_label']} {len(all_rows)}건"
+                    f" / {datetime.now():%Y-%m-%d %H:%M}"
+                )
+                auto_send.deliver(send_cfg, out_path, caption, self.log.emit)
             self.finished.emit(f"{prefix}: {out_path} ({len(all_rows)}건)")
         except Exception as e:
             self.failed.emit(str(e))
@@ -536,8 +545,10 @@ class MainWindow(QMainWindow):
         self.bbox: Dict[str, Dict[str, float]] = self._load_bbox()
         self._build_region_maps()
         self.schedules = ScheduleManager(os.path.join(self.base_dir, "onhouse_schedules.json"))
+        self.send_path = os.path.join(self.base_dir, "onhouse_send.json")
         self._build_ui()
         self._load_credentials()
+        self._load_send_config()
         self._refresh_schedule_list()
         # 예약 확인 타이머: 15초마다 실행 시각이 된 예약을 찾는다 (프로그램이 켜져 있을 때만 동작)
         self.sched_timer = QTimer(self)
@@ -699,6 +710,43 @@ class MainWindow(QMainWindow):
         g.setColumnStretch(6, 1)
         v.addWidget(opt)
 
+        snd = QGroupBox("수집 완료 후 자동 전송 (한 번만 입력해두면 예약 수집 결과도 자동으로 옵니다)")
+        sg = QGridLayout(snd)
+        self.chk_mail = QCheckBox("메일로 보내기")
+        self.ed_mail_from = QLineEdit()
+        self.ed_mail_from.setPlaceholderText("보내는 지메일 주소 (예: myoffice@gmail.com)")
+        self.ed_mail_pw = QLineEdit()
+        self.ed_mail_pw.setEchoMode(QLineEdit.EchoMode.Password)
+        self.ed_mail_pw.setPlaceholderText("구글 앱 비밀번호 16자리 (일반 비밀번호 아님)")
+        self.ed_mail_to = QLineEdit()
+        self.ed_mail_to.setPlaceholderText("받는 사람 (여러 명이면 쉼표로 구분)")
+        sg.addWidget(self.chk_mail, 0, 0)
+        sg.addWidget(self.ed_mail_from, 0, 1)
+        sg.addWidget(self.ed_mail_pw, 0, 2)
+        sg.addWidget(self.ed_mail_to, 0, 3, 1, 2)
+
+        self.chk_tg = QCheckBox("텔레그램으로 보내기")
+        self.ed_tg_token = QLineEdit()
+        self.ed_tg_token.setPlaceholderText("봇 토큰 (@BotFather 에서 발급)")
+        self.ed_tg_chat = QLineEdit()
+        self.ed_tg_chat.setPlaceholderText("챗 ID")
+        self.btn_tg_find = QPushButton("챗 ID 찾기")
+        self.btn_tg_find.clicked.connect(self._find_chat_id)
+        self.btn_send_test = QPushButton("테스트 전송")
+        self.btn_send_test.clicked.connect(self._test_send)
+        sg.addWidget(self.chk_tg, 1, 0)
+        sg.addWidget(self.ed_tg_token, 1, 1, 1, 2)
+        sg.addWidget(self.ed_tg_chat, 1, 3)
+        sg.addWidget(self.btn_tg_find, 1, 4)
+        sg.addWidget(self.btn_send_test, 0, 5)
+        sg.addWidget(
+            QLabel("메일: 지메일 2단계 인증 후 '앱 비밀번호' 필요 · 첨부 25MB / 텔레그램: 엑셀 파일이 그대로 전송 · 50MB"),
+            2, 0, 1, 6,
+        )
+        sg.setColumnStretch(1, 2)
+        sg.setColumnStretch(3, 2)
+        v.addWidget(snd)
+
         sch = QGroupBox("예약 자동 실행 (이 프로그램이 켜져 있는 동안, 지정 시각에 저장된 조건으로 자동 수집)")
         sl = QHBoxLayout(sch)
         self.lst_sched = QListWidget()
@@ -816,6 +864,59 @@ class MainWindow(QMainWindow):
 
     def _append_log(self, line: str):
         self.log.appendPlainText(line)
+
+    # ---------- 자동 전송 ----------
+    def _send_config(self, save: bool = False) -> Dict[str, Any]:
+        cfg = {
+            "mail_on": self.chk_mail.isChecked(),
+            "mail_from": self.ed_mail_from.text().strip(),
+            "mail_pw": self.ed_mail_pw.text().strip(),
+            "mail_to": self.ed_mail_to.text().strip(),
+            "tg_on": self.chk_tg.isChecked(),
+            "tg_token": self.ed_tg_token.text().strip(),
+            "tg_chat": self.ed_tg_chat.text().strip(),
+        }
+        if save:
+            auto_send.save_config(self.send_path, cfg)
+        return cfg
+
+    def _load_send_config(self) -> None:
+        cfg = auto_send.load_config(self.send_path)
+        self.chk_mail.setChecked(bool(cfg.get("mail_on")))
+        self.ed_mail_from.setText(cfg.get("mail_from", ""))
+        self.ed_mail_pw.setText(cfg.get("mail_pw", ""))
+        self.ed_mail_to.setText(cfg.get("mail_to", ""))
+        self.chk_tg.setChecked(bool(cfg.get("tg_on")))
+        self.ed_tg_token.setText(cfg.get("tg_token", ""))
+        self.ed_tg_chat.setText(cfg.get("tg_chat", ""))
+
+    def _find_chat_id(self) -> None:
+        res = auto_send.find_chat_id(self.ed_tg_token.text())
+        if res.lstrip("-").isdigit():
+            self.ed_tg_chat.setText(res)
+            self._append_log(f"텔레그램 챗 ID를 찾았습니다: {res}")
+        else:
+            QMessageBox.information(self, "챗 ID 찾기", res)
+
+    def _test_send(self) -> None:
+        cfg = self._send_config(save=True)
+        if not (cfg["mail_on"] or cfg["tg_on"]):
+            QMessageBox.information(self, "테스트 전송", "메일 또는 텔레그램 중 보낼 곳을 체크하세요.")
+            return
+        path = os.path.join(self.base_dir, "온하우스_전송테스트.txt")
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(f"온하우스 매물수집기 전송 테스트 {datetime.now():%Y-%m-%d %H:%M:%S}" + chr(10))
+        except Exception as e:
+            QMessageBox.warning(self, "테스트 전송", f"테스트 파일을 만들지 못했습니다: {e}")
+            return
+        self._append_log("테스트 전송 중...")
+        auto_send.deliver(cfg, path, "온하우스 매물수집기 전송 테스트", self._append_log)
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+        QMessageBox.information(self, "테스트 전송", "결과를 아래 로그에서 확인하세요.")
 
     def _open_out_dir(self):
         os.makedirs(self.out_dir, exist_ok=True)
@@ -1011,6 +1112,7 @@ class MainWindow(QMainWindow):
             "out_dir": self.out_dir,
             "region_label": self._region_label(),
             "contact_cache_path": os.path.join(self.base_dir, "onhouse_contacts_cache.json"),
+            "send": self._send_config(save=True),
         }
         self.log.clear()
         period_txt = "전체" if not (date_from or date_to) else f"{date_from} ~ {date_to}"
@@ -1071,6 +1173,7 @@ class MainWindow(QMainWindow):
         self.worker_thread = None
 
     def closeEvent(self, ev):
+        self._send_config(save=True)
         if self.worker_thread and self.worker_thread.isRunning():
             r = QMessageBox.question(self, "종료", "수집이 진행 중입니다. 종료할까요? (저장되지 않습니다)")
             if r != QMessageBox.StandardButton.Yes:
