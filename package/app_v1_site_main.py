@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+import auto_send
 from daangn_realty_crawler import DaangnRealtyCrawler
 from peterpan_crawler import PeterpanCrawler
 from onhouse_crawler import OnhouseCrawler
@@ -707,6 +708,25 @@ class NaverWorker(QObject):
             pass
 
 
+class SendWorker(QObject):
+    """수집 끝난 엑셀을 메일/텔레그램으로 보내는 작업 (UI 멈춤 방지용 별도 스레드)."""
+
+    log = Signal(str)
+    done = Signal()
+
+    def __init__(self, cfg: dict, path: str, caption: str):
+        super().__init__()
+        self.cfg, self.path, self.caption = cfg, path, caption
+
+    @Slot()
+    def run(self):
+        try:
+            auto_send.deliver(self.cfg, self.path, self.caption, self.log.emit)
+        except Exception as e:
+            self.log.emit(f"자동 전송 오류: {e}")
+        self.done.emit()
+
+
 class MainWindow(QMainWindow, ScheduleMixin):
     def __init__(self):
         super().__init__()
@@ -732,6 +752,10 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self.log_dialog: QDialog | None = None
         self.log_dialog_table: QTableWidget | None = None
         self._last_output_path: str | None = None
+        self._send_thread: QThread | None = None
+        self._send_worker: SendWorker | None = None
+        self._batch_mode: bool = False
+        self._batch_queue: list = []
         self.setWindowTitle("전국 부동산 매물 수집기 v1")
         self.resize(1600, 1020)
         self.setMinimumSize(1280, 820)
@@ -739,6 +763,7 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self._load_onhouse_credentials()
         self._apply_style()
         self._init_schedule()
+        self._load_send_config()
 
     def _load_regions(self):
         p = os.path.join(self.resource_dir, "regions.json")
@@ -856,6 +881,7 @@ class MainWindow(QMainWindow, ScheduleMixin):
         root.addWidget(self.tabs, 1)
         self.tabs.addTab(wrap_in_scroll(self._build_daangn_tab()), "당근")
         self.tabs.addTab(wrap_in_scroll(self._build_naver_tab()), "네이버")
+        self.tabs.addTab(wrap_in_scroll(self._build_send_tab()), "자동 전송")
         ctrl = QHBoxLayout()
         self.btn_start = QPushButton("수집 시작")
         self.btn_stop = QPushButton("중단")
@@ -2093,12 +2119,196 @@ class MainWindow(QMainWindow, ScheduleMixin):
         text = str(msg or "").strip()
         self.progress_text.setText(text)
 
+    # ──────────────────────────────────────────────────────────────
+    # 자동 전송 (메일 · 텔레그램) + 무인 실행
+    # ──────────────────────────────────────────────────────────────
+    def _build_send_tab(self) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+
+        gb_mail = QGroupBox("메일로 보내기")
+        gm = QGridLayout(gb_mail)
+        self.chk_send_mail = QCheckBox("수집이 끝나면 엑셀을 메일로 보냅니다")
+        self.ed_mail_from = QLineEdit()
+        self.ed_mail_from.setPlaceholderText("보내는 지메일 주소 (예: myoffice@gmail.com)")
+        self.ed_mail_pw = QLineEdit()
+        self.ed_mail_pw.setEchoMode(QLineEdit.EchoMode.Password)
+        self.ed_mail_pw.setPlaceholderText("구글 앱 비밀번호 16자리 (평소 쓰는 비밀번호 아님)")
+        self.ed_mail_to = QLineEdit()
+        self.ed_mail_to.setPlaceholderText("받는 사람 (여러 명이면 쉼표로 구분)")
+        gm.addWidget(self.chk_send_mail, 0, 0, 1, 2)
+        gm.addWidget(QLabel("보내는 주소"), 1, 0)
+        gm.addWidget(self.ed_mail_from, 1, 1)
+        gm.addWidget(QLabel("앱 비밀번호"), 2, 0)
+        gm.addWidget(self.ed_mail_pw, 2, 1)
+        gm.addWidget(QLabel("받는 사람"), 3, 0)
+        gm.addWidget(self.ed_mail_to, 3, 1)
+        gm.addWidget(QLabel("지메일 2단계 인증을 켜고 앱 비밀번호를 발급받아야 합니다. 첨부 25MB까지."), 4, 0, 1, 2)
+        gm.setColumnStretch(1, 1)
+        v.addWidget(gb_mail)
+
+        gb_tg = QGroupBox("텔레그램으로 보내기")
+        gt = QGridLayout(gb_tg)
+        self.chk_send_tg = QCheckBox("수집이 끝나면 엑셀을 텔레그램으로 보냅니다")
+        self.ed_tg_token = QLineEdit()
+        self.ed_tg_token.setPlaceholderText("봇 토큰 (@BotFather 에서 /mybots → API Token)")
+        self.ed_tg_chat = QLineEdit()
+        self.ed_tg_chat.setPlaceholderText("챗 ID")
+        self.btn_tg_find = QPushButton("챗 ID 찾기")
+        self.btn_tg_find.clicked.connect(self._find_chat_id)
+        gt.addWidget(self.chk_send_tg, 0, 0, 1, 3)
+        gt.addWidget(QLabel("봇 토큰"), 1, 0)
+        gt.addWidget(self.ed_tg_token, 1, 1, 1, 2)
+        gt.addWidget(QLabel("챗 ID"), 2, 0)
+        gt.addWidget(self.ed_tg_chat, 2, 1)
+        gt.addWidget(self.btn_tg_find, 2, 2)
+        gt.addWidget(
+            QLabel("봇에게 아무 메시지나 보낸 뒤 [챗 ID 찾기]를 누르면 자동으로 채워집니다. 엑셀 파일이 그대로 전송됩니다. 50MB까지."),
+            3, 0, 1, 3,
+        )
+        gt.setColumnStretch(1, 1)
+        v.addWidget(gb_tg)
+
+        row = QHBoxLayout()
+        self.btn_send_test = QPushButton("테스트 전송")
+        self.btn_send_test.clicked.connect(self._test_send)
+        self.btn_send_save = QPushButton("설정 저장")
+        self.btn_send_save.clicked.connect(self._save_send_clicked)
+        row.addWidget(self.btn_send_test)
+        row.addWidget(self.btn_send_save)
+        row.addStretch(1)
+        v.addLayout(row)
+
+        guide = QLabel(
+            "무인 실행 (PC가 자고 있어도 자동 수집)" + chr(10)
+            + "  1. 예약을 하나 이상 만들어 두세요. 수집 조건이 예약에 저장됩니다." + chr(10)
+            + "  2. 라이선스 창에서 '아이디/비밀번호 기억'을 체크해 두세요. 무인 실행에 필요합니다." + chr(10)
+            + "  3. 프로그램 폴더의 자동실행_설정.bat 을 관리자 권한으로 실행하고 시각을 정하세요." + chr(10)
+            + "  그 시각에 PC가 깨어나 수집하고, 위 설정대로 보낸 뒤 스스로 닫힙니다." + chr(10)
+            + "  전송 결과는 프로그램 폴더의 auto_send.log 에 기록됩니다."
+        )
+        guide.setStyleSheet("color:#475569;")
+        v.addWidget(guide)
+        v.addStretch(1)
+        return w
+
+    def _save_send_clicked(self) -> None:
+        self._send_config(save=True)
+        self.progress_text.setText("자동 전송 설정을 저장했습니다.")
+
+    def _send_config(self, save: bool = False) -> dict:
+        cfg = {
+            "mail_on": self.chk_send_mail.isChecked(),
+            "mail_from": self.ed_mail_from.text().strip(),
+            "mail_pw": self.ed_mail_pw.text().strip(),
+            "mail_to": self.ed_mail_to.text().strip(),
+            "tg_on": self.chk_send_tg.isChecked(),
+            "tg_token": self.ed_tg_token.text().strip(),
+            "tg_chat": self.ed_tg_chat.text().strip(),
+        }
+        if save:
+            auto_send.save_config(os.path.join(self.base_dir, "send_config.json"), cfg)
+        return cfg
+
+    def _load_send_config(self) -> None:
+        cfg = auto_send.load_config(os.path.join(self.base_dir, "send_config.json"))
+        self.chk_send_mail.setChecked(bool(cfg.get("mail_on")))
+        self.ed_mail_from.setText(cfg.get("mail_from", ""))
+        self.ed_mail_pw.setText(cfg.get("mail_pw", ""))
+        self.ed_mail_to.setText(cfg.get("mail_to", ""))
+        self.chk_send_tg.setChecked(bool(cfg.get("tg_on")))
+        self.ed_tg_token.setText(cfg.get("tg_token", ""))
+        self.ed_tg_chat.setText(cfg.get("tg_chat", ""))
+
+    def _send_log(self, line: str) -> None:
+        line = line.strip()
+        self.progress_text.setText(line)
+        try:
+            with open(os.path.join(self.base_dir, "auto_send.log"), "a", encoding="utf-8") as f:
+                f.write("[{0:%Y-%m-%d %H:%M:%S}] {1}".format(datetime.now(), line) + chr(10))
+        except Exception:
+            pass
+
+    def _find_chat_id(self) -> None:
+        res = auto_send.find_chat_id(self.ed_tg_token.text())
+        if res.lstrip("-").isdigit():
+            self.ed_tg_chat.setText(res)
+            self._send_log("텔레그램 챗 ID를 찾았습니다: " + res)
+        else:
+            QMessageBox.information(self, "챗 ID 찾기", res)
+
+    def _test_send(self) -> None:
+        cfg = self._send_config(save=True)
+        if not (cfg["mail_on"] or cfg["tg_on"]):
+            QMessageBox.information(self, "테스트 전송", "메일 또는 텔레그램 중 보낼 곳을 체크하세요.")
+            return
+        path = os.path.join(self.base_dir, "전송테스트.txt")
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("전국부동산매물수집기 전송 테스트 {0:%Y-%m-%d %H:%M:%S}".format(datetime.now()) + chr(10))
+        except Exception as e:
+            QMessageBox.warning(self, "테스트 전송", "테스트 파일을 만들지 못했습니다: {0}".format(e))
+            return
+        auto_send.deliver(cfg, path, "전국부동산매물수집기 전송 테스트", self._send_log)
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+        QMessageBox.information(self, "테스트 전송", "결과를 아래 상태줄과 auto_send.log 에서 확인하세요.")
+
+    def _auto_send_after_save(self) -> None:
+        cfg = self._send_config()
+        path = self._last_output_path
+        if not (cfg.get("mail_on") or cfg.get("tg_on")) or not path or not os.path.exists(path):
+            self._batch_step()
+            return
+        caption = "[매물수집] {0} / {1:%Y-%m-%d %H:%M}".format(os.path.basename(path), datetime.now())
+        self._send_log("자동 전송 중...")
+        self._send_thread = QThread(self)
+        self._send_worker = SendWorker(cfg, path, caption)
+        self._send_worker.moveToThread(self._send_thread)
+        self._send_thread.started.connect(self._send_worker.run)
+        self._send_worker.log.connect(self._send_log)
+        self._send_worker.done.connect(self._send_thread.quit)
+        self._send_worker.done.connect(self._batch_step)
+        self._send_thread.finished.connect(self._send_worker.deleteLater)
+        self._send_thread.start()
+
+    # ---------- 무인 실행 (윈도우 작업 스케줄러) ----------
+    def run_batch(self, job_name=None) -> None:
+        self._batch_mode = True
+        jobs = [j for j in self._schedule_manager.get_all() if j.enabled]
+        if job_name:
+            jobs = [j for j in jobs if j.name == job_name]
+        if not jobs:
+            self._send_log("무인 실행: 실행할 예약이 없습니다 - 프로그램에서 예약을 먼저 만들어 두세요.")
+            QTimer.singleShot(1500, QApplication.quit)
+            return
+        self._batch_queue = jobs
+        self._send_log("무인 실행 시작: 예약 {0}개".format(len(jobs)))
+        self._batch_next()
+
+    def _batch_next(self) -> None:
+        if not self._batch_queue:
+            self._send_log("무인 실행 완료 - 프로그램을 종료합니다.")
+            QTimer.singleShot(1500, QApplication.quit)
+            return
+        job = self._batch_queue.pop(0)
+        self._send_log("무인 실행: [{0}]".format(job.name))
+        self._run_scheduled_job(job)
+
+    def _batch_step(self) -> None:
+        """전송까지 끝난 뒤 다음 예약으로. 무인 모드가 아니면 아무것도 하지 않는다."""
+        if self._batch_mode:
+            QTimer.singleShot(2000, self._batch_next)
+
     def _on_finished(self, msg: str):
         self.progress_bar.setRange(0, 100)
         self.progress_text.setText(msg)
         self.btn_start.setEnabled(True)
         self.btn_stop.setEnabled(False)
         self._last_output_path = parse_saved_output_path_from_finish_message(msg)
+        self._auto_send_after_save()
 
     def _on_failed(self, msg: str):
         self.progress_bar.setRange(0, 100)

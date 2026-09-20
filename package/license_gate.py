@@ -232,10 +232,23 @@ def run_licensed_app(
     create_main_window: Callable[[], QWidget],
     base_dir: str,
     app: Optional[QApplication] = None,
+    auto_login: bool = False,
+    minimized: bool = False,
+    on_ready: Optional[Callable[[QWidget], None]] = None,
 ) -> None:
     qapp = app or QApplication(sys.argv)
 
     dlg = LicenseLoginDialog(cred_path=_cred_store_path(base_dir))
+
+    # 무인 실행(작업 스케줄러): 저장된 아이디/비밀번호로 창 없이 로그인 시도
+    if auto_login and dlg.edt_id.text().strip() and dlg.edt_pw.text().strip():
+        try:
+            dlg._on_login_clicked()
+        except Exception:
+            pass
+        if dlg.verified:
+            _start_main(qapp, create_main_window, base_dir, minimized, on_ready)
+            return
 
     def _bring_front():
         try:
@@ -250,6 +263,16 @@ def run_licensed_app(
     if not (dlg.exec() == QDialog.DialogCode.Accepted and dlg.verified):
         sys.exit(0)
 
+    _start_main(qapp, create_main_window, base_dir, minimized, on_ready)
+
+
+def _start_main(
+    qapp: QApplication,
+    create_main_window: Callable[[], QWidget],
+    base_dir: str,
+    minimized: bool = False,
+    on_ready: Optional[Callable[[QWidget], None]] = None,
+) -> None:
     icon_path = os.path.join(base_dir, "asset", "CodeCoon_profile.ico")
     if os.path.exists(icon_path):
         app_icon = QIcon(icon_path)
@@ -261,7 +284,12 @@ def run_licensed_app(
     win = create_main_window()
     if not app_icon.isNull():
         win.setWindowIcon(app_icon)
-    win.show()
-    win.raise_()
-    win.activateWindow()
+    if minimized:
+        win.showMinimized()
+    else:
+        win.show()
+        win.raise_()
+        win.activateWindow()
+    if on_ready is not None:
+        QTimer.singleShot(800, lambda: on_ready(win))
     sys.exit(qapp.exec())
