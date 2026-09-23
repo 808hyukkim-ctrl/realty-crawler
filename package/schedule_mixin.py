@@ -48,6 +48,7 @@ class ScheduleMixin:
             params = self._scheduled_daangn_params(job.settings)
             if params:
                 params["schedule_name"] = job.name
+                params["file_name"] = (job.settings or {}).get("file_name") or ""
                 worker = self._make_daangn_worker(params)
                 self._launch_scheduled_worker(worker, params, f"당근(예약:{job.name})")
             else:
@@ -56,6 +57,7 @@ class ScheduleMixin:
             params = self._scheduled_naver_params(job.settings)
             if params:
                 params["schedule_name"] = job.name
+                params["file_name"] = (job.settings or {}).get("file_name") or ""
                 worker = self._make_naver_worker(params)
                 self._launch_scheduled_worker(worker, params, f"네이버(예약:{job.name})")
             else:
@@ -361,7 +363,9 @@ class ScheduleMixin:
         if dlg.exec() == ScheduleAddDialog.DialogCode.Accepted:
             result = dlg.get_result()
             if result:
-                name, time_str, days = result
+                name, time_str, days = (result + ("",))[:4] if len(result) == 3 else result
+                settings = dict(settings)
+                settings["file_name"] = (result[3] if len(result) > 3 else "") or ""
                 job = ScheduledJob(
                     id=str(uuid.uuid4()),
                     name=name,

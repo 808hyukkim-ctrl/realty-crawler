@@ -41,12 +41,34 @@ def parse_keywords_csv(raw: str) -> List[str]:
     return [x.strip() for x in str(raw or "").split(",") if x.strip()]
 
 
+def keyword_regex(keywords: List[str]):
+    """키워드 OR 정규식. 영문 키워드는 앞뒤가 영문이면 매칭하지 않는다.
+
+    LH/SH/HUG 처럼 짧은 영문 키워드가 English, flash, shop, hugging 같은 단어 속에
+    섞여 잡히던 문제(2026-09-23) 때문에 영문 키워드에는 글자 경계를 준다.
+    한글 키워드(대출, 보증보험 등)는 붙여 쓰는 경우가 많아 그대로 부분일치한다.
+    """
+    import re as _re
+
+    kws = [str(k).strip() for k in (keywords or []) if str(k).strip()]
+    if not kws:
+        return None
+    parts = []
+    for k in sorted(kws, key=len, reverse=True):
+        esc = _re.escape(k)
+        if _re.fullmatch(r"[A-Za-z]+", k):
+            esc = r"(?<![A-Za-z])" + esc + r"(?![A-Za-z])"
+        parts.append(esc)
+    return _re.compile("|".join(parts), _re.IGNORECASE)
+
+
 def contains_any_keyword(text: Any, keywords: List[str]) -> bool:
-    """키워드 중 하나라도 본문에 있으면 True (OR). 영문 대소문자는 무시한다 (lh == LH)."""
-    if not keywords:
+    """키워드 중 하나라도 본문에 있으면 True (OR). 영문 대소문자는 무시한다 (lh == LH).
+    영문 키워드는 단어 경계를 지켜 English 의 sh 같은 오탐을 걸러낸다."""
+    rx = keyword_regex(keywords)
+    if rx is None:
         return True
-    t = str(text or "").lower()
-    return any(str(k).lower() in t for k in keywords if str(k).strip())
+    return bool(rx.search(str(text or "")))
 
 
 def parse_saved_output_path_from_finish_message(msg: str) -> Optional[str]:

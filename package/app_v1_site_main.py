@@ -154,7 +154,7 @@ class DaangnWorker(QObject):
             if all_results:
                 ts = self.params.get("timestamp", datetime.now().strftime("%y%m%d_%H%M%S"))
                 out_dir = self.params.get("out_dir", os.getcwd())
-                schedule_name = self.params.get("schedule_name")
+                schedule_name = self.params.get("file_name") or self.params.get("schedule_name")
                 if schedule_name:
                     out = os.path.join(out_dir, f"{schedule_name}_{len(all_results)}건_{ts}.xlsx")
                 else:
@@ -548,7 +548,7 @@ class NaverWorker(QObject):
                 self.finished.emit("필터 조건에 맞는 매물이 없습니다.")
                 return
 
-            _sched = self.params.get("schedule_name")
+            _sched = self.params.get("file_name") or self.params.get("schedule_name")
             if _sched:
                 _fname = f"{_sched}_{len(matched_rows)}건_{self.params['timestamp']}.xlsx"
             else:
@@ -606,7 +606,11 @@ class NaverWorker(QObject):
             from openpyxl.styles.colors import Color
         except Exception:
             return
-        pattern = re.compile("|".join(re.escape(k) for k in sorted(kws, key=len, reverse=True)), re.IGNORECASE)
+        from app_main_common import keyword_regex as _keyword_regex
+
+        pattern = _keyword_regex(kws)
+        if pattern is None:
+            return
         red_bold = InlineFont(b=True, color=Color(rgb="FFFF0000"))
         yellow = PatternFill(fill_type="solid", fgColor="FFFFFF00")
         try:
@@ -619,6 +623,7 @@ class NaverWorker(QObject):
             if not target_cols:
                 wb.close()
                 return
+            original: dict = {}
             for r in range(2, ws.max_row + 1):
                 for ci in target_cols:
                     cell = ws.cell(row=r, column=ci)
@@ -634,12 +639,46 @@ class NaverWorker(QObject):
                         pos = m.end()
                     if pos < len(text):
                         parts.append(text[pos:])
+                    original[(r, ci)] = text
                     cell.value = CellRichText(parts)
                     cell.fill = yellow
             wb.save(path)
             wb.close()
+            # 리치 텍스트로 저장하면 엑셀/openpyxl 조합에 따라 앞부분 글자가 사라지는 경우가 있다.
+            # 저장본을 다시 읽어 원문과 다르면 그 셀만 원래 글자로 되돌린다(노란 배경은 유지).
+            NaverWorker._verify_highlight(path, original)
         except Exception as e:
             print(f"[엑셀] 키워드 강조 실패: {e}")
+
+    @staticmethod
+    def _verify_highlight(path: str, original: dict) -> None:
+        """강조 저장 후 글자가 유실됐는지 확인하고, 유실된 셀은 원문으로 되돌린다."""
+        if not original:
+            return
+        try:
+            import openpyxl
+
+            wb = openpyxl.load_workbook(path, rich_text=True)
+            ws = wb.active
+            fixed = 0
+            for (r, ci), text in original.items():
+                v = ws.cell(row=r, column=ci).value
+                if isinstance(v, str):
+                    cur = v
+                else:
+                    try:
+                        cur = "".join(p if isinstance(p, str) else getattr(p, "text", "") for p in v)
+                    except Exception:
+                        cur = ""
+                if cur != text:
+                    ws.cell(row=r, column=ci).value = text
+                    fixed += 1
+            if fixed:
+                wb.save(path)
+                print(f"[엑셀] 강조 과정에서 글자가 줄어든 셀 {fixed}개를 원문으로 복구했습니다.")
+            wb.close()
+        except Exception as e:
+            print(f"[엑셀] 강조 검증 실패: {e}")
 
     @staticmethod
     def _apply_excel_hyperlinks(path: str) -> None:

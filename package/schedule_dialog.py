@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from typing import Callable, Optional
 
 from PySide6.QtCore import Qt, QTime
@@ -148,6 +150,20 @@ class ScheduleAddDialog(QDialog):
         name_row.addWidget(self._name_edit)
         lay.addLayout(name_row)
 
+        # 저장 파일 이름 (비우면 예약 이름으로 저장)
+        file_row = QHBoxLayout()
+        file_lbl = QLabel("저장 파일 이름:")
+        file_lbl.setStyleSheet("color: black;")
+        file_row.addWidget(file_lbl)
+        self._file_edit = QLineEdit()
+        self._file_edit.setStyleSheet("color: black;")
+        self._file_edit.setPlaceholderText("비우면 예약 이름으로 저장 (예: 강남_월세_아침)")
+        self._file_edit.setToolTip(
+            "여기 적은 이름으로 엑셀이 저장됩니다. 뒤에 건수와 날짜시간이 자동으로 붙습니다."
+        )
+        file_row.addWidget(self._file_edit)
+        lay.addLayout(file_row)
+
         # 수집 시간
         time_row = QHBoxLayout()
         time_lbl = QLabel("수집 시간:")
@@ -224,7 +240,8 @@ class ScheduleAddDialog(QDialog):
                 QMessageBox.warning(self, "오류", "요일을 하나 이상 선택하거나 '매일'을 체크하세요.")
                 return
 
-        self._result = (name, self._time_edit.time().toString("HH:mm"), days)
+        file_name = re.sub(r'[\/:*?"<>|]', "_", self._file_edit.text().strip())
+        self._result = (name, self._time_edit.time().toString("HH:mm"), days, file_name)
         self.accept()
 
     def get_result(self) -> Optional[tuple]:
