@@ -363,7 +363,7 @@ class ScheduleMixin:
         if dlg.exec() == ScheduleAddDialog.DialogCode.Accepted:
             result = dlg.get_result()
             if result:
-                name, time_str, days = (result + ("",))[:4] if len(result) == 3 else result
+                name, time_str, days = result[0], result[1], result[2]
                 settings = dict(settings)
                 settings["file_name"] = (result[3] if len(result) > 3 else "") or ""
                 job = ScheduledJob(
