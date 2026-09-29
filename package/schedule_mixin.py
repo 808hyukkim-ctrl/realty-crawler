@@ -9,7 +9,7 @@ from typing import Optional
 from PySide6.QtCore import QThread, QTimer
 from PySide6.QtWidgets import QMessageBox
 
-from app_main_common import RangeInput, parse_keywords_csv as _parse_keywords_csv
+from app_main_common import RangeInput, date_preset_to_range as _date_preset_to_range, parse_keywords_csv as _parse_keywords_csv
 from schedule_dialog import ScheduleAddDialog, ScheduleListDialog
 from schedule_manager import ScheduleManager, ScheduledJob
 
@@ -113,6 +113,13 @@ class ScheduleMixin:
             )
         if not regions:
             return None
+        # 등록일: 신규 예약은 date_preset(드롭다운), 구버전 예약은 date_use+date_start/date_end 그대로 사용
+        if s.get("date_preset") is not None:
+            date_start, date_end = _date_preset_to_range(s.get("date_preset"))
+        elif s.get("date_use"):
+            date_start, date_end = s.get("date_start"), s.get("date_end")
+        else:
+            date_start = date_end = None
         ts = datetime.now().strftime("%y%m%d_%H%M%S")
         out_dir = os.path.join(self.base_dir, "data")
         os.makedirs(out_dir, exist_ok=True)
@@ -131,8 +138,8 @@ class ScheduleMixin:
             "area_max": s.get("area_max", 200),
             "sales_type": s.get("sales_type", "two_room"),
             "trade_type": s.get("trade_type", "month"),
-            "date_start": s.get("date_start"),
-            "date_end": s.get("date_end"),
+            "date_start": date_start,
+            "date_end": date_end,
             "detail_keywords": s.get("detail_keywords", []),
             "detail_uses": s.get("detail_uses", []),
             "writer_types": s.get("writer_types") or ["BROKER", "DIRECT_USER"],
@@ -206,10 +213,6 @@ class ScheduleMixin:
             QMessageBox.warning(self, "오류", "거래유형을 하나 이상 선택하세요.")
             return None
         sales = [k for k, cb in self.sales_checks.items() if cb.isChecked()] or ["two_room"]
-        date_start = date_end = None
-        if self.date_use.isChecked():
-            date_start = self.date_start.date().toString("yyyyMMdd")
-            date_end = self.date_end.date().toString("yyyyMMdd")
         if hasattr(self.cb_si, "checked_data"):  # 다중선택 콤보
             region_part = {
                 "si_list": list(self.cb_si.checked_data()),
@@ -226,9 +229,7 @@ class ScheduleMixin:
             **region_part,
             "trade_type": ",".join(trade),
             "sales_type": ",".join(sales),
-            "date_use": self.date_use.isChecked(),
-            "date_start": date_start,
-            "date_end": date_end,
+            "date_preset": self.dg_date_preset.currentText(),
             "monthly_min": self.sl_month.values()[0],
             "monthly_max": self.sl_month.values()[1],
             "deposit_min": self.sl_deposit.values()[0],

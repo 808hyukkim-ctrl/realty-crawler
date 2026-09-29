@@ -9,7 +9,7 @@ import csv
 import json
 import asyncio
 import urllib.parse
-from datetime import datetime as dt, date
+from datetime import datetime as dt, date, timedelta, timezone
 
 
 class DaangnNotFound(RuntimeError):
@@ -157,6 +157,31 @@ class DaangnRealtyCrawler():
                 else:
                     raise
         return []
+
+    @staticmethod
+    def _parse_ymd_arg(v: Optional[str]) -> Optional[date]:
+        """'20260929' / '2026-09-29' 형태의 필터 인자를 date로. 형식이 다르면 None."""
+        if not v:
+            return None
+        s = str(v).strip().replace("-", "")[:8]
+        try:
+            return dt.strptime(s, "%Y%m%d").date() if len(s) == 8 else None
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _published_kst(s: Any) -> Optional[dt]:
+        """publishedAt/updatedAt ISO(UTC, 'Z') → 한국시간 datetime. 실패 시 None."""
+        if not s:
+            return None
+        try:
+            txt = str(s).strip().replace("Z", "+00:00")
+            d = dt.fromisoformat(txt)
+            if d.tzinfo is not None:
+                d = d.astimezone(timezone(timedelta(hours=9))).replace(tzinfo=None)
+            return d
+        except (ValueError, TypeError):
+            return None
 
     def _parse_created_at(self, s: str) -> Optional[date]:
         """createdAt ISO 문자열을 date로 파싱 (2026-01-12T11:07:04.487Z)"""
@@ -626,7 +651,11 @@ class DaangnRealtyCrawler():
                     "입주가능일": ("협의" if article.get("moveInDateNegotiable") else "") or article.get("moveInDate") or "",
                     "관리비": article.get("totalManageCost") or "",
                     "권리금": article.get("premiumMoney") or "",
-                    "등록일시": article.get("publishedAt") or "",
+                    # publishedAt은 UTC → 한국시간으로 표기. 원본은 _published_at_raw 에 남겨 필터에 사용
+                    "등록일시": (lambda k: k.strftime("%Y-%m-%d %H:%M") if k else (article.get("publishedAt") or ""))(
+                        self._published_kst(article.get("publishedAt"))
+                    ),
+                    "_published_at_raw": article.get("publishedAt") or "",
                 }
                 if wt_ko:
                     result["거래주체"] = wt_ko
@@ -680,8 +709,14 @@ class DaangnRealtyCrawler():
         on_item: Optional[Callable[[Dict[str, Any]], None]],
         is_cancelled: Optional[Callable[[], bool]],
         writer_types: Optional[Iterable[str]] = None,
+        date_start: Optional[str] = None,
+        date_end: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """realty.daangn.com 신규 SSR 지도 페이지 기반 크롤링 (2026년 사이트 개편 대응).
+
+        date_start/date_end("yyyyMMdd"): 등록일(publishedAt, 한국시간 기준) 범위 필터.
+        목록에는 날짜가 없고 상세에만 있어 상세를 연 뒤 판정한다. 목록은 등록일 내림차순이므로
+        시작일보다 오래된 매물이 나오면 그 유형 조합은 거기서 중단(불필요한 상세 요청 절약).
 
         지역명 해석:
           "서울특별시 강남구 역삼동"        → 시도/시군구/동
@@ -706,6 +741,10 @@ class DaangnRealtyCrawler():
 
         sales_list = [s for s in (sales_type or "").split(",") if s]
         trade_list = [t for t in (trade_type or "").split(",") if t]
+        f_start = self._parse_ymd_arg(date_start)
+        f_end = self._parse_ymd_arg(date_end)
+        date_filter_on = f_start is not None or f_end is not None
+        skipped_by_date = 0
 
         results: List[Dict[str, Any]] = []
         seen_keys = set()
@@ -775,13 +814,32 @@ class DaangnRealtyCrawler():
                     detail = self._fetch_article_detail(row.get("매물번호"), is_cancelled=is_cancelled)
                     if detail:
                         row.update(detail)
+                    if date_filter_on:
+                        pub = self._published_kst((detail or {}).get("_published_at_raw"))
+                        pub_d = pub.date() if pub else None
+                        if pub_d is None:
+                            # 상세를 못 열어 등록일을 알 수 없으면 기간 조건을 확인할 수 없으므로 제외
+                            skipped_by_date += 1
+                            continue
+                        if f_end is not None and pub_d > f_end:
+                            skipped_by_date += 1
+                            continue
+                        if f_start is not None and pub_d < f_start:
+                            # 목록은 최신순 → 이후 매물은 전부 더 오래됨
+                            skipped_by_date += 1
+                            print(f"[당근-SSR] {region_name} {sales_label}/{trade_label}: 등록일 {pub_d} < {f_start} → 이후 생략")
+                            break
+                    row.pop("_published_at_raw", None)
                     results.append(row)
                     if on_item:
                         try:
                             on_item(row)
                         except Exception:
                             pass
-        print(f"{region_name}에서 {len(results)}개 매물 (신규 SSR)")
+        if date_filter_on:
+            print(f"{region_name}에서 {len(results)}개 매물 (신규 SSR, 등록일 {date_start or ''}~{date_end or ''} 기준 제외 {skipped_by_date}건)")
+        else:
+            print(f"{region_name}에서 {len(results)}개 매물 (신규 SSR)")
         return results
 
     def crawl_realty(
@@ -819,8 +877,8 @@ class DaangnRealtyCrawler():
             realty.daangn.com SSR 지도 페이지 기반으로 크롤링한다 (신규 방식, 권장).
             생략하면 예전 www.daangn.com API로 시도하는데, 해당 API는 사이트 개편으로
             더 이상 매물을 반환하지 않는다(항상 0건).
-        date_start, date_end: 등록일(createdAt) 범위 필터. 신규 SSR 방식에는 등록일 정보가
-            없어 현재는 적용되지 않는다 (구 API 폴백 경로에서만 동작).
+        date_start, date_end: 등록일 범위 필터("yyyyMMdd"). 신규 SSR 방식은 상세의 publishedAt
+            (한국시간 변환) 기준으로 적용되며, 구 API 폴백은 createdAt 기준.
         csv_path 지정 시 매물 추출 시마다 실시간으로 CSV에 한 줄씩 추가합니다.
         return_results_only=True면 저장 없이 결과 리스트만 반환.
 
@@ -849,6 +907,8 @@ class DaangnRealtyCrawler():
                 on_item=on_item,
                 is_cancelled=is_cancelled,
                 writer_types=writer_types,
+                date_start=date_start,
+                date_end=date_end,
             )
             if return_results_only:
                 return results

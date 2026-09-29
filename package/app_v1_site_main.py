@@ -52,6 +52,8 @@ from app_main_common import (
     UseCheckGroup,
     contains_any_keyword as _contains_any_keyword,
     daangn_detail_values,
+    date_preset_to_range as _date_preset_to_range,
+    DATE_PRESETS as _DATE_PRESETS,
     description_text_from_naver_row,
     naver_detail_values,
     open_path_in_os,
@@ -991,24 +993,16 @@ class MainWindow(QMainWindow, ScheduleMixin):
         v.addWidget(region_box)
         date_box = QGroupBox("등록일")
         dr = QHBoxLayout(date_box)
-        self.date_use = QCheckBox("날짜 필터")
-        self.date_start = QDateEdit()
-        self.date_end = QDateEdit()
-        for de in (self.date_start, self.date_end):
-            de.setCalendarPopup(True)
-            de.setDisplayFormat("yyyy-MM-dd")
-            de.setDate(QDate.currentDate())
-        self.date_start.setDate(QDate.currentDate().addDays(-7))
-        self.date_use.toggled.connect(self.date_start.setEnabled)
-        self.date_use.toggled.connect(self.date_end.setEnabled)
-        self.date_use.toggled.connect(lambda _checked=False: self._update_date_filter_visuals())
-        self.date_start.setEnabled(False)
-        self.date_end.setEnabled(False)
-        self.date_range_sep = QLabel("~")
-        dr.addWidget(self.date_use)
-        dr.addWidget(self.date_start)
-        dr.addWidget(self.date_range_sep)
-        dr.addWidget(self.date_end)
+        # 네이버 탭과 같은 드롭다운 프리셋. 당근은 목록에 날짜가 없어 상세의 등록일(한국시간)로 판정한다
+        self.dg_date_preset = QComboBox()
+        self.dg_date_preset.addItems(list(_DATE_PRESETS))
+        self.dg_date_preset.setMinimumWidth(180)
+        self.dg_date_preset.setToolTip(
+            "오늘 / 어제·오늘 / 최근 7일 / 최근 30일 등록 매물만 수집합니다.\n"
+            "당근은 지역·유형별로 최신 20건까지만 웹에 제공되므로 그 안에서 걸러집니다."
+        )
+        dr.addWidget(QLabel("등록일"))
+        dr.addWidget(self.dg_date_preset)
         dr.addStretch(1)
         v.addWidget(date_box)
         price_box = QGroupBox("가격/면적 (직접 입력, 빈칸=제한없음)")
@@ -1752,10 +1746,7 @@ class MainWindow(QMainWindow, ScheduleMixin):
         if not writer_types:
             QMessageBox.warning(self, "오류", "거래주체(공인중개사/직거래)를 하나 이상 선택하세요.")
             return
-        date_start = date_end = None
-        if self.date_use.isChecked():
-            date_start = self.date_start.date().toString("yyyyMMdd")
-            date_end = self.date_end.date().toString("yyyyMMdd")
+        date_start, date_end = _date_preset_to_range(self.dg_date_preset.currentText())
 
         def _rng(values, full_min, full_max):
             # 직접입력(RangeInput): 최소가 기본값 이하이고 최대가 빈칸(제한없음)일 때만 필터 미적용

@@ -99,6 +99,22 @@ def open_path_in_os(path: str) -> None:
         subprocess.run(["xdg-open", p], check=False)
 
 
+DATE_PRESETS = ["전체", "오늘", "어제/오늘", "일주일", "한달"]
+DATE_PRESET_DAYS = {"오늘": 0, "어제/오늘": 1, "일주일": 7, "한달": 30}
+
+
+def date_preset_to_range(preset: Any) -> tuple[Optional[str], Optional[str]]:
+    """'오늘'/'어제/오늘'/'일주일'/'한달' → ("yyyyMMdd", "yyyyMMdd"), '전체'·미지정 → (None, None).
+    끝은 항상 오늘, 시작은 오늘에서 N일 전(네이버 탭의 등록일 프리셋과 같은 기준)."""
+    from datetime import date, timedelta
+
+    days = DATE_PRESET_DAYS.get(str(preset or "").strip())
+    if days is None:
+        return None, None
+    today = date.today()
+    return (today - timedelta(days=days)).strftime("%Y%m%d"), today.strftime("%Y%m%d")
+
+
 def parse_date_ymd(text: Any):
     s = str(text or "").strip()
     if not s:

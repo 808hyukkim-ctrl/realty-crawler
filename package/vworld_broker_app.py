@@ -173,11 +173,11 @@ class Worker(QObject):
                     self.failed.emit("브이월드에서 사무소정보 파일을 찾지 못했습니다.")
                     return
                 self.log.emit(f"내려받는 중: {office['label']}")
-                path = cli.download(office["key"], p["folder"], self.log.emit)
+                path = cli.download(office, p["folder"], self.log.emit)
                 if agent and p["with_agent"]:
                     try:
                         self.log.emit(f"내려받는 중: {agent['label']}")
-                        cli.download(agent["key"], p["folder"], self.log.emit)
+                        cli.download(agent, p["folder"], self.log.emit)
                     except Exception as e:
                         self.log.emit(f"  중개업자 파일은 건너뜁니다: {e}")
             else:

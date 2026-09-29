@@ -4,7 +4,8 @@
 
 - 로그인: POST /v4po_usrlogin_a004.do  (usrIdeE/usrPwdE = base64, 응답 JSON resultMap.result)
 - 파일목록: /dtmk/dtmk_ntads_s002.do?dsId=11&svcCde=NA 의 표에서 dsFileId + dsFileSq 를 읽는다
-- 다운로드: /dtmk/downloadDtnaResourceFile.do?ds_file_sq=<dsFileId><dsFileSq>  (로그인 세션 필요)
+- 다운로드: /dtmk/downloadResourceFile.do?ds_id=<dsFileId>&fileNo=<dsFileSq>  (로그인 세션 필요)
+  ※ 2026-09-29 확인: 예전 downloadDtnaResourceFile.do?ds_file_sq= 는 "다운로드가 완료되었습니다" HTML만 돌려줌
 - 파일: AL_D171(사무소, CSV) / AL_D172(중개업자, CSV) / AL_D170(공간정보, SHP)  ※ 인코딩 cp949
 
 사무소 CSV 컬럼:
@@ -30,7 +31,8 @@ import requests
 BASE = "https://www.vworld.kr"
 PAGE_URL = BASE + "/dtmk/dtmk_ntads_s002.do?dsId=11&svcCde=NA"
 LOGIN_URL = BASE + "/v4po_usrlogin_a004.do"
-DOWN_URL = BASE + "/dtmk/downloadDtnaResourceFile.do"
+DOWN_URL = BASE + "/dtmk/downloadResourceFile.do"        # 단일 파일: ?ds_id=<dsFileId>&fileNo=<dsFileSq>  (2026-09 현재 페이지의 listFnc.download)
+DOWN_URL_OLD = BASE + "/dtmk/downloadDtnaResourceFile.do"  # 예전 주소(?ds_file_sq=<dsFileId><dsFileSq>). 지금은 파일 대신 안내 HTML을 돌려줌
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
 OFFICE_PREFIX = "AL_D171"
@@ -88,29 +90,79 @@ class VworldClient:
     def file_list(self) -> List[Dict[str, str]]:
         """다운로드 가능한 파일 목록. [{key, label, kind, size}]"""
         r = self.s.get(PAGE_URL, timeout=60)
-        html = r.text
+        return self.parse_file_list(r.text)
+
+    @staticmethod
+    def parse_file_list(html: str) -> List[Dict[str, str]]:
+        """목록 HTML → [{key, label, kind, fmt}].
+
+        항목마다 <li> 안에 dsFileSq / dsFileId(hidden) / <div class="tit ...">파일명</div> / 포맷(SHP·CSV)이 있다.
+        (예전에는 dsFileId 앞뒤 2000자에서 '중개업' 글자를 찾았는데, 항목 간격이 좁아 앞 항목(공간정보 SHP)의
+        이름을 집어 세 파일이 전부 '기타'로 분류되고 dsFileSq 도 섞였다 → 2026-09-29 <li> 단위 파싱으로 교체)
+        """
         out: List[Dict[str, str]] = []
-        for m in re.finditer(r'name="dsFileId"\s+value="([^"]+)"', html):
-            fid = m.group(1)
-            around = html[max(0, m.start() - 2000): m.start() + 2000]
-            sq = re.search(r'name="dsFileSq"\s+value="([^"]+)"', around)
-            label = ""
-            for cand in re.findall(r">([^<>]{4,40})<", around):
-                if "중개업" in cand:
-                    label = cand.strip()
-                    break
-            kind = "office" if "사무소" in label else ("agent" if "중개업자" in label else "etc")
-            out.append({"key": fid + (sq.group(1) if sq else ""), "label": label or fid, "kind": kind})
+        for item in re.findall(r"<li(?:\s[^>]*)?>(.*?)</li>", html, re.S):
+            fid_m = re.search(r'name="dsFileId"\s+value="([^"]+)"', item)
+            if not fid_m:
+                continue
+            fid = fid_m.group(1)
+            sq_m = re.search(r'name="dsFileSq"\s+value="([^"]+)"', item)
+            tit_m = re.search(r'class="tit[^"]*"\s*>\s*([^<]+?)\s*<', item)
+            fmt_m = re.search(r'class="format"\s*>\s*<span[^>]*>\s*([^<]+?)\s*<', item)
+            label = tit_m.group(1).strip() if tit_m else ""
+            if not label:  # 구조가 또 바뀌면 항목 안에서 '중개업' 텍스트라도 찾는다
+                for cand in re.findall(r">([^<>]{4,40})<", item):
+                    if "중개업" in cand:
+                        label = cand.strip()
+                        break
+            fmt = (fmt_m.group(1).strip().upper() if fmt_m else "")
+            compact = label.replace(" ", "")
+            if "사무소" in compact:
+                kind = "office"
+            elif "중개업자" in compact:
+                kind = "agent"
+            else:
+                kind = "etc"
+            if kind != "etc" and fmt and fmt != "CSV":
+                kind = "etc"  # 같은 이름의 SHP 등은 제외
+            sq = sq_m.group(1) if sq_m else ""
+            out.append({"key": fid + sq, "ds_id": fid, "file_no": sq, "label": label or fid, "kind": kind, "fmt": fmt})
         return out
 
-    def download(self, key: str, dest_dir: str, log: Optional[Callable[[str], None]] = None) -> str:
-        """ds_file_sq 로 내려받아 저장한 파일 경로를 돌려준다."""
+    def download(self, entry, dest_dir: str, log: Optional[Callable[[str], None]] = None) -> str:
+        """file_list() 항목(dict) 또는 예전 key 문자열로 내려받아 저장한 파일 경로를 돌려준다.
+
+        새 주소(ds_id+fileNo)로 먼저 받고, HTML이 오면 예전 주소(ds_file_sq)로 한 번 더 시도한다.
+        """
         os.makedirs(dest_dir, exist_ok=True)
-        with self.s.get(DOWN_URL, params={"ds_file_sq": key}, stream=True, timeout=600) as r:
+        if isinstance(entry, dict):
+            ds_id, file_no, key = entry.get("ds_id", ""), entry.get("file_no", ""), entry.get("key", "")
+        else:
+            key = str(entry or "")
+            ds_id, file_no = "", ""
+            m = re.match(r"^(\d{8}DS\d{5})(\d+)$", key)  # 예: 20171128DS00161 + 100
+            if m:
+                ds_id, file_no = m.group(1), m.group(2)
+        attempts = []
+        if ds_id and file_no:
+            attempts.append((DOWN_URL, {"ds_id": ds_id, "fileNo": file_no}))
+        if key:
+            attempts.append((DOWN_URL_OLD, {"ds_file_sq": key}))
+        last_err = "다운로드 주소를 만들지 못했습니다."
+        for url, params in attempts:
+            try:
+                return self._download_one(url, params, dest_dir, log)
+            except RuntimeError as e:
+                last_err = str(e)
+                _log(log, f"  {os.path.basename(url)} 실패: {e}")
+        raise RuntimeError(last_err)
+
+    def _download_one(self, url: str, params: Dict[str, str], dest_dir: str, log: Optional[Callable[[str], None]]) -> str:
+        with self.s.get(url, params=params, stream=True, timeout=600) as r:
             if r.status_code != 200:
                 raise RuntimeError(f"다운로드 실패 (HTTP {r.status_code}) — 브이월드 로그인이 필요합니다.")
             if "text/html" in (r.headers.get("Content-Type") or ""):
-                raise RuntimeError("파일 대신 웹페이지가 왔습니다 — 브이월드 로그인이 풀렸습니다. 아이디/비밀번호를 확인하세요.")
+                raise RuntimeError("파일 대신 웹페이지가 왔습니다 — 브이월드 로그인이 풀렸거나 다운로드 주소가 바뀌었습니다.")
             cd = r.headers.get("Content-Disposition", "")
             name = ""
             m = re.search(r'filename="?([^";]+)"?', cd)

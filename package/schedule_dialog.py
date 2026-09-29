@@ -88,10 +88,12 @@ def format_settings_summary(site: str, s: dict) -> str:
         sales = [DG_SALES_LABELS.get(t, t) for t in s.get("sales_type", "").split(",") if t]
         lines.append(f"매물유형: {', '.join(sales) if sales else '없음'}")
 
-        if s.get("date_use") and s.get("date_start"):
+        if s.get("date_preset"):
+            lines.append(f"등록일: {s['date_preset']}")
+        elif s.get("date_use") and s.get("date_start"):
             lines.append(f"날짜: {s['date_start']} ~ {s.get('date_end', '')}")
         else:
-            lines.append("날짜: 전체")
+            lines.append("등록일: 전체")
 
         lines.append(f"월세: {s.get('monthly_min', 0):,} ~ {s.get('monthly_max', 3000):,} 만원")
         lines.append(f"보증금: {s.get('deposit_min', 0):,} ~ {s.get('deposit_max', 50000):,} 만원")
