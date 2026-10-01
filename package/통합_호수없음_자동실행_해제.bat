@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 > nul
-title 중개업소 신규개업 수집기 - 자동 실행 해제
+title 전국부동산매물수집기(호수없음) - 자동 실행 해제
 
 rem 관리자 권한이 아니면 스스로 다시 실행 (작업 스케줄러 등록·절전 깨우기 설정에 필요)
 net session >nul 2>&1
@@ -19,10 +19,10 @@ if not "%errorlevel%"=="0" (
 )
 cd /d "%~dp0"
 echo.
-echo  '중개업소 신규개업 수집' 로 등록된 작업을 모두 해제합니다.
+echo  '매물수집 자동실행_호수없음' 로 등록된 작업을 모두 해제합니다.
 echo  (프로그램과 수집한 엑셀은 그대로 남습니다)
 echo.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$x = @(Get-ScheduledTask | Where-Object { $_.TaskName -eq '중개업소 신규개업 수집' -or $_.TaskName -like '중개업소 신규개업 수집 - *' }); if ($x.Count -eq 0) { Write-Host '  등록된 작업이 없습니다.' } else { foreach ($t in $x) { Unregister-ScheduledTask -TaskName $t.TaskName -Confirm:$false; Write-Host ('  해제: ' + $t.TaskName) } }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$x = @(Get-ScheduledTask | Where-Object { $_.TaskName -eq '매물수집 자동실행_호수없음' -or $_.TaskName -like '매물수집 자동실행_호수없음 - *' }); if ($x.Count -eq 0) { Write-Host '  등록된 작업이 없습니다.' } else { foreach ($t in $x) { Unregister-ScheduledTask -TaskName $t.TaskName -Confirm:$false; Write-Host ('  해제: ' + $t.TaskName) } }"
 echo.
 echo  해제했습니다. 다시 켜려면 자동실행_설정.bat 을 실행하세요.
 echo.
