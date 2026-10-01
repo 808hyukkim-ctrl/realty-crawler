@@ -40,13 +40,16 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QSpinBox,
+    QTabWidget,
     QTimeEdit,
     QVBoxLayout,
     QWidget,
 )
 
 import auto_send
-from app_main_common import MultiSelectCombo
+from app_main_common import (
+    APP_STYLESHEET, DetailFilters, MultiSelectCombo, RangeInput, contains_any_keyword, parse_keywords_csv, wrap_in_scroll,
+)
 from onhouse_crawler import OnhouseCrawler
 from schedule_manager import DAY_NAMES, ScheduleManager, ScheduledJob
 
@@ -56,7 +59,19 @@ TRADE_TYPES = ["월세", "전세", "매매"]
 APP_TITLE = "온하우스 매물수집기"
 PHONE_VIEW_URL = "https://www.onhouse.com/index.php/dataFunction/phoneView"
 PAGE_SIZE = 30
-ROOM_TYPES = ["전체", "주택", "오피", "주택/오피", "사무실", "상가", "사무실/상가", "분양사무실"]
+ROOM_TYPES = ["전체", "주택", "오피", "주택/오피", "사무실", "상가", "사무실/상가", "분양사무실"]   # (옛 예약 호환용)
+# 온하우스 서버 필터 (2026-10-01 실측): roomType/structure 는 '주택','오피스텔' 처럼 따옴표 목록, floorArray 는 1층,2층 처럼 쉼표, 옵션은 Y
+ROOM_KINDS = ["주택", "오피스텔", "아파트", "사무실", "상가"]
+STRUCTURES = {"원룸": ["오픈형원룸", "분리형원룸", "분리형원룸(1룸 1거실)", "복층형원룸"], "투룸": ["투룸"], "쓰리룸": ["쓰리룸"], "포룸+": ["포룸+"]}
+FLOOR_ARRAY = ["지하층", "1층", "2층", "3층 이상"]
+SERVER_OPTIONS = [  # (라벨, 파라미터, 값)
+    ("엘리베이터", "elevator", "Y"), ("주차 가능", "parking", "Y"), ("반려동물", "pet", "Y"), ("풀옵션", "fulloption", "Y"),
+    ("즉시입주", "moveInType", "즉시입주"), ("반지하 제외", "noSemiBasement", "Y"), ("1층 제외", "noFirstFloor", "Y"),
+    ("전세대출 가능", "cfLoan", "Y"), ("권리금 없음", "noPremiumPrice", "Y"), ("관리비 포함", "managementFeeYn", "Y"),
+    ("인테리어", "interior", "Y"), ("내부사진 있음", "img", "room"),
+]
+KEYWORD_PRESETS = ["통임대", "통매매", "건물전체", "반려", "대출", "LH", "SH", "보증보험", "풀옵션", "주차", "엘리베이터", "신축", "역세권", "즉시입주"]
+DATE_BY = [("확인일(업로드)", "chk"), ("등록일", "reg")]
 INVALID_FILENAME_CHARS = '\\/:*?"<>|'
 
 # (라벨, 오늘 기준 며칠 전부터) — None 은 전체, -1 은 직접 지정
@@ -231,6 +246,21 @@ class Worker(QObject):
                 return
             time.sleep(0.2)
 
+    @staticmethod
+    def _post_ok(parsed: Dict[str, Any], post: DetailFilters, keywords: List[str]) -> bool:
+        """상세를 읽은 뒤 거르는 조건: 방수/층수/준공년 + 키워드(상세의 모든 값에서 찾음)"""
+        if post.active:
+            rooms = str(parsed.get("방수 / 욕실수") or parsed.get("방수") or "")
+            floor = str(parsed.get("해당층 / 전체층") or parsed.get("해당층") or "")
+            approve = " ".join(str(v) for k, v in parsed.items() if str(k).endswith("_태그") or k in ("준공년", "사용승인일"))
+            if not post.passes(rooms=rooms, floor=floor, approve=approve, use=""):
+                return False
+        if keywords:
+            text = " ".join(str(v) for v in parsed.values() if v)
+            if not contains_any_keyword(text, keywords):
+                return False
+        return True
+
     def _fetch_contact(
         self, crawler: OnhouseCrawler, hid: str, html: str, fallback_type: str
     ) -> Tuple[Dict[str, str], bool]:
@@ -278,6 +308,13 @@ class Worker(QObject):
             by_reg: bool = self.p.get("date_by") == "reg"   # 기간을 확인일이 아니라 등록일로 (목록은 등록일 내림차순 요청)
             date_word = "등록일" if by_reg else "확인일"
             warned_no_reg = False
+            # 거래유형별 검색 회차: 가격 조건이 거래유형마다 다르므로(보증금/월세/전세/매매가) 가격을 걸면 유형별로 따로 검색한다
+            passes: List[Tuple[List[str], Dict[str, Any]]] = self.p.get("passes") or [(trade_types, {})]
+            post = DetailFilters(rooms=self.p.get("post_rooms"), floors=self.p.get("post_floors"), years=self.p.get("post_years"))
+            keywords: List[str] = list(self.p.get("keywords") or [])
+            skipped_by_filter = 0
+            if len(passes) > 1:
+                self.log.emit(f"  가격 조건이 있어 거래유형별로 {len(passes)}회 나눠 검색합니다")
             contact_fail_streak = 0
             # 연락처 캐시: 같은 매물은 서버도 재차감하지 않지만, 호출 자체를 생략해 조회수/시간을 아낀다.
             cache_path: str = self.p.get("contact_cache_path", "")
@@ -304,8 +341,9 @@ class Worker(QObject):
                     self.progress.emit(ri, total)
                     continue
                 self.status.emit(f"[{ri}/{total}] {region} 검색 중")
-                page = 0
-                while True:
+                for pass_trades, pass_extra in passes:
+                  page = 0
+                  while True:
                     if self._cancel:
                         stopped = True
                         break
@@ -317,13 +355,13 @@ class Worker(QObject):
                         ne_lat=bbox["lat_max"],
                         sw_lng=bbox["lon_min"],
                         ne_lng=bbox["lon_max"],
-                        trade_type=trade_types,
-                        room_type=room_type,
+                        trade_type=pass_trades,
+                        room_type="all",
                         limit=PAGE_SIZE,
                         page=page,
                         fetch_details=False,
                         is_cancelled=lambda: self._cancel,
-                        **({"order1": "R.INS_DATE|DESC"} if by_reg else {}),
+                        **{**({"order1": "R.INS_DATE|DESC"} if by_reg else {}), **pass_extra},
                     ) or []
                     if not ids:
                         if page == 0:
@@ -400,6 +438,10 @@ class Worker(QObject):
                                         skipped_by_date += 1
                                         self._sleep_between()
                                         continue
+                            if not self._post_ok(parsed, post, keywords):
+                                skipped_by_filter += 1
+                                self._sleep_between()
+                                continue
                             row: Dict[str, Any] = {
                                 "매물ID": parsed.get("매물ID", hid),
                                 "URL": parsed.get("URL", f"{crawler.DETAIL_URL}/{hid}"),
@@ -462,12 +504,16 @@ class Worker(QObject):
                         break
                     page += 1
                     self._sleep_between()
+                  if stopped:
+                      break
                 self.progress.emit(ri, total)
 
             if cache_path and new_lookups:
                 save_contact_cache(cache_path, contact_cache)
             if date_from or date_to:
                 self.log.emit(f"  {date_word} 기간 필터로 제외된 매물: {skipped_by_date}건")
+            if skipped_by_filter:
+                self.log.emit(f"  방수/층수/준공년/키워드 조건으로 제외된 매물: {skipped_by_filter}건")
             if self.p.get("contact"):
                 self.log.emit(
                     f"  연락처: 신규 조회 {new_lookups}건 (조회수 차감), 캐시 재사용 {cache_hits}건 (차감 없음)"
@@ -582,7 +628,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_TITLE)
-        self.resize(980, 860)
+        self.resize(1100, 920)
+        self.setStyleSheet(APP_STYLESHEET)
         self.base_dir = base_dir()
         self.cred_path = os.path.join(self.base_dir, "onhouse_credentials.json")
         self.out_dir = os.path.join(self.base_dir, "data")
@@ -661,9 +708,56 @@ class MainWindow(QMainWindow):
 
     # ---------- UI ----------
     def _build_ui(self):
-        root = QWidget()
-        self.setCentralWidget(root)
-        v = QVBoxLayout(root)
+        central = QWidget()
+        central.setObjectName("appRoot")
+        self.setCentralWidget(central)
+        root = QVBoxLayout(central)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.setSpacing(12)
+        self.tabs = QTabWidget()
+        root.addWidget(self.tabs, 3)
+        self.tabs.addTab(wrap_in_scroll(self._build_collect_tab()), "온하우스 수집")
+        self.tabs.addTab(wrap_in_scroll(self._build_send_tab()), "자동 전송")
+        self.tabs.addTab(wrap_in_scroll(self._build_schedule_tab()), "예약 자동 실행")
+
+        ctrl = QHBoxLayout()
+        self.btn_start = QPushButton("수집 시작")
+        self.btn_stop = QPushButton("중지 (지금까지 저장)")
+        self.btn_stop.setEnabled(False)
+        self.btn_clear = QPushButton("수집 로그 지우기")
+        self.btn_open = QPushButton("수집된 파일 열기")
+        self.btn_sched_add = QPushButton("현재 설정으로 예약 추가")
+        self.btn_start.clicked.connect(self._start)
+        self.btn_stop.clicked.connect(self._stop)
+        self.btn_clear.clicked.connect(lambda: self.log.clear())
+        self.btn_open.clicked.connect(self._open_out_dir)
+        self.btn_sched_add.clicked.connect(self._add_schedule)
+        for btn in (self.btn_start, self.btn_stop, self.btn_clear, self.btn_open, self.btn_sched_add):
+            ctrl.addWidget(btn)
+        ctrl.addStretch(1)
+        root.addLayout(ctrl)
+
+        pr = QHBoxLayout()
+        self.lbl_status = QLabel("대기 중")
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 100)
+        pr.addWidget(self.lbl_status)
+        pr.addWidget(self.progress, 1)
+        root.addLayout(pr)
+
+        self.log = QPlainTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setMaximumBlockCount(5000)
+        self.log.setMinimumHeight(140)
+        self.log.setStyleSheet("background:#0f172a; color:#e2e8f0; border-radius:10px; padding:6px; font-family:Consolas,'Malgun Gothic';")
+        root.addWidget(self.log, 1)
+        self._refresh_trade_controls()
+
+    # ---------- 탭 1: 수집 조건 ----------
+    def _build_collect_tab(self) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setSpacing(10)
 
         acc = QGroupBox("온하우스 계정 (유료 회원사 계정 필요 — 상세/연락처는 유료만 조회됨)")
         h = QHBoxLayout(acc)
@@ -680,19 +774,19 @@ class MainWindow(QMainWindow):
         h.addWidget(self.chk_save)
         v.addWidget(acc)
 
-        reg = QGroupBox("지역 (체크박스로 여러 곳 동시 선택 — 하위 단계를 체크하면 그것만, 아니면 상위 선택 전체)")
+        reg = QGroupBox("지역 (체크박스로 여러 곳 동시 선택 가능 — 하위 단계를 체크하면 그것만, 아니면 상위 선택 전체)")
         h = QHBoxLayout(reg)
         self.cb_si = MultiSelectCombo()
         self.cb_si.set_entries([(si, si) for si in self.si_list])
         self.cb_gun = MultiSelectCombo()
         self.cb_dong = MultiSelectCombo()
-        for cb, w in ((self.cb_si, 190), (self.cb_gun, 200), (self.cb_dong, 240)):
-            cb.setMinimumWidth(w)
+        for cb, wd in ((self.cb_si, 190), (self.cb_gun, 200), (self.cb_dong, 240)):
+            cb.setMinimumWidth(wd)
         h.addWidget(QLabel("시/도"))
         h.addWidget(self.cb_si)
-        h.addWidget(QLabel("시군구"))
+        h.addWidget(QLabel("시·군·구"))
         h.addWidget(self.cb_gun)
-        h.addWidget(QLabel("읍면동"))
+        h.addWidget(QLabel("읍·면·동"))
         h.addWidget(self.cb_dong)
         h.addStretch(1)
         self.lbl_region_count = QLabel("")
@@ -702,46 +796,140 @@ class MainWindow(QMainWindow):
         self.cb_dong.selection_changed.connect(self._update_region_count)
         v.addWidget(reg)
 
-        typ = QGroupBox("유형 / 기간")
-        h = QHBoxLayout(typ)
+        kind_box = QGroupBox("매물유형 (체크 없음 = 전체)")
+        kg = QGridLayout(kind_box)
+        self.room_checks: Dict[str, QCheckBox] = {}
+        for i, k in enumerate(ROOM_KINDS):
+            cb = QCheckBox(k)
+            self.room_checks[k] = cb
+            kg.addWidget(cb, 0, i)
+        kg.addWidget(QLabel("방 구조(주택)"), 1, 0)
+        self.struct_checks: Dict[str, QCheckBox] = {}
+        for i, k in enumerate(STRUCTURES.keys()):
+            cb = QCheckBox(k)
+            self.struct_checks[k] = cb
+            kg.addWidget(cb, 1, i + 1)
+        kg.setColumnStretch(len(ROOM_KINDS), 1)
+        v.addWidget(kind_box)
+
+        trade_box = QGroupBox("거래유형")
+        tr = QHBoxLayout(trade_box)
         self.chk_month = QCheckBox("월세")
         self.chk_jeonse = QCheckBox("전세")
         self.chk_buy = QCheckBox("매매")
-        self.chk_buy.setChecked(True)
+        self.chk_month.setChecked(True)
         self.trade_checks: Dict[str, QCheckBox] = {"월세": self.chk_month, "전세": self.chk_jeonse, "매매": self.chk_buy}
-        self.cb_room = QComboBox()
-        self.cb_room.addItems(ROOM_TYPES)
-        h.addWidget(self.chk_month)
-        h.addWidget(self.chk_jeonse)
-        h.addWidget(self.chk_buy)
-        h.addSpacing(16)
-        h.addWidget(QLabel("방유형"))
-        h.addWidget(self.cb_room)
-        h.addSpacing(24)
-        self.lbl_period = QLabel("확인일(업로드) 기간")
-        h.addWidget(self.lbl_period)
+        for c in (self.chk_month, self.chk_jeonse, self.chk_buy):
+            tr.addWidget(c)
+            c.toggled.connect(lambda _checked=False: self._refresh_trade_controls())
+        tr.addStretch(1)
+        v.addWidget(trade_box)
+
+        price_box = QGroupBox("가격/면적/기간 (직접 입력, 빈칸=제한없음 · 가격은 온하우스 서버에서 바로 걸러짐)")
+        pg = QGridLayout(price_box)
+        self.sl_deposit = RangeInput("보증금", unit="만원")
+        self.sl_rent = RangeInput("월세", unit="만원")
+        self.sl_buy = RangeInput("매매가", unit="만원")
+        self.sl_jeonse = RangeInput("전세", unit="만원")
+        self.sl_area = RangeInput("면적", unit="평", unit_toggle=("㎡", 3.3058))
+        pg.addWidget(self.sl_deposit, 0, 0)
+        pg.addWidget(self.sl_rent, 0, 1)
+        pg.addWidget(self.sl_buy, 1, 0)
+        pg.addWidget(self.sl_jeonse, 1, 1)
+        pg.addWidget(self.sl_area, 2, 0)
+        date_wrap = QWidget()
+        dr = QHBoxLayout(date_wrap)
+        dr.setContentsMargins(10, 0, 0, 0)
+        dr.setSpacing(8)
+        self.cb_date_by = QComboBox()
+        self.cb_date_by.addItems([lbl for lbl, _ in DATE_BY])
+        self.cb_date_by.setToolTip(
+            "확인일(업로드): 온하우스가 매물을 확인/갱신한 날 — 목록이 이 순서라 빠릅니다.\n"
+            "등록일: 매물이 처음 올라온 날 — 목록을 등록일 순으로 받고 상세의 등록일로 거릅니다."
+        )
+        self.lbl_period = QLabel("기간")
         self.cb_period = QComboBox()
         self.cb_period.addItems([lbl for lbl, _ in DATE_PERIODS])
+        self.cb_period.setMinimumWidth(110)
         self.de_from = QDateEdit(QDate.currentDate().addDays(-6))
         self.de_to = QDateEdit(QDate.currentDate())
         for de in (self.de_from, self.de_to):
             de.setCalendarPopup(True)
             de.setDisplayFormat("yyyy-MM-dd")
             de.setEnabled(False)
-        h.addWidget(self.cb_period)
-        h.addWidget(self.de_from)
-        h.addWidget(QLabel("~"))
-        h.addWidget(self.de_to)
-        self.chk_by_reg = QCheckBox("등록일 기준")
-        self.chk_by_reg.setToolTip(
-            "켜면 기간을 매물 '등록일'로 거릅니다 (목록을 등록일 순으로 받고, 상세의 등록일로 확인).\n"
-            "끄면 지금처럼 '확인일(업로드)' 기준입니다."
-        )
-        self.chk_by_reg.toggled.connect(self._on_by_reg_changed)
-        h.addWidget(self.chk_by_reg)
-        h.addStretch(1)
+        dr.addWidget(QLabel("기준"))
+        dr.addWidget(self.cb_date_by)
+        dr.addWidget(self.lbl_period)
+        dr.addWidget(self.cb_period)
+        dr.addWidget(self.de_from)
+        dr.addWidget(QLabel("~"))
+        dr.addWidget(self.de_to)
+        dr.addStretch(1)
+        pg.addWidget(date_wrap, 3, 0, 1, 2)   # 기간 줄은 전체 폭 (기준·프리셋·날짜가 길어서)
+        pg.setColumnStretch(0, 1)
+        pg.setColumnStretch(1, 1)
+        pg.setHorizontalSpacing(16)
+        pg.setVerticalSpacing(4)
         self.cb_period.currentIndexChanged.connect(self._on_period_changed)
-        v.addWidget(typ)
+        v.addWidget(price_box)
+
+        detail_box = QGroupBox("상세 조건 (방수/층수/준공년 — 상세를 읽은 뒤 거릅니다)")
+        dg = QGridLayout(detail_box)
+        self.sl_rooms = RangeInput("방수", unit="개")
+        self.sl_floor = RangeInput("층수", unit="층 (반지하/지하=0)")
+        self.sl_year = RangeInput("준공년", unit="년", default_min_text="1950")
+        dg.addWidget(self.sl_rooms, 0, 0)
+        dg.addWidget(self.sl_floor, 0, 1)
+        dg.addWidget(self.sl_year, 1, 0)
+        floor_wrap = QWidget()
+        fl = QHBoxLayout(floor_wrap)
+        fl.setContentsMargins(10, 0, 0, 0)
+        fl.addWidget(QLabel("층 (서버 필터)"))
+        self.floor_checks: Dict[str, QCheckBox] = {}
+        for k in FLOOR_ARRAY:
+            cb = QCheckBox(k)
+            self.floor_checks[k] = cb
+            fl.addWidget(cb)
+        fl.addStretch(1)
+        dg.addWidget(floor_wrap, 1, 1)
+        dg.setColumnStretch(0, 1)
+        dg.setColumnStretch(1, 1)
+        dg.setHorizontalSpacing(16)
+        dg.setVerticalSpacing(4)
+        v.addWidget(detail_box)
+
+        opt_box = QGroupBox("옵션 (온하우스 서버 필터 · 체크한 것만 수집)")
+        og = QGridLayout(opt_box)
+        self.option_checks: Dict[str, QCheckBox] = {}
+        for i, (label, key, _val) in enumerate(SERVER_OPTIONS):
+            cb = QCheckBox(label)
+            self.option_checks[key] = cb
+            og.addWidget(cb, i // 6, i % 6)
+        v.addWidget(opt_box)
+
+        text_box = QGroupBox("상세 텍스트 필터 (입력 키워드 + 체크 키워드 중 하나라도 매물 정보에 있으면 수집)")
+        fr = QHBoxLayout(text_box)
+        fr.setSpacing(12)
+        left = QWidget()
+        lf = QHBoxLayout(left)
+        lf.setContentsMargins(0, 0, 0, 0)
+        self.ed_keywords = QLineEdit()
+        self.ed_keywords.setPlaceholderText("키워드,콤마로구분 (예: 통임대,역세권)")
+        lf.addWidget(QLabel("키워드"))
+        lf.addWidget(self.ed_keywords, 1)
+        right = QWidget()
+        rg = QGridLayout(right)
+        rg.setContentsMargins(0, 0, 0, 0)
+        rg.setHorizontalSpacing(10)
+        rg.setVerticalSpacing(2)
+        self.kw_checks: Dict[str, QCheckBox] = {}
+        for i, kw in enumerate(KEYWORD_PRESETS):
+            cb = QCheckBox(kw)
+            self.kw_checks[kw] = cb
+            rg.addWidget(cb, i // 7, i % 7)
+        fr.addWidget(left, 1)
+        fr.addWidget(right, 2)
+        v.addWidget(text_box)
 
         opt = QGroupBox("수집 옵션")
         g = QGridLayout(opt)
@@ -767,7 +955,13 @@ class MainWindow(QMainWindow):
         g.addWidget(self.sp_max_pages, 1, 5)
         g.setColumnStretch(6, 1)
         v.addWidget(opt)
+        v.addStretch(1)
+        return w
 
+    # ---------- 탭 2: 자동 전송 ----------
+    def _build_send_tab(self) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
         snd = QGroupBox("수집 완료 후 자동 전송 (한 번만 입력해두면 예약 수집 결과도 자동으로 옵니다)")
         sg = QGridLayout(snd)
         self.chk_mail = QCheckBox("메일로 보내기")
@@ -782,7 +976,6 @@ class MainWindow(QMainWindow):
         sg.addWidget(self.ed_mail_from, 0, 1)
         sg.addWidget(self.ed_mail_pw, 0, 2)
         sg.addWidget(self.ed_mail_to, 0, 3, 1, 2)
-
         self.chk_tg = QCheckBox("텔레그램으로 보내기")
         self.ed_tg_token = QLineEdit()
         self.ed_tg_token.setPlaceholderText("봇 토큰 (@BotFather 에서 발급)")
@@ -804,54 +997,105 @@ class MainWindow(QMainWindow):
         sg.setColumnStretch(1, 2)
         sg.setColumnStretch(3, 2)
         v.addWidget(snd)
+        v.addStretch(1)
+        return w
 
-        sch = QGroupBox("예약 자동 실행 (이 프로그램이 켜져 있는 동안, 지정 시각에 저장된 조건으로 자동 수집)")
+    # ---------- 탭 3: 예약 ----------
+    def _build_schedule_tab(self) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+        sch = QGroupBox("예약 자동 실행 (이 프로그램이 켜져 있는 동안, 지정 시각에 저장된 조건으로 자동 수집 · 자동실행_설정.bat 으로 무인 실행도 가능)")
         sl = QHBoxLayout(sch)
         self.lst_sched = QListWidget()
-        self.lst_sched.setMaximumHeight(96)
+        self.lst_sched.setMinimumHeight(160)
         sl.addWidget(self.lst_sched, 1)
         bl = QVBoxLayout()
-        self.btn_sched_add = QPushButton("현재 설정으로 예약 추가")
+        self.btn_sched_add2 = QPushButton("현재 설정으로 예약 추가")
         self.btn_sched_toggle = QPushButton("선택 켜기/끄기")
         self.btn_sched_run = QPushButton("선택 예약 지금 실행")
         self.btn_sched_del = QPushButton("선택 삭제")
-        self.btn_sched_add.clicked.connect(self._add_schedule)
+        self.btn_sched_add2.clicked.connect(self._add_schedule)
         self.btn_sched_toggle.clicked.connect(self._toggle_schedule)
         self.btn_sched_run.clicked.connect(self._run_schedule_now)
         self.btn_sched_del.clicked.connect(self._remove_schedule)
-        for b in (self.btn_sched_add, self.btn_sched_toggle, self.btn_sched_run, self.btn_sched_del):
+        for b in (self.btn_sched_add2, self.btn_sched_toggle, self.btn_sched_run, self.btn_sched_del):
             bl.addWidget(b)
+        bl.addStretch(1)
         sl.addLayout(bl)
         v.addWidget(sch)
+        v.addStretch(1)
+        return w
 
-        h = QHBoxLayout()
-        self.btn_start = QPushButton("수집 시작")
-        self.btn_stop = QPushButton("중지 (지금까지 저장)")
-        self.btn_stop.setEnabled(False)
-        self.btn_open = QPushButton("결과 폴더 열기")
-        self.btn_start.clicked.connect(self._start)
-        self.btn_stop.clicked.connect(self._stop)
-        self.btn_open.clicked.connect(self._open_out_dir)
-        h.addWidget(self.btn_start)
-        h.addWidget(self.btn_stop)
-        h.addStretch(1)
-        h.addWidget(self.btn_open)
-        v.addLayout(h)
+    # ---------- 조건 읽기 ----------
+    def _refresh_trade_controls(self):
+        """거래유형에 맞는 가격 칸만 켠다"""
+        month = self.chk_month.isChecked()
+        self.sl_deposit.set_enabled(month)
+        self.sl_rent.set_enabled(month)
+        self.sl_jeonse.set_enabled(self.chk_jeonse.isChecked())
+        self.sl_buy.set_enabled(self.chk_buy.isChecked())
 
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 100)
-        self.lbl_status = QLabel("대기")
-        v.addWidget(self.progress)
-        v.addWidget(self.lbl_status)
+    @staticmethod
+    def _range_or_none(r: RangeInput):
+        lo, hi = r.values()
+        if lo <= 0 and hi >= RangeInput.OPEN_MAX:
+            return None
+        return (lo, hi)
 
-        self.log = QPlainTextEdit()
-        self.log.setReadOnly(True)
-        self.log.setMaximumBlockCount(5000)
-        v.addWidget(self.log, 1)
+    @staticmethod
+    def _range_params(r: RangeInput, lo_key: str, hi_key: str) -> Dict[str, str]:
+        v = MainWindow._range_or_none(r)
+        if not v:
+            return {}
+        lo, hi = v
+        out: Dict[str, str] = {}
+        if lo > 0:
+            out[lo_key] = str(lo)
+        if hi < RangeInput.OPEN_MAX:
+            out[hi_key] = str(hi)
+        return out
 
-        self._on_si_changed()
+    def _by_reg(self) -> bool:
+        return DATE_BY[self.cb_date_by.currentIndex()][1] == "reg"
 
-    # ---------- 지역 다중선택 ----------
+    def _server_common(self) -> Dict[str, Any]:
+        """모든 회차에 공통으로 붙는 서버 필터 (매물유형·구조·층·옵션·면적)"""
+        extra: Dict[str, Any] = {}
+        kinds = [k for k, cb in self.room_checks.items() if cb.isChecked()]
+        if kinds:
+            extra["roomType"] = ",".join(f"'{k}'" for k in kinds)
+        structs: List[str] = []
+        for k, cb in self.struct_checks.items():
+            if cb.isChecked():
+                structs.extend(STRUCTURES[k])
+        if structs:
+            extra["structure"] = ",".join(f"'{x}'" for x in structs)
+        floors = [k for k, cb in self.floor_checks.items() if cb.isChecked()]
+        if floors:
+            extra["floorArray"] = ",".join(floors)
+        for _label, key, val in SERVER_OPTIONS:
+            if self.option_checks[key].isChecked():
+                extra[key] = val
+        extra.update(self._range_params(self.sl_area, "minArea", "maxArea"))
+        return extra
+
+    def _build_passes(self, trade_types: List[str]) -> List[Tuple[List[str], Dict[str, Any]]]:
+        """거래유형별 가격 조건 → 검색 회차. 가격 조건이 하나도 없으면 한 번에 검색"""
+        common = self._server_common()
+        per: Dict[str, Dict[str, str]] = {
+            "월세": {**self._range_params(self.sl_deposit, "minPrice", "maxPrice"), **self._range_params(self.sl_rent, "minMonthPrice", "maxMonthPrice")},
+            "전세": self._range_params(self.sl_jeonse, "minPrice", "maxPrice"),
+            "매매": self._range_params(self.sl_buy, "minPrice", "maxPrice"),
+        }
+        if not any(per[t] for t in trade_types):
+            return [(list(trade_types), dict(common))]
+        return [([t], {**common, **per[t]}) for t in trade_types]
+
+    def _keywords(self) -> List[str]:
+        kws = parse_keywords_csv(self.ed_keywords.text())
+        kws += [k for k, cb in self.kw_checks.items() if cb.isChecked() and k not in kws]
+        return kws
+
     def _on_si_changed(self):
         sis = self.cb_si.checked_data()
         entries: List[tuple] = []
@@ -905,9 +1149,6 @@ class MainWindow(QMainWindow):
         self.lbl_region_count.setText(f"선택 지역 {len(self._selected_regions())}개")
 
     # ---------- 기간 ----------
-    def _on_by_reg_changed(self, on: bool):
-        self.lbl_period.setText("등록일 기간" if on else "확인일(업로드) 기간")
-
     def _on_period_changed(self, _idx: int):
         custom = DATE_PERIODS[self.cb_period.currentIndex()][1] == -1
         self.de_from.setEnabled(custom)
@@ -986,14 +1227,22 @@ class MainWindow(QMainWindow):
     # ---------- 설정 스냅샷 (예약용) ----------
     def _snapshot_settings(self) -> Dict[str, Any]:
         f, t = self._date_range()
+        rng = lambda r: list(r.values())
         return {
             "si": self.cb_si.checked_labels(),
             "gun": self.cb_gun.checked_labels(),
             "dong": self.cb_dong.checked_labels(),
             "trade": [k for k, cb in self.trade_checks.items() if cb.isChecked()],
-            "room": self.cb_room.currentText(),
+            "kinds": [k for k, cb in self.room_checks.items() if cb.isChecked()],
+            "structs": [k for k, cb in self.struct_checks.items() if cb.isChecked()],
+            "floors_srv": [k for k, cb in self.floor_checks.items() if cb.isChecked()],
+            "options": [k for k, cb in self.option_checks.items() if cb.isChecked()],
+            "deposit": rng(self.sl_deposit), "rent": rng(self.sl_rent), "buy": rng(self.sl_buy), "jeonse": rng(self.sl_jeonse), "area": rng(self.sl_area),
+            "rooms": rng(self.sl_rooms), "floor": rng(self.sl_floor), "year": rng(self.sl_year),
+            "keywords": self.ed_keywords.text().strip(),
+            "kw_checks": [k for k, cb in self.kw_checks.items() if cb.isChecked()],
             "period_idx": self.cb_period.currentIndex(),
-            "by_reg": self.chk_by_reg.isChecked(),
+            "by_reg": self._by_reg(),
             "date_from": f.isoformat() if f else None,
             "date_to": t.isoformat() if t else None,
             "contact": self.chk_contact.isChecked(),
@@ -1002,6 +1251,15 @@ class MainWindow(QMainWindow):
             "max_pages": self.sp_max_pages.value(),
         }
 
+    @staticmethod
+    def _set_range(r: RangeInput, v: Any) -> None:
+        try:
+            lo, hi = (v or [0, RangeInput.OPEN_MAX])
+            r.edt_min.setText("" if not lo else str(int(lo)))
+            r.edt_max.setText("" if hi is None or int(hi) >= RangeInput.OPEN_MAX else str(int(hi)))
+        except Exception:
+            pass
+
     def _apply_settings(self, s: Dict[str, Any]) -> None:
         # 상위 → 하위 순서로 체크해야 계단식 목록이 다시 만들어진 뒤 하위 체크가 반영된다
         self.cb_si.set_checked_labels(s.get("si") or [])
@@ -1009,34 +1267,71 @@ class MainWindow(QMainWindow):
         self.cb_dong.set_checked_labels(s.get("dong") or [])
         for k, cb in self.trade_checks.items():
             cb.setChecked(k in (s.get("trade") or []))
-        self.cb_room.setCurrentText(s.get("room") or "전체")
+        kinds = s.get("kinds")
+        if kinds is None and s.get("room") and s.get("room") != "전체":   # 옛 예약(방유형 드롭다운) 호환
+            kinds = [k for k in ROOM_KINDS if k in str(s.get("room")).replace("오피", "오피스텔")]
+        for k, cb in self.room_checks.items():
+            cb.setChecked(k in (kinds or []))
+        for k, cb in self.struct_checks.items():
+            cb.setChecked(k in (s.get("structs") or []))
+        for k, cb in self.floor_checks.items():
+            cb.setChecked(k in (s.get("floors_srv") or []))
+        for k, cb in self.option_checks.items():
+            cb.setChecked(k in (s.get("options") or []))
+        for key, r in (("deposit", self.sl_deposit), ("rent", self.sl_rent), ("buy", self.sl_buy), ("jeonse", self.sl_jeonse), ("area", self.sl_area),
+                       ("rooms", self.sl_rooms), ("floor", self.sl_floor), ("year", self.sl_year)):
+            self._set_range(r, s.get(key))
+        if s.get("year") is None:
+            self.sl_year.edt_min.setText("1950")
+        self.ed_keywords.setText(str(s.get("keywords") or ""))
+        for k, cb in self.kw_checks.items():
+            cb.setChecked(k in (s.get("kw_checks") or []))
         self.cb_period.setCurrentIndex(int(s.get("period_idx") or 0))
         if DATE_PERIODS[self.cb_period.currentIndex()][1] == -1:
             if s.get("date_from"):
                 self.de_from.setDate(QDate.fromString(s["date_from"], "yyyy-MM-dd"))
             if s.get("date_to"):
                 self.de_to.setDate(QDate.fromString(s["date_to"], "yyyy-MM-dd"))
-        self.chk_by_reg.setChecked(bool(s.get("by_reg")))
+        self.cb_date_by.setCurrentIndex(1 if s.get("by_reg") else 0)
         self.chk_contact.setChecked(bool(s.get("contact")))
         self.sp_delay_min.setValue(int(s.get("delay_min", 2)))
         self.sp_delay_max.setValue(int(s.get("delay_max", 5)))
         self.sp_max_pages.setValue(int(s.get("max_pages", 0)))
+        self._refresh_trade_controls()
 
     def _settings_summary(self, s: Dict[str, Any]) -> str:
         def j(v, default="전체"):
             return ", ".join(v) if v else default
 
+        def rng(v, unit=""):
+            if not v:
+                return ""
+            lo, hi = v
+            if (lo or 0) <= 0 and (hi is None or int(hi) >= RangeInput.OPEN_MAX):
+                return ""
+            return f"{lo or 0}~{'' if hi is None or int(hi) >= RangeInput.OPEN_MAX else hi}{unit}"
+
         period = DATE_PERIODS[int(s.get("period_idx") or 0)][0]
         if DATE_PERIODS[int(s.get("period_idx") or 0)][1] == -1:
             period = f"{s.get('date_from')} ~ {s.get('date_to')}"
+        prices = [f"{k} {rng(s.get(key), '만')}" for k, key in (("보증금", "deposit"), ("월세", "rent"), ("매매", "buy"), ("전세", "jeonse")) if rng(s.get(key))]
+        if rng(s.get("area")):
+            prices.append(f"면적 {rng(s.get('area'), '평')}")
+        details = [f"{k} {rng(s.get(key))}" for k, key in (("방수", "rooms"), ("층수", "floor"), ("준공", "year")) if rng(s.get(key))]
+        opts = [lbl for lbl, key, _ in SERVER_OPTIONS if key in (s.get("options") or [])]
+        kws = [x for x in parse_keywords_csv(str(s.get("keywords") or ""))] + list(s.get("kw_checks") or [])
         return (
             f"지역: {j(s.get('si'))} / {j(s.get('gun'))} / {j(s.get('dong'))}\n"
-            f"유형: {j(s.get('trade'), '-')} · 방유형 {s.get('room')} · {'등록일' if s.get('by_reg') else '확인일'} {period}\n"
-            f"연락처 {'ON' if s.get('contact') else 'OFF'} · 대기 {s.get('delay_min')}~{s.get('delay_max')}초 · "
-            f"최대 페이지 {s.get('max_pages') or '제한없음'}"
+            f"유형: {j(s.get('trade'), '-')} · 매물유형 {j(s.get('kinds'))}{' · 구조 ' + j(s.get('structs')) if s.get('structs') else ''}\n"
+            f"{'등록일' if s.get('by_reg') else '확인일'} {period}"
+            + (f" · {' · '.join(prices)}" if prices else "")
+            + (f"\n상세: {' · '.join(details)}" if details else "")
+            + (f"\n층 {j(s.get('floors_srv'))}" if s.get("floors_srv") else "")
+            + (f"\n옵션: {', '.join(opts)}" if opts else "")
+            + (f"\n키워드: {', '.join(kws)}" if kws else "")
+            + f"\n연락처 {'ON' if s.get('contact') else 'OFF'} · 대기 {s.get('delay_min')}~{s.get('delay_max')}초 · 최대 페이지 {s.get('max_pages') or '제한없음'}"
         )
 
-    # ---------- 예약 ----------
     def _refresh_schedule_list(self):
         cur = self.lst_sched.currentItem()
         keep = cur.data(0x0100) if cur else None
@@ -1184,21 +1479,27 @@ class MainWindow(QMainWindow):
                 return
         self._save_credentials(uid, pwd)
 
-        room = self.cb_room.currentText()
         date_from, date_to = self._date_range()
         period_label = self.cb_period.currentText()
         if DATE_PERIODS[self.cb_period.currentIndex()][1] == -1 and date_from and date_to:
             period_label = f"{date_from:%y%m%d}-{date_to:%y%m%d}"
-        by_reg = self.chk_by_reg.isChecked()
+        by_reg = self._by_reg()
         if by_reg and (date_from or date_to):
             period_label = f"등록일{period_label}"
+        passes = self._build_passes(trade_types)
+        kinds = [k for k, cb in self.room_checks.items() if cb.isChecked()]
         params = {
             "uid": uid,
             "pwd": pwd,
             "regions": regions,
             "bbox": self.bbox,
             "trade_types": trade_types,
-            "room_type": "all" if room == "전체" else room,
+            "room_type": "all",
+            "passes": passes,
+            "post_rooms": self._range_or_none(self.sl_rooms),
+            "post_floors": self._range_or_none(self.sl_floor),
+            "post_years": self._range_or_none(self.sl_year),
+            "keywords": self._keywords(),
             "contact": self.chk_contact.isChecked(),
             "delay_min": self.sp_delay_min.value(),
             "delay_max": self.sp_delay_max.value(),
@@ -1216,9 +1517,19 @@ class MainWindow(QMainWindow):
         period_txt = "전체" if not (date_from or date_to) else f"{date_from} ~ {date_to}"
         head = f"예약 실행 [{self._current_job_name}] " if auto and self._current_job_name else ""
         self._current_job_name = ""
+        cond = []
+        for lbl, r, unit in (("보증금", self.sl_deposit, "만"), ("월세", self.sl_rent, "만"), ("매매", self.sl_buy, "만"), ("전세", self.sl_jeonse, "만"), ("면적", self.sl_area, "평"),
+                             ("방수", self.sl_rooms, "개"), ("층수", self.sl_floor, "층"), ("준공", self.sl_year, "년")):
+            v = self._range_or_none(r)
+            if v:
+                cond.append(f"{lbl} {v[0]}~{'' if v[1] >= RangeInput.OPEN_MAX else v[1]}{unit}")
+        opts = [lbl for lbl, key, _ in SERVER_OPTIONS if self.option_checks[key].isChecked()]
         self._append_log(
-            f"{head}시작 {datetime.now():%Y-%m-%d %H:%M}: 지역 {len(regions)}개 / {', '.join(trade_types)} / {room} / "
+            f"{head}시작 {datetime.now():%Y-%m-%d %H:%M}: 지역 {len(regions)}개 / {', '.join(trade_types)} / 매물유형 {', '.join(kinds) or '전체'} / "
             f"{'등록일' if by_reg else '확인일'} {period_txt} / 연락처 {'ON' if params['contact'] else 'OFF'}"
+            + (f"\n  조건: {' · '.join(cond)}" if cond else "")
+            + (f"\n  옵션: {', '.join(opts)}" if opts else "")
+            + (f"\n  키워드: {', '.join(params['keywords'])}" if params["keywords"] else "")
         )
         self.progress.setValue(0)
         self.lbl_status.setText("실행 중")
