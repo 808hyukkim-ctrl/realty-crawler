@@ -110,6 +110,8 @@ class DaangnWorker(QObject):
             all_results: List[Dict[str, Any]] = []
             stopped = False
             processed = 0
+            # 지역 간 중복 제거(구 단위 지도 페이지가 이웃 구 매물도 내려줌) — 크롤러 세션 시작
+            crawler.begin_session(region_names)
             for idx, region_name in enumerate(region_names, 1):
                 if self._cancel:
                     stopped = True
@@ -154,6 +156,18 @@ class DaangnWorker(QObject):
                     self.progress.emit(processed, total)
                 # time.sleep(random.uniform(0.7, 1.2))
             if all_results:
+                # 안전망: 매물번호+거래유형 기준으로 한 번 더 중복 제거(먼저 수집된 행 유지)
+                _seen_final = set()
+                _uniq: List[Dict[str, Any]] = []
+                for r in all_results:
+                    k = (str(r.get("매물번호")), r.get("거래유형"))
+                    if k in _seen_final:
+                        continue
+                    _seen_final.add(k)
+                    _uniq.append(r)
+                if len(_uniq) != len(all_results):
+                    print(f"[당근] 중복 {len(all_results) - len(_uniq)}건 제거 → {len(_uniq)}건")
+                all_results = _uniq
                 ts = self.params.get("timestamp", datetime.now().strftime("%y%m%d_%H%M%S"))
                 out_dir = self.params.get("out_dir", os.getcwd())
                 schedule_name = self.params.get("file_name") or self.params.get("schedule_name")

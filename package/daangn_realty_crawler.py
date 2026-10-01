@@ -103,6 +103,11 @@ class DaangnRealtyCrawler():
         self.search_url = f"{self.host}/kr/realty/s"
         self.realty_host = "https://realty.daangn.com"
         self.timeout_sec = 20
+        # 수집 세션(여러 지역을 연달아 수집) 전체에서 공유하는 중복 키 집합과 선택 지역 목록.
+        # 구 단위 지도 페이지는 지도 범위 안의 이웃 구 매물도 함께 내려주므로, 강남구·서초구·송파구를
+        # 차례로 수집하면 같은 매물이 지역마다 한 번씩 들어왔다. begin_session() 으로 초기화한다.
+        self._session_seen: set = set()
+        self._session_regions: List[str] = []
         
         self.headers = {
             "accept": "*/*",
@@ -687,6 +692,31 @@ class DaangnRealtyCrawler():
             return False
         return True
 
+    def begin_session(self, region_names: Optional[Iterable[str]] = None) -> None:
+        """여러 지역을 한 번에 수집하기 전에 호출. 지역 간 중복 제거 집합을 비우고 선택 지역을 기억한다."""
+        self._session_seen = set()
+        self._session_regions = [str(r) for r in (region_names or []) if r]
+
+    def _relabel_region(self, row: Dict[str, Any]) -> None:
+        """상세 주소가 선택 지역 중 다른 지역에 속하면 '매물지역'을 그 지역으로 바꾼다.
+
+        예) 강남구 지도 페이지에서 내려온 서초구 매물 → 매물지역 "서울특별시 서초구".
+        주소에 선택 지역의 마지막 토큰(구/동)이 없으면 그대로 둔다.
+        """
+        if not self._session_regions:
+            return
+        addr = " ".join(str(row.get(k) or "") for k in ("주소", "지번주소", "제목"))
+        if not addr.strip():
+            return
+        cur = str(row.get("매물지역") or "")
+        if cur and cur.split()[-1] in addr:
+            return
+        for reg in self._session_regions:
+            tok = reg.split()[-1] if reg.split() else ""
+            if tok and tok in addr:
+                row["매물지역"] = reg
+                return
+
     def _crawl_realty_ssr(
         self,
         region_name: str,
@@ -805,15 +835,18 @@ class DaangnRealtyCrawler():
                     elif t_upper == "BUY":
                         if not self._price_in_range(row.get("매매가"), buy_price_min, buy_price_max):
                             continue
-                    key = (row.get("매물번호"), row.get("거래유형"))
-                    if key in seen_keys:
+                    key = (str(row.get("매물번호")), row.get("거래유형"))
+                    if key in seen_keys or key in self._session_seen:
+                        # 같은 매물·거래유형은 한 번만 (지역 간 중복 포함). 상세 요청도 아낀다.
                         continue
                     seen_keys.add(key)
+                    self._session_seen.add(key)
                     if is_cancelled and is_cancelled():
                         break
                     detail = self._fetch_article_detail(row.get("매물번호"), is_cancelled=is_cancelled)
                     if detail:
                         row.update(detail)
+                        self._relabel_region(row)
                     if date_filter_on:
                         pub = self._published_kst((detail or {}).get("_published_at_raw"))
                         pub_d = pub.date() if pub else None
