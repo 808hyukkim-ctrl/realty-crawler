@@ -392,6 +392,13 @@ class OnhouseCrawler:
         body_bottom = soup.find("div", class_="bodyBottom")
         if body_bottom:
             for box in body_bottom.find_all("div", class_="bodyBox"):
+                flex = box.find("div", class_="boxFlex")
+                if flex:   # 확인일·등록일·전세대출·반려동물 등은 flex_title/flex_desc 쌍
+                    for t, d in zip(flex.find_all("div", class_="flex_title"), flex.find_all("div", class_="flex_desc")):
+                        k = t.get_text(strip=True)
+                        if k:
+                            out[k] = d.get_text(strip=True)
+                    continue
                 title_el = box.find("div", class_="box_title")
                 desc_el = box.find("div", class_="box_desc")
                 if title_el and desc_el:

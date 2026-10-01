@@ -132,6 +132,28 @@ def parse_chk_date(s: str) -> Optional[date]:
         return None
 
 
+_DETAIL_DATE_RE = re.compile(
+    r'class="flex_title"[^>]*>\s*(확인일|등록일)\s*<.*?class="flex_desc"[^>]*>\s*([\d][\d./\- :]*?)\s*<', re.S
+)
+
+
+def parse_detail_dates(html: str) -> Dict[str, Optional[date]]:
+    """상세 페이지의 '확인일' / '등록일' (예: 26.10.01, 2026-10-01) → date"""
+    out: Dict[str, Optional[date]] = {}
+    for k, v in _DETAIL_DATE_RE.findall(html or ""):
+        m = re.match(r"(\d{2,4})[.\-/](\d{1,2})[.\-/](\d{1,2})", v.strip())
+        if not m:
+            continue
+        y = int(m.group(1))
+        if y < 100:
+            y += 2000
+        try:
+            out[k] = date(y, int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            pass
+    return out
+
+
 def load_contact_cache(path: str) -> Dict[str, Dict[str, str]]:
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -253,6 +275,9 @@ class Worker(QObject):
             max_pages: int = int(self.p.get("max_pages", 0))
             date_from: Optional[date] = self.p.get("date_from")
             date_to: Optional[date] = self.p.get("date_to")
+            by_reg: bool = self.p.get("date_by") == "reg"   # 기간을 확인일이 아니라 등록일로 (목록은 등록일 내림차순 요청)
+            date_word = "등록일" if by_reg else "확인일"
+            warned_no_reg = False
             contact_fail_streak = 0
             # 연락처 캐시: 같은 매물은 서버도 재차감하지 않지만, 호출 자체를 생략해 조회수/시간을 아낀다.
             cache_path: str = self.p.get("contact_cache_path", "")
@@ -298,6 +323,7 @@ class Worker(QObject):
                         page=page,
                         fetch_details=False,
                         is_cancelled=lambda: self._cancel,
+                        **({"order1": "R.INS_DATE|DESC"} if by_reg else {}),
                     ) or []
                     if not ids:
                         if page == 0:
@@ -306,14 +332,14 @@ class Worker(QObject):
 
                     # 목록 항목(확인일 내림차순). HTML 파싱이 안 된 경우엔 ID만으로 진행.
                     items = crawler.last_items or [{"id": str(i), "chk": "", "lat": "", "lng": ""} for i in ids]
-                    if (date_from or date_to) and not any(it["chk"] for it in items) and not warned_no_date:
+                    if (date_from or date_to) and not by_reg and not any(it["chk"] for it in items) and not warned_no_date:
                         warned_no_date = True
                         self.log.emit("  주의: 목록에서 확인일을 읽지 못해 기간 필터를 적용할 수 없습니다 (전체 수집).")
 
                     page_older_exists = False
                     todo: List[Dict[str, str]] = []
                     for it in items:
-                        d = parse_chk_date(it["chk"])
+                        d = None if by_reg else parse_chk_date(it["chk"])   # 등록일 기준이면 상세를 읽은 뒤 거른다
                         if d is not None:
                             if date_from and d < date_from:
                                 page_older_exists = True
@@ -357,6 +383,23 @@ class Worker(QObject):
                                     quota_first = q
                                     self.log.emit(f"  현재 잔여 연락처 조회수: {q}")
                             parsed = crawler._parse_detail_html(html, hid)
+                            ddates = parse_detail_dates(html)
+                            reg_d = ddates.get("등록일")
+                            if by_reg and (date_from or date_to):
+                                if reg_d is None:
+                                    if not warned_no_reg:
+                                        warned_no_reg = True
+                                        self.log.emit("  주의: 상세에서 등록일을 읽지 못한 매물이 있어 그 매물은 기간과 상관없이 담습니다.")
+                                else:
+                                    if date_from and reg_d < date_from:
+                                        page_older_exists = True   # 등록일 내림차순이므로 이 뒤는 전부 더 오래됨 → 상세를 더 읽지 않고 이 지역 종료
+                                        skipped_by_date += 1
+                                        self.log.emit(f"  {hid} 등록일 {reg_d} — 기간 이전이라 여기서 멈춤 (이 뒤는 모두 더 오래된 매물)")
+                                        break
+                                    if date_to and reg_d > date_to:
+                                        skipped_by_date += 1
+                                        self._sleep_between()
+                                        continue
                             row: Dict[str, Any] = {
                                 "매물ID": parsed.get("매물ID", hid),
                                 "URL": parsed.get("URL", f"{crawler.DETAIL_URL}/{hid}"),
@@ -366,6 +409,10 @@ class Worker(QObject):
                             for k, v in parsed.items():
                                 if k not in row:
                                     row[k] = v
+                            if reg_d is not None:
+                                row["등록일"] = reg_d.isoformat()
+                            if ddates.get("확인일") is not None and not row.get("확인일"):
+                                row["확인일"] = ddates["확인일"].isoformat()
                             if it["lat"] and it["lng"]:
                                 row["위도"] = it["lat"]
                                 row["경도"] = it["lng"]
@@ -403,7 +450,8 @@ class Worker(QObject):
                             (f"{k} {row[k]}" for k in ("월세", "전세", "매매", "매매가", "단기", "보증금") if row.get(k)), ""
                         )
                         tel = f" | {row.get('임대인연락처')}" if row.get("임대인연락처") else ""
-                        self.log.emit(f"  [{len(all_rows)}] {hid} | {it['chk'][:16]} | {addr} | {price}{tel}")
+                        when = (f"등록 {row.get('등록일')}" if by_reg and row.get("등록일") else it['chk'][:16])
+                        self.log.emit(f"  [{len(all_rows)}] {hid} | {when} | {addr} | {price}{tel}")
                         self._sleep_between()
                     if stopped:
                         break
@@ -419,7 +467,7 @@ class Worker(QObject):
             if cache_path and new_lookups:
                 save_contact_cache(cache_path, contact_cache)
             if date_from or date_to:
-                self.log.emit(f"  기간 필터로 제외된 매물: {skipped_by_date}건")
+                self.log.emit(f"  {date_word} 기간 필터로 제외된 매물: {skipped_by_date}건")
             if self.p.get("contact"):
                 self.log.emit(
                     f"  연락처: 신규 조회 {new_lookups}건 (조회수 차감), 캐시 재사용 {cache_hits}건 (차감 없음)"
@@ -670,7 +718,8 @@ class MainWindow(QMainWindow):
         h.addWidget(QLabel("방유형"))
         h.addWidget(self.cb_room)
         h.addSpacing(24)
-        h.addWidget(QLabel("확인일(업로드) 기간"))
+        self.lbl_period = QLabel("확인일(업로드) 기간")
+        h.addWidget(self.lbl_period)
         self.cb_period = QComboBox()
         self.cb_period.addItems([lbl for lbl, _ in DATE_PERIODS])
         self.de_from = QDateEdit(QDate.currentDate().addDays(-6))
@@ -683,6 +732,13 @@ class MainWindow(QMainWindow):
         h.addWidget(self.de_from)
         h.addWidget(QLabel("~"))
         h.addWidget(self.de_to)
+        self.chk_by_reg = QCheckBox("등록일 기준")
+        self.chk_by_reg.setToolTip(
+            "켜면 기간을 매물 '등록일'로 거릅니다 (목록을 등록일 순으로 받고, 상세의 등록일로 확인).\n"
+            "끄면 지금처럼 '확인일(업로드)' 기준입니다."
+        )
+        self.chk_by_reg.toggled.connect(self._on_by_reg_changed)
+        h.addWidget(self.chk_by_reg)
         h.addStretch(1)
         self.cb_period.currentIndexChanged.connect(self._on_period_changed)
         v.addWidget(typ)
@@ -849,6 +905,9 @@ class MainWindow(QMainWindow):
         self.lbl_region_count.setText(f"선택 지역 {len(self._selected_regions())}개")
 
     # ---------- 기간 ----------
+    def _on_by_reg_changed(self, on: bool):
+        self.lbl_period.setText("등록일 기간" if on else "확인일(업로드) 기간")
+
     def _on_period_changed(self, _idx: int):
         custom = DATE_PERIODS[self.cb_period.currentIndex()][1] == -1
         self.de_from.setEnabled(custom)
@@ -934,6 +993,7 @@ class MainWindow(QMainWindow):
             "trade": [k for k, cb in self.trade_checks.items() if cb.isChecked()],
             "room": self.cb_room.currentText(),
             "period_idx": self.cb_period.currentIndex(),
+            "by_reg": self.chk_by_reg.isChecked(),
             "date_from": f.isoformat() if f else None,
             "date_to": t.isoformat() if t else None,
             "contact": self.chk_contact.isChecked(),
@@ -956,6 +1016,7 @@ class MainWindow(QMainWindow):
                 self.de_from.setDate(QDate.fromString(s["date_from"], "yyyy-MM-dd"))
             if s.get("date_to"):
                 self.de_to.setDate(QDate.fromString(s["date_to"], "yyyy-MM-dd"))
+        self.chk_by_reg.setChecked(bool(s.get("by_reg")))
         self.chk_contact.setChecked(bool(s.get("contact")))
         self.sp_delay_min.setValue(int(s.get("delay_min", 2)))
         self.sp_delay_max.setValue(int(s.get("delay_max", 5)))
@@ -970,7 +1031,7 @@ class MainWindow(QMainWindow):
             period = f"{s.get('date_from')} ~ {s.get('date_to')}"
         return (
             f"지역: {j(s.get('si'))} / {j(s.get('gun'))} / {j(s.get('dong'))}\n"
-            f"유형: {j(s.get('trade'), '-')} · 방유형 {s.get('room')} · 확인일 {period}\n"
+            f"유형: {j(s.get('trade'), '-')} · 방유형 {s.get('room')} · {'등록일' if s.get('by_reg') else '확인일'} {period}\n"
             f"연락처 {'ON' if s.get('contact') else 'OFF'} · 대기 {s.get('delay_min')}~{s.get('delay_max')}초 · "
             f"최대 페이지 {s.get('max_pages') or '제한없음'}"
         )
@@ -1128,6 +1189,9 @@ class MainWindow(QMainWindow):
         period_label = self.cb_period.currentText()
         if DATE_PERIODS[self.cb_period.currentIndex()][1] == -1 and date_from and date_to:
             period_label = f"{date_from:%y%m%d}-{date_to:%y%m%d}"
+        by_reg = self.chk_by_reg.isChecked()
+        if by_reg and (date_from or date_to):
+            period_label = f"등록일{period_label}"
         params = {
             "uid": uid,
             "pwd": pwd,
@@ -1141,6 +1205,7 @@ class MainWindow(QMainWindow):
             "max_pages": self.sp_max_pages.value(),
             "date_from": date_from,
             "date_to": date_to,
+            "date_by": "reg" if by_reg else "chk",
             "period_label": period_label,
             "out_dir": self.out_dir,
             "region_label": self._region_label(),
@@ -1153,7 +1218,7 @@ class MainWindow(QMainWindow):
         self._current_job_name = ""
         self._append_log(
             f"{head}시작 {datetime.now():%Y-%m-%d %H:%M}: 지역 {len(regions)}개 / {', '.join(trade_types)} / {room} / "
-            f"확인일 {period_txt} / 연락처 {'ON' if params['contact'] else 'OFF'}"
+            f"{'등록일' if by_reg else '확인일'} {period_txt} / 연락처 {'ON' if params['contact'] else 'OFF'}"
         )
         self.progress.setValue(0)
         self.lbl_status.setText("실행 중")
