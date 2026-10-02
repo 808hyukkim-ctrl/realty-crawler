@@ -313,6 +313,10 @@ class Worker(QObject):
             post = DetailFilters(rooms=self.p.get("post_rooms"), floors=self.p.get("post_floors"), years=self.p.get("post_years"))
             keywords: List[str] = list(self.p.get("keywords") or [])
             skipped_by_filter = 0
+            # 같은 매물 중복 제거: 온하우스엔 같은 집이 매물번호만 다르게 두 번 올라오는 경우가 있다 → 주소·호실·금액·면적이 같으면 하나만
+            dedupe_same: bool = bool(self.p.get("dedupe", True))
+            seen_keys: set = set()
+            skipped_dup = 0
             if len(passes) > 1:
                 self.log.emit(f"  가격 조건이 있어 거래유형별로 {len(passes)}회 나눠 검색합니다")
             contact_fail_streak = 0
@@ -442,6 +446,15 @@ class Worker(QObject):
                                 skipped_by_filter += 1
                                 self._sleep_between()
                                 continue
+                            if dedupe_same:
+                                price_txt = next((str(parsed.get(k)) for k in ("월세", "전세", "매매", "단기") if parsed.get(k)), "")
+                                dkey = re.sub(r"\s+", "", f"{parsed.get('전체주소') or ''}|{parsed.get('주소_호실') or ''}|{price_txt}|{parsed.get('전용면적(㎡/P)') or ''}")
+                                if dkey and dkey != "|||" and dkey in seen_keys:
+                                    skipped_dup += 1
+                                    self.log.emit(f"  {hid} 같은 매물 중복(주소·호실·금액 동일) — 건너뜀")
+                                    self._sleep_between()
+                                    continue
+                                seen_keys.add(dkey)
                             row: Dict[str, Any] = {
                                 "매물ID": parsed.get("매물ID", hid),
                                 "URL": parsed.get("URL", f"{crawler.DETAIL_URL}/{hid}"),
@@ -514,6 +527,8 @@ class Worker(QObject):
                 self.log.emit(f"  {date_word} 기간 필터로 제외된 매물: {skipped_by_date}건")
             if skipped_by_filter:
                 self.log.emit(f"  방수/층수/준공년/키워드 조건으로 제외된 매물: {skipped_by_filter}건")
+            if skipped_dup:
+                self.log.emit(f"  같은 매물 중복 제거: {skipped_dup}건")
             if self.p.get("contact"):
                 self.log.emit(
                     f"  연락처: 신규 조회 {new_lookups}건 (조회수 차감), 캐시 재사용 {cache_hits}건 (차감 없음)"
@@ -937,6 +952,9 @@ class MainWindow(QMainWindow):
             "임대인 연락처도 수집  (새 매물 1건당 '연락처 조회수' 1 차감. 이미 조회한 매물은 캐시에서 재사용 — 차감 없음)"
         )
         g.addWidget(self.chk_contact, 0, 0, 1, 6)
+        self.chk_dedupe = QCheckBox("같은 매물 중복 제거 (주소·호실·금액·면적이 같으면 하나만 — 온하우스에 두 번 올라온 매물 정리)")
+        self.chk_dedupe.setChecked(True)
+        g.addWidget(self.chk_dedupe, 2, 0, 1, 6)
         self.sp_delay_min = QSpinBox()
         self.sp_delay_min.setRange(0, 60)
         self.sp_delay_min.setValue(2)
@@ -1246,6 +1264,7 @@ class MainWindow(QMainWindow):
             "date_from": f.isoformat() if f else None,
             "date_to": t.isoformat() if t else None,
             "contact": self.chk_contact.isChecked(),
+            "dedupe": self.chk_dedupe.isChecked(),
             "delay_min": self.sp_delay_min.value(),
             "delay_max": self.sp_delay_max.value(),
             "max_pages": self.sp_max_pages.value(),
@@ -1294,6 +1313,7 @@ class MainWindow(QMainWindow):
                 self.de_to.setDate(QDate.fromString(s["date_to"], "yyyy-MM-dd"))
         self.cb_date_by.setCurrentIndex(1 if s.get("by_reg") else 0)
         self.chk_contact.setChecked(bool(s.get("contact")))
+        self.chk_dedupe.setChecked(bool(s.get("dedupe", True)))
         self.sp_delay_min.setValue(int(s.get("delay_min", 2)))
         self.sp_delay_max.setValue(int(s.get("delay_max", 5)))
         self.sp_max_pages.setValue(int(s.get("max_pages", 0)))
@@ -1501,6 +1521,7 @@ class MainWindow(QMainWindow):
             "post_years": self._range_or_none(self.sl_year),
             "keywords": self._keywords(),
             "contact": self.chk_contact.isChecked(),
+            "dedupe": self.chk_dedupe.isChecked(),
             "delay_min": self.sp_delay_min.value(),
             "delay_max": self.sp_delay_max.value(),
             "max_pages": self.sp_max_pages.value(),
