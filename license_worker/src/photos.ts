@@ -5,6 +5,7 @@
 //   GET  /admin/photos/img?u=          사진 바이트 중계 (캔버스에서 쓰려면 같은 출처여야 함)
 import { Hono } from "hono";
 import { html, raw } from "hono/html";
+import { layout } from "./layout";
 
 type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string };
 export const photos = new Hono<{ Bindings: Bindings }>();
@@ -129,7 +130,7 @@ photos.get("/admin/photos", async (c) => {
   const ohId = await getSetting(c.env.DB, "onhouse_id");
   const ohPw = await getSetting(c.env.DB, "onhouse_pw");
   const saved = c.req.query("saved") === "1";
-  return c.html(c.get("layout" as any)?.("사진 950", PAGE(ohId, !!ohPw, saved)) ?? PAGE(ohId, !!ohPw, saved));
+  return c.html(layout("사진 950", PAGE(ohId, !!ohPw, saved)));
 });
 
 photos.post("/admin/photos/settings", async (c) => {
