@@ -177,7 +177,7 @@ class DaangnWorker(QObject):
                     site = self.params.get("site_name", "사이트")
                     region = self.params.get("region_for_file", "전체_전체_전체")
                     out = os.path.join(out_dir, f"{site}_{region}_{len(all_results)}건_{ts}.xlsx")
-                crawler._save_to_excel(all_results, filepath=out)
+                crawler._save_to_excel([daangn_excel_row(r) for r in all_results], filepath=out, columns=DAANGN_EXCEL_COLUMNS)
                 prefix = "중단 저장 완료" if stopped else "저장 완료"
                 self.finished.emit(f"{prefix}: {out} ({len(all_results)}건)")
             else:
@@ -427,6 +427,25 @@ NAVER_KEYWORD_PRESETS = ["LH", "SH", "보증보험", "전세대출", "HUG", "허
 KEYWORD_HIGHLIGHT_COLUMNS = ("간략설명", "설명")
 
 # 네이버 엑셀 출력 컬럼 순서 (사용자 지정, 2026-09-14)
+# 당근 엑셀 출력 컬럼과 순서 (사용자 지정, 2026-10-02) — 수집 데이터의 키 이름이 다른 것은 DAANGN_COLUMN_SOURCE 로 맞춘다
+DAANGN_EXCEL_COLUMNS = [
+    "매물번호", "매물_URL", "매물유형", "거래유형", "지번주소", "거래주체", "매매가", "전세금", "보증금", "월세", "관리비", "권리금",
+    "제목", "상세내용", "등록일시", "방수", "욕실수", "층수", "최고층수", "사용승인일", "건축용도", "방향", "입주가능일",
+]
+DAANGN_COLUMN_SOURCE = {"상세내용": "상세_내용", "건축용도": "건축물용도"}
+
+
+def daangn_excel_row(row: dict) -> dict:
+    """당근 수집 행 → 지정 컬럼 순서의 행 (없는 값은 빈칸)"""
+    out = {}
+    for col in DAANGN_EXCEL_COLUMNS:
+        v = row.get(col)
+        if v is None or v == "":
+            v = row.get(DAANGN_COLUMN_SOURCE.get(col, col))
+        out[col] = "" if v is None else v
+    return out
+
+
 NAVER_EXCEL_COLUMNS = [
     "매물번호", "세부주소", "호수", "종류", "거래방식", "매물명", "아파트동",
     "공급/계약/대지", "전용/연", "해당층", "전체층", "매매/전세금", "월세", "관리비",

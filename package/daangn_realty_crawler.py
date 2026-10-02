@@ -396,8 +396,8 @@ class DaangnRealtyCrawler():
                     return None
         return None
 
-    def _save_to_excel(self, rows: List[Dict[str, Any]], filepath: Optional[str] = None) -> str:
-        """추출 데이터를 엑셀 파일로 저장합니다."""
+    def _save_to_excel(self, rows: List[Dict[str, Any]], filepath: Optional[str] = None, columns: Optional[List[str]] = None) -> str:
+        """추출 데이터를 엑셀 파일로 저장합니다. columns 를 주면 그 컬럼·순서를 그대로(빈 컬럼도 유지)."""
         try:
             import openpyxl
         except ImportError:
@@ -427,7 +427,7 @@ class DaangnRealtyCrawler():
                 return True
             return False
 
-        all_keys = [k for k in all_keys if any(not _blank(r.get(k)) for r in rows)]
+        all_keys = list(columns) if columns else [k for k in all_keys if any(not _blank(r.get(k)) for r in rows)]
         ws.append([self._sanitize_excel_str(str(k)) for k in all_keys])
         for row in rows:
             ws.append([self._cell_value(row.get(k)) for k in all_keys])
