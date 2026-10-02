@@ -602,10 +602,10 @@ class MainWindow(QMainWindow):
 
 
 def main():
-    app = QApplication(sys.argv)
-    w = MainWindow()
-    w.show()
-    return app.exec()
+    # 라이선스 로그인(수집기와 같은 서버) — 어드민에서 '사진950' 기능이 체크된 계정만 통과
+    from license_gate import run_licensed_app
+    run_licensed_app(create_main_window=MainWindow, base_dir=base_dir(), app_key="photo")
+    return 0
 
 
 if __name__ == "__main__":

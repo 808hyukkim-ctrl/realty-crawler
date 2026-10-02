@@ -18,7 +18,7 @@ import time
 from datetime import datetime
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
-SOURCE_FILES = ("photo950_app.py", "onhouse_crawler.py", "app_main_common.py")
+SOURCE_FILES = ("photo950_app.py", "onhouse_crawler.py", "app_main_common.py", "license_gate.py")
 ENTRY = "photo950_app.py"
 EXE_NAME = "매물사진950변환기"
 OBF_DIR = os.path.join(PROJECT_DIR, "dist_obf_photo950")

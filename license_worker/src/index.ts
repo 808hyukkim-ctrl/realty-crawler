@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { html, raw } from "hono/html";
 import { basicAuth } from "hono/basic-auth";
+import { photos } from "./photos";
 
 type Bindings = {
   DB: D1Database;
@@ -21,6 +22,17 @@ const DURATION_PRESETS: Record<string, [string, number | null]> = {
   "1year": ["1년", 365 * 24 * 60 * 60 * 1000],
   unlimited: ["무제한", null],
 };
+
+// 계정별 기능: 수집기(crawl) / 사진950(photo). 둘 다 체크면 둘 다, 하나만 체크면 그것만 쓸 수 있다 (2026-10-02)
+const FEATURES: [string, string][] = [["crawl", "매물 수집"], ["photo", "사진950"]];
+let featuresReady = false;
+async function ensureFeatures(db: D1Database) {
+  if (featuresReady) return;
+  try { await db.prepare("ALTER TABLE users ADD COLUMN features TEXT NOT NULL DEFAULT 'crawl'").run(); } catch (e) { /* 이미 있음 */ }
+  featuresReady = true;
+}
+const featureList = (s: any) => String(s ?? "crawl").split(",").map((x) => x.trim()).filter(Boolean);
+const featureLabel = (key: string) => (FEATURES.find(([k]) => k === key) || [key, key])[1];
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -91,6 +103,7 @@ function layout(title: string, body: unknown) {
 <body>
 <header class="topbar">
   <div class="brand">전국부동산매물수집기 · 라이선스 관리</div>
+  <nav class="nav"><a href="/admin/dashboard">사용자 관리</a><a href="/admin/photos">사진 950</a></nav>
 </header>
 <main class="container">${body}</main>
 </body>
@@ -104,6 +117,9 @@ body{margin:0;font-family:"Pretendard","Segoe UI",-apple-system,sans-serif;backg
 a{color:var(--accent);text-decoration:none;}
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);background:var(--panel);}
 .brand{font-weight:700;}
+.nav{display:flex;gap:6px;}
+.nav a{padding:6px 12px;border-radius:8px;border:1px solid var(--border);color:var(--text);font-size:13px;}
+.nav a:hover{background:#1d2436;}
 .container{max-width:1100px;margin:0 auto;padding:32px 20px;}
 .form-box{max-width:420px;margin:30px auto;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:28px;}
 .form-box h1{margin-top:0;font-size:20px;}
@@ -134,6 +150,10 @@ form input,form select{display:block;width:100%;margin-top:6px;padding:10px 12px
 .inline-form{display:inline-flex;gap:6px;align-items:center;}
 .actions{display:flex;flex-wrap:wrap;gap:6px;}
 .pw-input{width:120px;padding:6px 8px;font-size:12px;}
+.feat-form{display:flex;gap:10px;}
+.feat{display:inline-flex!important;align-items:center;gap:4px;margin:0!important;font-size:12px;color:var(--text)!important;white-space:nowrap;}
+.feat input{width:auto!important;display:inline-block!important;margin:0!important;}
+.feat-pick{display:flex;gap:14px;align-items:center;margin-bottom:14px;font-size:13px;color:var(--muted);}
 `;
 
 // ---------------------------------------------------------------- admin auth
@@ -142,12 +162,15 @@ app.use("/admin/*", async (c, next) => {
   const auth = basicAuth({ username: c.env.ADMIN_USER, password: c.env.ADMIN_PASSWORD });
   return auth(c, next);
 });
+app.use("/admin/photos*", async (c, next) => { (c as any).set("layout", layout); await next(); });
+app.route("/", photos);   // 사진 950 (src/photos.ts)
 
 // ---------------------------------------------------------------- dashboard
 
 app.get("/", (c) => c.redirect("/admin/dashboard"));
 
 app.get("/admin/dashboard", async (c) => {
+  await ensureFeatures(c.env.DB);
   const q = c.req.query("q")?.trim() ?? "";
   const { results } = q
     ? await c.env.DB.prepare("SELECT * FROM users WHERE username LIKE ? ORDER BY created_at DESC")
@@ -164,9 +187,14 @@ app.get("/admin/dashboard", async (c) => {
       ([key, [optLabel]]) =>
         html`<option value="${key}" ${key === defaultDuration ? "selected" : ""}>${optLabel}</option>`
     );
+    const feats = featureList(u.features);
+    const featureBoxes = FEATURES.map(([key, flabel]) =>
+      html`<label class="feat"><input type="checkbox" name="f" value="${key}" ${feats.includes(key) ? "checked" : ""} onchange="this.form.submit()"> ${flabel}</label>`
+    );
     return html`<tr>
       <td class="mono">${u.username}</td>
       <td><span class="badge ${cls}">${label}</span></td>
+      <td><form method="post" action="/admin/users/${u.id}/features" class="feat-form">${featureBoxes}</form></td>
       <td class="mono">${u.expires_at ?? "무제한"}</td>
       <td class="mono small">${u.mac_address ?? "-"}</td>
       <td>${u.memo ?? ""}</td>
@@ -206,8 +234,8 @@ app.get("/admin/dashboard", async (c) => {
       <button type="submit" class="btn">검색</button>
     </form>
     <table class="user-table">
-      <thead><tr><th>아이디</th><th>상태</th><th>만료일</th><th>기기(MAC)</th><th>메모</th><th>생성일</th><th>연장</th><th>관리</th></tr></thead>
-      <tbody>${rows.length ? rows : html`<tr><td colspan="8" class="empty">등록된 사용자가 없습니다.</td></tr>`}</tbody>
+      <thead><tr><th>아이디</th><th>상태</th><th>기능</th><th>만료일</th><th>기기(MAC)</th><th>메모</th><th>생성일</th><th>연장</th><th>관리</th></tr></thead>
+      <tbody>${rows.length ? rows : html`<tr><td colspan="9" class="empty">등록된 사용자가 없습니다.</td></tr>`}</tbody>
     </table>
   `;
   return c.html(layout("대시보드", body));
@@ -224,6 +252,7 @@ app.get("/admin/users/new", (c) => {
         <label>아이디<input type="text" name="username" required autofocus></label>
         <label>비밀번호<input type="password" name="password" required></label>
         <label>이용권 기간<select name="duration">${durationOptions}</select></label>
+        <div class="feat-pick"><span>기능</span>${FEATURES.map(([key, flabel]) => html`<label class="feat"><input type="checkbox" name="f" value="${key}" ${key === "crawl" ? "checked" : ""}> ${flabel}</label>`)}</div>
         <label>메모<input type="text" name="memo" placeholder="선택 입력"></label>
         <div class="form-actions">
           <a href="/admin/dashboard" class="btn">취소</a>
@@ -241,6 +270,8 @@ app.post("/admin/users/new", async (c) => {
   const password = String(form.get("password") ?? "");
   const duration = String(form.get("duration") ?? "1month");
   const memo = String(form.get("memo") ?? "").trim();
+  const feats = form.getAll("f").map((x) => String(x)).filter((x) => FEATURES.some(([k]) => k === x));
+  await ensureFeatures(c.env.DB);
 
   if (!username || !password) {
     return c.html(layout("새 사용자", html`<div class="form-box"><p class="error">아이디와 비밀번호를 입력하세요.</p><a href="/admin/users/new" class="btn">돌아가기</a></div>`));
@@ -254,11 +285,20 @@ app.post("/admin/users/new", async (c) => {
   const ts = nowIso();
   const passwordHash = await hashPassword(password);
   await c.env.DB.prepare(
-    `INSERT INTO users (username, password_hash, mac_address, is_active, expires_at, memo, created_at, updated_at)
-     VALUES (?, ?, NULL, 1, ?, ?, ?, ?)`
+    `INSERT INTO users (username, password_hash, mac_address, is_active, expires_at, memo, created_at, updated_at, features)
+     VALUES (?, ?, NULL, 1, ?, ?, ?, ?, ?)`
   )
-    .bind(username, passwordHash, expiresAt, memo, ts, ts)
+    .bind(username, passwordHash, expiresAt, memo, ts, ts, feats.join(","))
     .run();
+  return c.redirect("/admin/dashboard");
+});
+
+app.post("/admin/users/:id/features", async (c) => {
+  await ensureFeatures(c.env.DB);
+  const id = c.req.param("id");
+  const form = await c.req.formData();
+  const feats = form.getAll("f").map((x) => String(x)).filter((x) => FEATURES.some(([k]) => k === x));
+  await c.env.DB.prepare("UPDATE users SET features = ?, updated_at = ? WHERE id = ?").bind(feats.join(","), nowIso(), id).run();
   return c.redirect("/admin/dashboard");
 });
 
@@ -329,6 +369,8 @@ app.post("/api/v1/verify", async (c) => {
   const username = String(body.username ?? "").trim();
   const password = String(body.password ?? "");
   const macAddress = String(body.mac_address ?? "").trim();
+  const appKey = String(body.app ?? "crawl").trim() || "crawl";   // 옛 수집기는 app 을 안 보냄 → 수집으로 취급
+  await ensureFeatures(c.env.DB);
 
   if (!username || !password) {
     return c.json({ success: false, message: "아이디와 비밀번호를 입력하세요." }, 400);
@@ -344,6 +386,9 @@ app.post("/api/v1/verify", async (c) => {
   if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
     return c.json({ success: false, message: "이용권이 만료되었습니다." });
   }
+  if (!featureList(row.features).includes(appKey)) {
+    return c.json({ success: false, message: `이 계정은 '${featureLabel(appKey)}' 이용권이 없습니다. 관리자에게 문의하세요.` });
+  }
   if (macAddress) {
     if (!row.mac_address) {
       await c.env.DB.prepare("UPDATE users SET mac_address = ?, updated_at = ? WHERE id = ?")
@@ -356,7 +401,8 @@ app.post("/api/v1/verify", async (c) => {
       });
     }
   }
-  return c.json({ success: true, message: "인증 성공", expires_at: row.expires_at ?? null });
+  return c.json({
+    success: true, features: featureList(row.features), message: "인증 성공", expires_at: row.expires_at ?? null });
 });
 
 app.get("/healthz", (c) => c.json({ ok: true }));

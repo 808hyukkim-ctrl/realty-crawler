@@ -100,8 +100,9 @@ def _format_expiry_readable(iso_str: Optional[str]) -> str:
         return iso_str
 
 
-def _verify_license_api(username: str, password: str, mac_address: str) -> tuple[bool, str, Optional[str]]:
-    payload = {"username": username, "password": password, "mac_address": mac_address}
+def _verify_license_api(username: str, password: str, mac_address: str, app: str = "crawl") -> tuple[bool, str, Optional[str]]:
+    # app: 어떤 프로그램에서 로그인하는지 — crawl(매물 수집기) / photo(사진950). 서버가 계정의 기능 체크와 대조한다
+    payload = {"username": username, "password": password, "mac_address": mac_address, "app": app}
     req = urllib.request.Request(
         VERIFY_URL,
         data=json.dumps(payload).encode("utf-8"),
@@ -137,7 +138,8 @@ def _verify_license_api(username: str, password: str, mac_address: str) -> tuple
 
 
 class LicenseLoginDialog(QDialog):
-    def __init__(self, parent: Optional[QWidget] = None, cred_path: Optional[str] = None):
+    def __init__(self, parent: Optional[QWidget] = None, cred_path: Optional[str] = None, app: str = "crawl"):
+        self.app_key = app
         super().__init__(parent)
         self.setWindowTitle("로그인")
         self.setModal(True)
@@ -211,7 +213,7 @@ class LicenseLoginDialog(QDialog):
         if not username or not password:
             QMessageBox.warning(self, "로그인 실패", "아이디와 비밀번호를 입력하세요.")
             return
-        ok, message, expires_at = _verify_license_api(username, password, _get_mac_address())
+        ok, message, expires_at = _verify_license_api(username, password, _get_mac_address(), getattr(self, "app_key", "crawl"))
         if ok:
             self._verified = True
             if self._cred_path:
@@ -235,10 +237,11 @@ def run_licensed_app(
     auto_login: bool = False,
     minimized: bool = False,
     on_ready: Optional[Callable[[QWidget], None]] = None,
+    app_key: str = "crawl",
 ) -> None:
     qapp = app or QApplication(sys.argv)
 
-    dlg = LicenseLoginDialog(cred_path=_cred_store_path(base_dir))
+    dlg = LicenseLoginDialog(cred_path=_cred_store_path(base_dir), app=app_key)
 
     # 무인 실행(작업 스케줄러): 저장된 아이디/비밀번호로 창 없이 로그인 시도
     if auto_login and dlg.edt_id.text().strip() and dlg.edt_pw.text().strip():
