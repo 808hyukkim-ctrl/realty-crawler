@@ -143,6 +143,7 @@ class ScheduleMixin:
             "detail_keywords": s.get("detail_keywords", []),
             "detail_uses": s.get("detail_uses", []),
             "writer_types": s.get("writer_types") or ["BROKER", "DIRECT_USER"],
+            "dedupe_same": bool(s.get("dedupe_same", True)),
             "site_name": "당근",
             "region_for_file": region_for_file,
             "timestamp": ts,
@@ -189,6 +190,7 @@ class ScheduleMixin:
             "detail_keywords": s.get("detail_keywords", []),
             "detail_uses": s.get("detail_uses", []),
             "hosu_enabled": bool(s.get("hosu_enabled", True)),
+            "dedupe_same": bool(s.get("dedupe_same", True)),
             "site_name": "네이버",
             "region_for_file": region_for_file,
             "timestamp": ts,
@@ -242,6 +244,7 @@ class ScheduleMixin:
             "area_max": self.sl_area.values()[1],
             "detail_keywords": _parse_keywords_csv(self.dg_detail_filter.text()),
             "detail_uses": self.dg_use_group.selected() if hasattr(self, "dg_use_group") else [],
+            "dedupe_same": self.dg_dedupe.isChecked() if hasattr(self, "dg_dedupe") else True,
             "writer_types": [
                 w for w, cb in (("BROKER", getattr(self, "chk_dg_broker", None)), ("DIRECT_USER", getattr(self, "chk_dg_direct", None)))
                 if cb is None or cb.isChecked()
@@ -328,6 +331,7 @@ class ScheduleMixin:
             "detail_keywords": self._naver_keywords() if hasattr(self, "_naver_keywords") else _parse_keywords_csv(self.nv_detail_filter.text()),
             "detail_uses": self.nv_use_group.selected() if hasattr(self, "nv_use_group") else [],
             "hosu_enabled": self.nv_hosu_check.isChecked() if hasattr(self, "nv_hosu_check") else True,
+            "dedupe_same": self.nv_dedupe.isChecked() if hasattr(self, "nv_dedupe") else True,
         }
 
     # ──────────────────────────────────────────────────────────────

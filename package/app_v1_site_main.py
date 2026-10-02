@@ -168,6 +168,10 @@ class DaangnWorker(QObject):
                 if len(_uniq) != len(all_results):
                     print(f"[당근] 중복 {len(all_results) - len(_uniq)}건 제거 → {len(_uniq)}건")
                 all_results = _uniq
+                if self.params.get("dedupe_same", True):
+                    all_results, _dropped = dedupe_same_rows(all_results, daangn_same_key)
+                    if _dropped:
+                        self.status.emit(f"당근: 같은 매물(주소·층·금액 동일) 중복 {_dropped}건 제거 → {len(all_results)}건")
                 ts = self.params.get("timestamp", datetime.now().strftime("%y%m%d_%H%M%S"))
                 out_dir = self.params.get("out_dir", os.getcwd())
                 schedule_name = self.params.get("file_name") or self.params.get("schedule_name")
@@ -435,6 +439,27 @@ DAANGN_EXCEL_COLUMNS = [
 DAANGN_COLUMN_SOURCE = {"상세내용": "상세_내용", "건축용도": "건축물용도"}
 
 
+def _norm_key(*parts) -> str:
+    return "|".join(re.sub(r"\s+", "", str(p if p is not None else "")) for p in parts)
+
+
+def dedupe_same_rows(rows: list, key_fn) -> tuple:
+    """같은 매물(주소·층·호·금액·면적 동일) 은 먼저 나온 행만 남긴다. (남은 행, 뺀 개수)"""
+    seen = set(); out = []; dropped = 0
+    for r in rows:
+        k = key_fn(r)
+        if k and k.replace("|", "") and k in seen:
+            dropped += 1
+            continue
+        seen.add(k); out.append(r)
+    return out, dropped
+
+
+def daangn_same_key(r: dict) -> str:
+    return _norm_key(r.get("지번주소") or r.get("주소"), r.get("매물유형"), r.get("거래유형"), r.get("층수"), r.get("면적"),
+                     r.get("매매가"), r.get("전세금"), r.get("보증금"), r.get("월세"))
+
+
 def daangn_excel_row(row: dict) -> dict:
     """당근 수집 행 → 지정 컬럼 순서의 행 (없는 값은 빈칸)"""
     out = {}
@@ -445,6 +470,9 @@ def daangn_excel_row(row: dict) -> dict:
         out[col] = "" if v is None else v
     return out
 
+
+# 네이버 '같은 매물' 판정 열 (같은 집을 여러 중개사가 올린 경우 하나만)
+NAVER_SAME_KEY_COLUMNS = ["세부주소", "매물명", "아파트동", "호수", "해당층", "전용/연", "거래방식", "매매/전세금", "월세"]
 
 NAVER_EXCEL_COLUMNS = [
     "매물번호", "세부주소", "호수", "종류", "거래방식", "매물명", "아파트동",
@@ -609,11 +637,18 @@ class NaverWorker(QObject):
                 # 엑셀 출력 컬럼과 순서 (고정). 매물번호 셀은 저장 후 하이퍼링크(매물 링크)로 변환됨.
                 cols = [c for c in NAVER_EXCEL_COLUMNS if c in df.columns]
                 df = df[cols]
+                if self.params.get("dedupe_same", True):
+                    _before = len(df)
+                    df = df.drop_duplicates(subset=[c for c in NAVER_SAME_KEY_COLUMNS if c in df.columns], keep="first")
+                    if len(df) != _before:
+                        self.status.emit(f"네이버: 같은 매물(주소·호·층·금액 동일) 중복 {_before - len(df)}건 제거 → {len(df)}건")
             elif df.shape[1] == len(headers) - 1:
                 # 호수 없는 구버전 레이아웃 (안전장치)
                 df.columns = [h for h in headers if h != "호수"]
                 cols = [c for c in NAVER_EXCEL_COLUMNS if c in df.columns]
                 df = df[cols]
+                if self.params.get("dedupe_same", True):
+                    df = df.drop_duplicates(subset=[c for c in NAVER_SAME_KEY_COLUMNS if c in df.columns], keep="first")
             df = df.map(lambda x: ILLEGAL_CHARACTERS_RE.sub(r"", x) if isinstance(x, str) else x)
             df.to_excel(out_path, index=False)
             self._apply_excel_hyperlinks(out_path)
@@ -1036,6 +1071,10 @@ class MainWindow(QMainWindow, ScheduleMixin):
         )
         dr.addWidget(QLabel("등록일"))
         dr.addWidget(self.dg_date_preset)
+        self.dg_dedupe = QCheckBox("같은 매물 중복 제거 (주소·층·금액·면적 같으면 하나만)")
+        self.dg_dedupe.setChecked(True)
+        dr.addSpacing(16)
+        dr.addWidget(self.dg_dedupe)
         dr.addStretch(1)
         v.addWidget(date_box)
         price_box = QGroupBox("가격/면적 (직접 입력, 빈칸=제한없음)")
@@ -1368,6 +1407,11 @@ class MainWindow(QMainWindow, ScheduleMixin):
         nv_date_row.setSpacing(8)
         nv_date_row.addWidget(QLabel("등록일"))
         nv_date_row.addWidget(self.nv_date_preset)
+        self.nv_dedupe = QCheckBox("같은 매물 중복 제거")
+        self.nv_dedupe.setChecked(True)
+        self.nv_dedupe.setToolTip("같은 집을 여러 중개사가 올린 경우(주소·동·호·층·면적·금액 동일) 하나만 남깁니다")
+        nv_date_row.addSpacing(10)
+        nv_date_row.addWidget(self.nv_dedupe)
         nv_date_row.addStretch(1)
         pg.addWidget(nv_date_wrap, 2, 1)
         v.addWidget(price_box)
@@ -1816,6 +1860,7 @@ class MainWindow(QMainWindow, ScheduleMixin):
             "detail_years": _rng(self.dg_sl_builtyear.values(), 1970, 2026),
             "detail_uses": self.dg_use_group.selected(),
             "writer_types": writer_types,
+            "dedupe_same": self.dg_dedupe.isChecked(),
             "site_name": "당근",
             "region_for_file": region_for_file,
             "timestamp": ts,
@@ -2098,6 +2143,7 @@ class MainWindow(QMainWindow, ScheduleMixin):
             "detail_years": _rng(self.nv_sl_builtyear.values(), 1970, 2026),
             "detail_uses": self.nv_use_group.selected(),
             "hosu_enabled": self.nv_hosu_check.isChecked(),
+            "dedupe_same": self.nv_dedupe.isChecked(),
             "site_name": "네이버",
             "region_for_file": region_for_file,
             "timestamp": ts,

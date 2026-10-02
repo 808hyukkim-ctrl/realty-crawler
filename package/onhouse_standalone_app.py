@@ -440,11 +440,11 @@ class Worker(QObject):
                                         break
                                     if date_to and reg_d > date_to:
                                         skipped_by_date += 1
-                                        self._sleep_between()
+                                        time.sleep(0.2)   # 건너뛰는 매물은 긴 대기 없이
                                         continue
                             if not self._post_ok(parsed, post, keywords):
                                 skipped_by_filter += 1
-                                self._sleep_between()
+                                time.sleep(0.2)
                                 continue
                             if dedupe_same:
                                 price_txt = next((str(parsed.get(k)) for k in ("월세", "전세", "매매", "단기") if parsed.get(k)), "")
@@ -452,7 +452,7 @@ class Worker(QObject):
                                 if dkey and dkey != "|||" and dkey in seen_keys:
                                     skipped_dup += 1
                                     self.log.emit(f"  {hid} 같은 매물 중복(주소·호실·금액 동일) — 건너뜀")
-                                    self._sleep_between()
+                                    time.sleep(0.2)
                                     continue
                                 seen_keys.add(dkey)
                             row: Dict[str, Any] = {
@@ -957,10 +957,11 @@ class MainWindow(QMainWindow):
         g.addWidget(self.chk_dedupe, 2, 0, 1, 6)
         self.sp_delay_min = QSpinBox()
         self.sp_delay_min.setRange(0, 60)
-        self.sp_delay_min.setValue(2)
+        self.sp_delay_min.setValue(0)
         self.sp_delay_max = QSpinBox()
         self.sp_delay_max.setRange(0, 120)
-        self.sp_delay_max.setValue(5)
+        self.sp_delay_max.setValue(1)
+        self.sp_delay_min.setToolTip("매물 1건 읽을 때마다 쉬는 시간. 0~1초면 30건에 15초 정도, 2~5초면 2분 가까이 걸립니다")
         self.sp_max_pages = QSpinBox()
         self.sp_max_pages.setRange(0, 999)
         self.sp_max_pages.setValue(0)
@@ -1314,8 +1315,8 @@ class MainWindow(QMainWindow):
         self.cb_date_by.setCurrentIndex(1 if s.get("by_reg") else 0)
         self.chk_contact.setChecked(bool(s.get("contact")))
         self.chk_dedupe.setChecked(bool(s.get("dedupe", True)))
-        self.sp_delay_min.setValue(int(s.get("delay_min", 2)))
-        self.sp_delay_max.setValue(int(s.get("delay_max", 5)))
+        self.sp_delay_min.setValue(int(s.get("delay_min", 0)))
+        self.sp_delay_max.setValue(int(s.get("delay_max", 1)))
         self.sp_max_pages.setValue(int(s.get("max_pages", 0)))
         self._refresh_trade_controls()
 
