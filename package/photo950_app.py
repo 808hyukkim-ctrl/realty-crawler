@@ -123,8 +123,9 @@ def photos_onhouse(hid: str, crawler: OnhouseCrawler) -> Tuple[str, List[str]]:
     if len(html) < 400 and ("로그인" in html or "유료" in html):
         raise RuntimeError("온하우스 상세를 열 수 없습니다 — 유료 회원사 계정으로 로그인해야 합니다")
     seen: Dict[str, str] = {}
-    for m in re.finditer(r"https://[a-z0-9.-]+\.cloudfront\.net/room_img/([a-z0-9]+\.(?:jpg|jpeg|png|webp))", html, re.I):
-        seen.setdefault(m.group(1), m.group(0))          # ?w=… 없이 = 원본
+    # 매물 사진은 room_img/, 건물 사진은 building_img/ 아래 (…_resize.jpg). ?w=… 를 떼면 원본
+    for m in re.finditer(r"https://[a-z0-9.-]+\.cloudfront\.net/(?:room_img|building_img|[a-z_]*img)/([A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp))", html, re.I):
+        seen.setdefault(m.group(1).lower(), m.group(0) + "?w=1900")   # CDN 리사이저에 큰 폭을 요청해 받은 뒤 950 으로 줄인다
     title = ""
     tm = re.search(r'class="addr_title"[^>]*>\s*([^<]+)<', html)
     if tm:
@@ -208,7 +209,7 @@ def resize_to(im: Image.Image, width: int, height: int = 0) -> Image.Image:
         im = bg
     elif im.mode == "L":
         im = im.convert("RGB")
-    if height and height > 0:
+    if height and height >= 100:
         return ImageOps.fit(im, (width, height), method=Image.LANCZOS, centering=(0.5, 0.5))   # 가운데 기준으로 잘라 맞춤
     w, h = im.size
     nh = max(1, round(h * width / w))
@@ -254,6 +255,8 @@ def process_link(
         if cancelled():
             break
         im = fetch_image(u, referer)
+        if im is None and "?" in u:
+            im = fetch_image(u.split("?")[0], referer)   # 크기 인자(?w=…)를 못 받는 파일은 원본으로
         if im is None:
             log(f"    [{i}] 내려받기 실패: {u[:90]}")
             continue
@@ -371,10 +374,12 @@ class MainWindow(QMainWindow):
         self.sp_w = QSpinBox()
         self.sp_w.setRange(50, 5000)
         self.sp_w.setValue(950)
+        self.chk_h = QCheckBox("세로 고정")
         self.sp_h = QSpinBox()
-        self.sp_h.setRange(0, 5000)
-        self.sp_h.setValue(0)
-        self.sp_h.setSpecialValueText("비율 유지")
+        self.sp_h.setRange(100, 5000)
+        self.sp_h.setValue(950)
+        self.sp_h.setEnabled(False)
+        self.chk_h.toggled.connect(self.sp_h.setEnabled)
         self.sp_q = QSpinBox()
         self.sp_q.setRange(50, 100)
         self.sp_q.setValue(92)
@@ -385,9 +390,9 @@ class MainWindow(QMainWindow):
         self.chk_open.setChecked(True)
         g.addWidget(QLabel("가로(px)"), 0, 0)
         g.addWidget(self.sp_w, 0, 1)
-        g.addWidget(QLabel("세로(px)"), 0, 2)
+        g.addWidget(self.chk_h, 0, 2)
         g.addWidget(self.sp_h, 0, 3)
-        g.addWidget(QLabel("0이면 비율대로, 숫자를 넣으면 그 크기로 가운데를 잘라 맞춤"), 0, 4, 1, 2)
+        g.addWidget(QLabel("기본은 가로 950에 세로는 비율대로. '세로 고정'을 켜면 그 크기로 가운데를 잘라 맞춤"), 0, 4, 1, 2)
         g.addWidget(QLabel("JPG 품질"), 1, 0)
         g.addWidget(self.sp_q, 1, 1)
         g.addWidget(QLabel("저장 폴더"), 1, 2)
@@ -447,7 +452,9 @@ class MainWindow(QMainWindow):
             if os.path.exists(self.cfg_path):
                 c = json.load(open(self.cfg_path, "r", encoding="utf-8"))
                 self.sp_w.setValue(int(c.get("width", 950)))
-                self.sp_h.setValue(int(c.get("height", 0)))
+                hh = int(c.get("height", 0) or 0)
+                self.chk_h.setChecked(hh >= 100)
+                self.sp_h.setValue(hh if hh >= 100 else 950)
                 self.sp_q.setValue(int(c.get("quality", 92)))
                 if c.get("out"):
                     self.ed_out.setText(c["out"])
@@ -475,7 +482,7 @@ class MainWindow(QMainWindow):
                 pass
 
     def _save_cfg(self):
-        c = {"width": self.sp_w.value(), "height": self.sp_h.value(), "quality": self.sp_q.value(), "out": self.ed_out.text().strip(),
+        c = {"width": self.sp_w.value(), "height": self._height(), "quality": self.sp_q.value(), "out": self.ed_out.text().strip(),
              "open": self.chk_open.isChecked(), "watch": self.chk_watch.isChecked()}
         if self.chk_oh_save.isChecked():
             c["oh_id"] = self.ed_oh_id.text().strip()
@@ -486,6 +493,9 @@ class MainWindow(QMainWindow):
             pass
 
     # ---------- 동작 ----------
+    def _height(self) -> int:
+        return self.sp_h.value() if self.chk_h.isChecked() else 0
+
     def _pick_out(self):
         d = QFileDialog.getExistingDirectory(self, "저장 폴더", self.ed_out.text().strip() or os.path.expanduser("~"))
         if d:
@@ -533,7 +543,7 @@ class MainWindow(QMainWindow):
         out_root = self.ed_out.text().strip() or os.path.join(os.path.expanduser("~"), "Desktop", "매물사진950")
         os.makedirs(out_root, exist_ok=True)
         self._save_cfg()
-        self.worker = Worker(links, out_root, self.sp_w.value(), self.sp_h.value(), self.sp_q.value(), self.ed_oh_id.text().strip(), self.ed_oh_pw.text().strip())
+        self.worker = Worker(links, out_root, self.sp_w.value(), self._height(), self.sp_q.value(), self.ed_oh_id.text().strip(), self.ed_oh_pw.text().strip())
         self.thread = QThread(self)
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)
