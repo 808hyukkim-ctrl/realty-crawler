@@ -1562,6 +1562,12 @@ class MainWindow(QMainWindow):
     def _on_finished(self, msg: str):
         self.lbl_status.setText(msg)
         self._append_log(msg)
+        try:
+            from license_gate import report_activity
+            m = re.search(r"(\d+)건", msg)
+            report_activity("수집", f"온하우스 · {os.path.basename(msg.split(': ', 1)[-1].split(' (')[0]) if '저장' in msg else msg}", int(m.group(1)) if m else None)
+        except Exception:
+            pass
         self.progress.setValue(100)
         if self._batch_mode:
             QTimer.singleShot(2000, self._batch_next)

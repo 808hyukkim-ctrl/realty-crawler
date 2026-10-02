@@ -32,6 +32,28 @@ async function ensureFeatures(db: D1Database) {
   try { await db.prepare("ALTER TABLE users ADD COLUMN features TEXT NOT NULL DEFAULT 'crawl'").run(); } catch (e) { /* 이미 있음 */ }
   featuresReady = true;
 }
+// 활동 기록: 누가(아이디) 어느 프로그램(app)으로 무엇을(action) 했는지 (2026-10-02)
+let logReady = false;
+async function ensureLog(db: D1Database) {
+  if (logReady) return;
+  await db.prepare("CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, username TEXT NOT NULL, app TEXT NOT NULL, action TEXT NOT NULL, detail TEXT, count INTEGER, mac TEXT)").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS activity_log_at ON activity_log(at DESC)").run();
+  logReady = true;
+}
+async function addLog(db: D1Database, username: string, app: string, action: string, detail: string, count: number | null, mac: string) {
+  await ensureLog(db);
+  await db.prepare("INSERT INTO activity_log (at, username, app, action, detail, count, mac) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(nowIso(), username, app, action, detail.slice(0, 500), count, mac.slice(0, 40)).run();
+}
+// 프로그램이 작업 기록을 보낼 때 쓰는 토큰: HMAC(아이디) — 로그인 성공 응답에 실어 준다
+async function hmacHex(secret: string, msg: string): Promise<string> {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(msg));
+  return toHex(new Uint8Array(sig));
+}
+const logToken = (secret: string, username: string) => hmacHex(secret, "log:" + username);
+const APP_LABEL: Record<string, string> = { crawl: "매물 수집기", photo: "사진950" };
+
 const featureList = (s: any) => String(s ?? "crawl").split(",").map((x) => x.trim()).filter(Boolean);
 const featureLabel = (key: string) => (FEATURES.find(([k]) => k === key) || [key, key])[1];
 
@@ -151,6 +173,7 @@ app.get("/admin/dashboard", async (c) => {
           <input type="password" name="password" placeholder="새 비밀번호" class="pw-input">
           <button type="submit" class="btn btn-sm">변경</button>
         </form>
+        <a class="btn btn-sm" href="/admin/logs?q=${u.username}">기록</a>
         <form method="post" action="/admin/users/${u.id}/delete" class="inline-form"
               onsubmit="return confirm('${u.username} 계정을 삭제할까요?');">
           <button type="submit" class="btn btn-sm btn-danger">삭제</button>
@@ -336,8 +359,62 @@ app.post("/api/v1/verify", async (c) => {
       });
     }
   }
+  try { await addLog(c.env.DB, row.username, appKey, "로그인", "", null, macAddress); } catch (e) {}
   return c.json({
-    success: true, features: featureList(row.features), message: "인증 성공", expires_at: row.expires_at ?? null });
+    success: true, features: featureList(row.features), message: "인증 성공", expires_at: row.expires_at ?? null,
+    log_token: await logToken(c.env.ADMIN_PASSWORD, row.username) });
+});
+
+app.post("/api/v1/log", async (c) => {
+  const body: any = await c.req.json().catch(() => ({}));
+  const username = String(body.username ?? "").trim();
+  const token = String(body.token ?? "").trim();
+  if (!username || !token || token !== (await logToken(c.env.ADMIN_PASSWORD, username))) {
+    return c.json({ success: false, message: "기록 토큰이 맞지 않습니다." }, 401);
+  }
+  const app_ = String(body.app ?? "crawl").trim().slice(0, 20) || "crawl";
+  const action = String(body.action ?? "작업").trim().slice(0, 40) || "작업";
+  const detail = String(body.detail ?? "").trim();
+  const count = body.count == null || body.count === "" ? null : Number(body.count);
+  await addLog(c.env.DB, username, app_, action, detail, Number.isFinite(count as number) ? (count as number) : null, String(body.mac_address ?? ""));
+  return c.json({ success: true });
+});
+
+app.get("/admin/logs", async (c) => {
+  await ensureLog(c.env.DB);
+  const q = c.req.query("q")?.trim() ?? "";
+  const appF = c.req.query("app")?.trim() ?? "";
+  const where: string[] = []; const binds: any[] = [];
+  if (q) { where.push("username LIKE ?"); binds.push(`%${q}%`); }
+  if (appF) { where.push("app = ?"); binds.push(appF); }
+  const sql = "SELECT * FROM activity_log" + (where.length ? " WHERE " + where.join(" AND ") : "") + " ORDER BY at DESC LIMIT 500";
+  const { results } = await c.env.DB.prepare(sql).bind(...binds).all();
+  const kst = (iso: string) => { try { return new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }); } catch { return iso; } };
+  const rows = (results ?? []).map((r: any) => html`<tr>
+    <td class="mono small">${kst(r.at)}</td>
+    <td class="mono">${r.username}</td>
+    <td><span class="badge ${r.app === "photo" ? "status-unlimited" : "status-active"}">${APP_LABEL[r.app] ?? r.app}</span></td>
+    <td>${r.action}</td>
+    <td class="small">${r.detail ?? ""}</td>
+    <td class="mono">${r.count ?? ""}</td>
+    <td class="mono small">${r.mac ?? ""}</td>
+  </tr>`);
+  const body = html`
+    <div class="page-head"><h1>활동 기록</h1><span class="small" style="color:var(--muted)">최근 500건 · 로그인과 수집/사진 작업이 남습니다 (프로그램이 끝날 때 보냄)</span></div>
+    <form class="search-form" method="get">
+      <input type="text" name="q" placeholder="아이디 검색" value="${q}">
+      <select name="app" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#0d121c;color:var(--text)">
+        <option value="" ${appF === "" ? "selected" : ""}>전체 프로그램</option>
+        <option value="crawl" ${appF === "crawl" ? "selected" : ""}>매물 수집기</option>
+        <option value="photo" ${appF === "photo" ? "selected" : ""}>사진950</option>
+      </select>
+      <button type="submit" class="btn">검색</button>
+    </form>
+    <table class="user-table">
+      <thead><tr><th>시각</th><th>아이디</th><th>프로그램</th><th>작업</th><th>내용</th><th>건수</th><th>기기</th></tr></thead>
+      <tbody>${rows.length ? rows : html`<tr><td colspan="7" class="empty">기록이 없습니다.</td></tr>`}</tbody>
+    </table>`;
+  return c.html(layout("활동 기록", body));
 });
 
 app.get("/healthz", (c) => c.json({ ok: true }));

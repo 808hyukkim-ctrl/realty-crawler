@@ -2352,6 +2352,13 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self.btn_start.setEnabled(True)
         self.btn_stop.setEnabled(False)
         self._last_output_path = parse_saved_output_path_from_finish_message(msg)
+        try:
+            from license_gate import report_activity
+            site = self.tabs.tabText(self.tabs.currentIndex()) if hasattr(self, "tabs") else ""
+            m = re.search(r"(\d+)건", msg)
+            report_activity("수집", f"{site} · {os.path.basename(self._last_output_path) if self._last_output_path else msg[:200]}", int(m.group(1)) if m else None)
+        except Exception:
+            pass
         self._auto_send_after_save()
 
     def _on_failed(self, msg: str):

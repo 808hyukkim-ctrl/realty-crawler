@@ -568,6 +568,11 @@ class MainWindow(QMainWindow):
 
     def _on_finished(self, last_dir: str, n_links: int, n_imgs: int):
         self._append(f"완료: 링크 {n_links}개 → 사진 {n_imgs}장")
+        try:
+            from license_gate import report_activity
+            report_activity("사진950", f"링크 {n_links}개 → 사진 {n_imgs}장" + (f" · {os.path.basename(last_dir)}" if last_dir else ""), n_imgs)
+        except Exception:
+            pass
         self.lbl_status.setText(f"완료 — 사진 {n_imgs}장")
         self.progress.setValue(100)
         if self.thread:

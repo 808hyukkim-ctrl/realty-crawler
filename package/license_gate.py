@@ -37,6 +37,33 @@ from PySide6.QtWidgets import (
 VERIFY_URL = os.environ.get(
     "LICENSE_VERIFY_URL", "https://realty-license-server.808hyukkim.workers.dev/api/v1/verify"
 )
+LOG_URL = VERIFY_URL.rsplit("/", 1)[0] + "/log"
+# 로그인에 성공한 계정 — 작업 기록(report_activity)에 쓴다
+SESSION = {"username": "", "token": "", "app": "crawl"}
+
+
+def report_activity(action: str, detail: str = "", count=None) -> None:
+    """어드민 '활동 기록'에 남긴다 (누가 어느 프로그램으로 무엇을 몇 건). 실패해도 조용히 넘어가며 화면을 막지 않는다."""
+    if not SESSION.get("username") or not SESSION.get("token"):
+        return
+    payload = {
+        "username": SESSION["username"], "token": SESSION["token"], "app": SESSION.get("app", "crawl"),
+        "action": action, "detail": str(detail or "")[:500], "count": count, "mac_address": _get_mac_address(),
+    }
+
+    def _send():
+        try:
+            req = urllib.request.Request(
+                LOG_URL, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"},
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=12).read()
+        except Exception:
+            pass
+
+    import threading
+    threading.Thread(target=_send, daemon=True).start()
 
 
 def _cred_store_path(base_dir: str) -> str:
@@ -134,6 +161,10 @@ def _verify_license_api(username: str, password: str, mac_address: str, app: str
     ok = bool(data.get("success"))
     msg = str(data.get("message") or "").strip()
     expires_at = data.get("expires_at")
+    if ok:
+        SESSION["username"] = username
+        SESSION["token"] = str(data.get("log_token") or "")
+        SESSION["app"] = app
     return ok, (msg or ("인증 성공" if ok else "인증 실패")), expires_at
 
 
