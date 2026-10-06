@@ -1730,15 +1730,12 @@ def main():
             job_name = argv[i + 1]
             batch = True
 
+    # 라이선스 로그인(수집기와 같은 서버·계정) — 로그인해야 활동 기록과 텔레그램 봇(예약 목록 업로드·명령 수신)이 동작한다.
+    # 무인 실행(--run-all/--run-job)은 로그인 창에서 '아이디/비밀번호 기억'을 켜 둔 계정으로 자동 로그인한다.
+    from license_gate import run_licensed_app
     app = QApplication.instance() or QApplication(sys.argv)
-    w = MainWindow()
-    if batch:
-        # 작업 스케줄러가 부른 경우: 창은 최소화로 띄우고(로그 확인용) 끝나면 스스로 종료
-        w.showMinimized()
-        QTimer.singleShot(800, lambda: w.run_batch(job_name))
-    else:
-        w.show()
-    sys.exit(app.exec())
+    on_ready = (lambda win: win.run_batch(job_name)) if batch else None
+    run_licensed_app(create_main_window=MainWindow, base_dir=base_dir(), app=app, auto_login=batch, minimized=batch, on_ready=on_ready, app_key="crawl")
 
 
 if __name__ == "__main__":
