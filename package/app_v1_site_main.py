@@ -873,6 +873,41 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self._apply_style()
         self._init_schedule()
         self._load_send_config()
+        # 텔레그램으로 "목록" / "실행 <예약이름>" 을 보내면 그 예약을 바로 돌리고 결과 엑셀을 텔레그램으로 보낸다
+        self._force_tg = False
+        self.tg_cmd = auto_send.TelegramCommander(lambda: self._send_config(), "매물수집기")
+        self.tg_timer = QTimer(self)
+        self.tg_timer.setInterval(10000)
+        self.tg_timer.timeout.connect(self._poll_telegram)
+        self.tg_timer.start()
+
+    def _poll_telegram(self):
+        try:
+            cmds = self.tg_cmd.poll()
+        except Exception:
+            return
+        for cmd in cmds:
+            kind, arg = auto_send.TelegramCommander.parse(cmd["text"])
+            if kind == "list":
+                names = [f"{'[켜짐]' if j.enabled else '[꺼짐]'} {j.name} ({'당근' if j.site == 'daangn' else '네이버'} {j.schedule_time})" for j in self._schedule_manager.get_all()]
+                self.tg_cmd.reply("[매물수집기] 예약 목록\n" + ("\n".join(names) if names else "(없음)") + "\n\n실행 <예약이름> 으로 바로 수집합니다")
+            elif kind == "help":
+                self.tg_cmd.reply("[매물수집기] " + auto_send.TelegramCommander.HELP)
+            elif kind == "run":
+                self._send_log(f"텔레그램 명령: 실행 [{arg}]")
+                self.tg_cmd.reply("[매물수집기] " + self._run_job_by_name_tg(arg))
+
+    def _run_job_by_name_tg(self, name: str) -> str:
+        name = (name or "").strip()
+        jobs = self._schedule_manager.get_all()
+        job = next((j for j in jobs if j.name == name), None) or next((j for j in jobs if name and name in j.name), None)
+        if not job:
+            return f"'{name}' 예약이 없습니다. '목록' 으로 이름을 확인하세요"
+        if self.worker_thread and self.worker_thread.isRunning():
+            return "다른 수집이 진행 중입니다. 끝난 뒤 다시 보내주세요"
+        self._force_tg = True
+        self._run_scheduled_job(job)
+        return f"'{job.name}' 수집을 시작했습니다. 끝나면 엑셀을 이리로 보냅니다"
 
     def _load_regions(self):
         p = os.path.join(self.resource_dir, "regions.json")
@@ -2367,6 +2402,9 @@ class MainWindow(QMainWindow, ScheduleMixin):
 
     def _auto_send_after_save(self) -> None:
         cfg = self._send_config()
+        if getattr(self, "_force_tg", False):   # 텔레그램 명령으로 시작한 수집은 결과를 텔레그램으로
+            cfg = {**cfg, "tg_on": True}
+            self._force_tg = False
         path = self._last_output_path
         if not (cfg.get("mail_on") or cfg.get("tg_on")) or not path or not os.path.exists(path):
             self._batch_step()

@@ -148,3 +148,94 @@ def deliver(cfg: Dict[str, Any], file_path: str, caption: str, log: Callable[[st
         log("  " + send_mail(cfg, file_path, caption, caption + "\n\n온하우스 매물수집기에서 자동 발송했습니다."))
     if cfg.get("tg_on"):
         log("  " + send_telegram(cfg, file_path, caption))
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 텔레그램으로 수집 명령 받기 (2026-10-06)
+#   봇에게 "목록" → 예약 목록 / "실행 <예약이름>" (또는 "뽑아 <이름>", "수집 <이름>") → 그 예약을 바로 실행.
+#   프로그램이 켜져 있는 동안 10초마다 getUpdates 로 확인. 자동 전송 탭에 적힌 챗 ID 에서 온 메시지만 받는다.
+#   네트워크는 작업 스레드에서, 실행은 호출한 쪽(UI 스레드)이 poll() 로 가져가 처리한다.
+# ──────────────────────────────────────────────────────────────────────────
+import threading as _threading
+
+
+class TelegramCommander:
+    HELP = "명령: 목록 — 예약 목록 / 실행 <예약이름> — 그 예약으로 지금 수집 (뽑아 <이름>, 수집 <이름> 도 됨) / 도움"
+
+    def __init__(self, get_cfg: Callable[[], Dict[str, Any]], app_label: str = "매물수집기"):
+        self.get_cfg = get_cfg
+        self.app_label = app_label
+        self.offset: int | None = None       # 마지막으로 처리한 update_id
+        self._pending: List[Dict[str, Any]] = []
+        self._lock = _threading.Lock()
+        self._busy = False
+        self._primed = False
+
+    # ---- 네트워크 (작업 스레드) ----
+    def _api(self, method: str, **params):
+        token = str(self.get_cfg().get("tg_token", "")).strip()
+        if not token:
+            return None
+        try:
+            r = requests.post(TELEGRAM_API.format(token=token, method=method), data=params, timeout=25)
+            return r.json()
+        except Exception:
+            return None
+
+    def reply(self, text: str) -> None:
+        chat = str(self.get_cfg().get("tg_chat", "")).strip()
+        if not chat:
+            return
+        _threading.Thread(target=self._api, args=("sendMessage",), kwargs={"chat_id": chat, "text": text[:3900]}, daemon=True).start()
+
+    def _fetch(self) -> None:
+        try:
+            d = self._api("getUpdates", offset=(self.offset + 1) if self.offset is not None else None, timeout=0)
+            if not d or not d.get("ok"):
+                return
+            chat_ok = str(self.get_cfg().get("tg_chat", "")).strip()
+            for item in d.get("result") or []:
+                uid = int(item.get("update_id", 0))
+                if self.offset is None or uid > self.offset:
+                    self.offset = uid
+                if not self._primed:
+                    continue   # 프로그램 켜기 전에 쌓인 옛 메시지는 무시
+                msg = item.get("message") or {}
+                chat = str((msg.get("chat") or {}).get("id", ""))
+                text = str(msg.get("text") or "").strip()
+                if not text or (chat_ok and chat != chat_ok):
+                    continue
+                with self._lock:
+                    self._pending.append({"text": text, "chat": chat})
+            self._primed = True
+        finally:
+            self._busy = False
+
+    # ---- UI 스레드에서 주기적으로 ----
+    def poll(self) -> List[Dict[str, Any]]:
+        """새 명령 목록을 돌려주고, 백그라운드로 다음 조회를 시작한다."""
+        cfg = self.get_cfg()
+        if not str(cfg.get("tg_token", "")).strip():
+            return []
+        with self._lock:
+            out, self._pending = self._pending, []
+        if not self._busy:
+            self._busy = True
+            _threading.Thread(target=self._fetch, daemon=True).start()
+        return out
+
+    @staticmethod
+    def parse(text: str):
+        """('list'|'run'|'help'|None, 인자)"""
+        t = text.strip().lstrip("/").strip()
+        if not t:
+            return None, ""
+        head, _, rest = t.partition(" ")
+        head = head.strip().lower()
+        if head in ("목록", "list", "예약"):
+            return "list", ""
+        if head in ("도움", "help", "명령"):
+            return "help", ""
+        if head in ("실행", "뽑아", "수집", "run", "시작"):
+            return "run", rest.strip()
+        return None, t

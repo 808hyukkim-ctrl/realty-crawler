@@ -458,16 +458,19 @@ class Worker(QObject):
                             row: Dict[str, Any] = {
                                 "매물ID": parsed.get("매물ID", hid),
                                 "URL": parsed.get("URL", f"{crawler.DETAIL_URL}/{hid}"),
-                                "확인일": it["chk"][:19],
-                                "지역": region,
                             }
+                            # 날짜 열: 등록일 기준이면 '등록일'만, 확인일 기준이면 '확인일'과 '등록일' 둘 다
+                            chk_txt = it["chk"][:19] or (ddates["확인일"].isoformat() if ddates.get("확인일") else "")
+                            reg_txt = reg_d.isoformat() if reg_d is not None else ""
+                            if by_reg:
+                                row["등록일"] = reg_txt
+                            else:
+                                row["확인일"] = chk_txt
+                                row["등록일"] = reg_txt
+                            row["지역"] = region
                             for k, v in parsed.items():
-                                if k not in row:
+                                if k not in row and not (by_reg and k == "확인일"):
                                     row[k] = v
-                            if reg_d is not None:
-                                row["등록일"] = reg_d.isoformat()
-                            if ddates.get("확인일") is not None and not row.get("확인일"):
-                                row["확인일"] = ddates["확인일"].isoformat()
                             if it["lat"] and it["lng"]:
                                 row["위도"] = it["lat"]
                                 row["경도"] = it["lng"]
@@ -498,7 +501,7 @@ class Worker(QObject):
                             stopped = True
                             break
                         except Exception as e:
-                            row = {"매물ID": hid, "URL": f"{crawler.DETAIL_URL}/{hid}", "확인일": it["chk"][:19], "지역": region, "오류": str(e)}
+                            row = {"매물ID": hid, "URL": f"{crawler.DETAIL_URL}/{hid}", **({} if by_reg else {"확인일": it["chk"][:19]}), "지역": region, "오류": str(e)}
                         all_rows.append(row)
                         addr = row.get("전체주소") or row.get("주소_호실") or ""
                         price = next(
@@ -667,6 +670,44 @@ class MainWindow(QMainWindow):
         self.sched_timer.setInterval(15000)
         self.sched_timer.timeout.connect(self._check_schedules)
         self.sched_timer.start()
+        # 텔레그램으로 "목록" / "실행 <예약이름>" 을 보내면 그 예약을 바로 돌리고 결과 엑셀을 텔레그램으로 보낸다
+        self._force_tg = False
+        self.tg_cmd = auto_send.TelegramCommander(lambda: self._send_config(), "온하우스 수집기")
+        self.tg_timer = QTimer(self)
+        self.tg_timer.setInterval(10000)
+        self.tg_timer.timeout.connect(self._poll_telegram)
+        self.tg_timer.start()
+
+    # ---------- 텔레그램 명령 ----------
+    def _poll_telegram(self):
+        try:
+            cmds = self.tg_cmd.poll()
+        except Exception:
+            return
+        for cmd in cmds:
+            kind, arg = auto_send.TelegramCommander.parse(cmd["text"])
+            if kind == "list":
+                names = [f"{'[켜짐]' if j.enabled else '[꺼짐]'} {j.name} ({j.schedule_time})" for j in self.schedules.get_all()]
+                self.tg_cmd.reply("[온하우스 수집기] 예약 목록\n" + ("\n".join(names) if names else "(없음)") + "\n\n실행 <예약이름> 으로 바로 수집합니다")
+            elif kind == "help":
+                self.tg_cmd.reply("[온하우스 수집기] " + auto_send.TelegramCommander.HELP)
+            elif kind == "run":
+                self._append_log(f"텔레그램 명령: 실행 [{arg}]")
+                self.tg_cmd.reply("[온하우스 수집기] " + self._run_job_by_name(arg))
+
+    def _run_job_by_name(self, name: str) -> str:
+        name = (name or "").strip()
+        jobs = self.schedules.get_all()
+        job = next((j for j in jobs if j.name == name), None) or next((j for j in jobs if name and name in j.name), None)
+        if not job:
+            return f"'{name}' 예약이 없습니다. '목록' 으로 이름을 확인하세요"
+        if self.worker_thread and self.worker_thread.isRunning():
+            return "다른 수집이 진행 중입니다. 끝난 뒤 다시 보내주세요"
+        if not self.ed_id.text().strip() or not self.ed_pw.text().strip():
+            return "온하우스 아이디/비밀번호가 저장돼 있지 않습니다"
+        self._force_tg = True
+        self._run_job(job, mark=False)
+        return f"'{job.name}' 수집을 시작했습니다. 끝나면 엑셀을 이리로 보냅니다"
 
     # ---------- 데이터 ----------
     def _load_bbox(self) -> Dict[str, Dict[str, float]]:
@@ -1535,6 +1576,9 @@ class MainWindow(QMainWindow):
             "contact_cache_path": os.path.join(self.base_dir, "onhouse_contacts_cache.json"),
             "send": self._send_config(save=True),
         }
+        if getattr(self, "_force_tg", False):   # 텔레그램 명령으로 시작한 수집은 결과를 텔레그램으로 보낸다
+            params["send"] = {**params["send"], "tg_on": True}
+            self._force_tg = False
         self.log.clear()
         period_txt = "전체" if not (date_from or date_to) else f"{date_from} ~ {date_to}"
         head = f"예약 실행 [{self._current_job_name}] " if auto and self._current_job_name else ""
