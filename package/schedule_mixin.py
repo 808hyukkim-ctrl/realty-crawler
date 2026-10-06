@@ -21,7 +21,7 @@ class ScheduleMixin:
 
     def _init_schedule(self):
         self._schedule_manager = ScheduleManager(
-            os.path.join(self.base_dir, "schedules.json")
+            os.path.join(self.base_dir, "schedules.json"), program="main"
         )
         self._schedule_timer = QTimer(self)
         self._schedule_timer.timeout.connect(self._check_due_schedules)

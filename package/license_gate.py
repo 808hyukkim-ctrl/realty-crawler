@@ -15,6 +15,7 @@ import os
 import sys
 import uuid
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from typing import Callable, Optional
@@ -64,6 +65,59 @@ def report_activity(action: str, detail: str = "", count=None) -> None:
 
     import threading
     threading.Thread(target=_send, daemon=True).start()
+
+
+def _api_json(method: str, path: str, payload: dict | None = None, timeout: int = 12):
+    base = VERIFY_URL.rsplit("/", 1)[0]
+    url = base + path
+    data = None
+    if method == "GET" and payload:
+        url += "?" + urllib.parse.urlencode(payload)
+    elif payload is not None:
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method=method, headers={
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+    })
+    with urllib.request.urlopen(req, timeout=timeout) as res:
+        body = res.read().decode("utf-8", errors="replace")
+        return json.loads(body) if body else {}
+
+
+def report_schedules(program: str, jobs: list) -> None:
+    """예약 목록을 서버에 올린다 — 프로그램이 꺼져 있어도 텔레그램 '목록' 에 답할 수 있게. 실패는 조용히."""
+    if not SESSION.get("username") or not SESSION.get("token"):
+        return
+    payload = {"username": SESSION["username"], "token": SESSION["token"], "program": program,
+               "jobs": [{"name": j.get("name"), "site": j.get("site"), "schedule_time": j.get("schedule_time"), "days": j.get("days"), "enabled": j.get("enabled", True)} for j in jobs]}
+    import threading
+    threading.Thread(target=lambda: _swallow(lambda: _api_json("POST", "/schedules", payload)), daemon=True).start()
+
+
+def fetch_commands(program: str):
+    """서버 대기열의 텔레그램 명령. {'bot': 서버가 봇을 받는지, 'commands': [{'id','text'}]} 또는 None(서버 없음/로그인 전)"""
+    if not SESSION.get("username") or not SESSION.get("token"):
+        return None
+    try:
+        return _api_json("GET", "/commands", {"username": SESSION["username"], "token": SESSION["token"], "program": program})
+    except Exception:
+        return None
+
+
+def command_done(cmd_id, text: str) -> None:
+    """명령 처리 결과를 서버에 알리면 서버가 텔레그램으로 답장을 보낸다"""
+    if not SESSION.get("username") or not SESSION.get("token"):
+        return
+    payload = {"username": SESSION["username"], "token": SESSION["token"], "text": text}
+    import threading
+    threading.Thread(target=lambda: _swallow(lambda: _api_json("POST", f"/commands/{cmd_id}/done", payload)), daemon=True).start()
+
+
+def _swallow(fn):
+    try:
+        fn()
+    except Exception:
+        pass
 
 
 def _cred_store_path(base_dir: str) -> str:

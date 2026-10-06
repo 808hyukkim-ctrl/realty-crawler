@@ -162,9 +162,10 @@ import threading as _threading
 class TelegramCommander:
     HELP = "명령: 목록 — 예약 목록 / 실행 <예약이름> — 그 예약으로 지금 수집 (뽑아 <이름>, 수집 <이름> 도 됨) / 도움"
 
-    def __init__(self, get_cfg: Callable[[], Dict[str, Any]], app_label: str = "매물수집기"):
+    def __init__(self, get_cfg: Callable[[], Dict[str, Any]], app_label: str = "매물수집기", program: str = "main"):
         self.get_cfg = get_cfg
         self.app_label = app_label
+        self.program = program
         self.offset: int | None = None       # 다음 조회의 offset (2분 지난 메시지까지 확인한 뒤의 값)
         self._seen_ids: set = set()
         self._pending: List[Dict[str, Any]] = []
@@ -190,10 +191,22 @@ class TelegramCommander:
         _threading.Thread(target=self._api, args=("sendMessage",), kwargs={"chat_id": chat, "text": text[:3900]}, daemon=True).start()
 
     def _fetch(self) -> None:
-        """텔레그램 getUpdates. 봇 하나를 여러 프로그램(온하우스·통합 수집기)이 같이 보므로, 메시지를 바로 '확인(offset)' 하지 않고
+        """1) 서버(라이선스 워커)가 봇을 받고 있으면 서버 대기열에서 명령을 가져온다 (프로그램이 꺼져 있던 동안 온 명령도 받음)
+           2) 아니면 텔레그램 getUpdates 를 직접 본다.
+           텔레그램 getUpdates. 봇 하나를 여러 프로그램(온하우스·통합 수집기)이 같이 보므로, 메시지를 바로 '확인(offset)' 하지 않고
         2분 지난 것만 확인한다 → 모든 프로그램이 같은 명령을 받을 수 있다. 같은 메시지는 update_id 로 한 번만 처리."""
         try:
             import time as _time
+            try:
+                from license_gate import fetch_commands
+                srv = fetch_commands(self.program)
+            except Exception:
+                srv = None
+            if srv and srv.get("bot"):
+                with self._lock:
+                    for cmd in srv.get("commands") or []:
+                        self._pending.append({"text": str(cmd.get("text") or ""), "chat": "", "source": "server", "id": cmd.get("id")})
+                return
             d = self._api("getUpdates", timeout=0, **({"offset": self.offset} if self.offset else {}))
             if not d or not d.get("ok"):
                 return
@@ -224,6 +237,17 @@ class TelegramCommander:
             self._primed = True
         finally:
             self._busy = False
+
+    def reply_to(self, cmd: Dict[str, Any], text: str) -> None:
+        """명령이 서버 대기열에서 온 것이면 서버가 답장을 보내고, 직접 받은 것이면 봇 API 로 바로 보낸다"""
+        if cmd.get("source") == "server" and cmd.get("id") is not None:
+            try:
+                from license_gate import command_done
+                command_done(cmd["id"], text)
+                return
+            except Exception:
+                pass
+        self.reply(text)
 
     # ---- UI 스레드에서 주기적으로 ----
     def poll(self) -> List[Dict[str, Any]]:

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { html } from "hono/html";
 import { basicAuth } from "hono/basic-auth";
 import { photos } from "./photos";
+import { telegram } from "./telegram";
 import { layout } from "./layout";
 
 type Bindings = {
@@ -121,6 +122,7 @@ app.use("/admin/*", async (c, next) => {
   return auth(c, next);
 });
 app.route("/", photos);   // 사진 950 (src/photos.ts)
+app.route("/", telegram);   // 텔레그램 봇·예약 대기열 (src/telegram.ts)
 
 // ---------------------------------------------------------------- dashboard
 

@@ -24,10 +24,21 @@ class ScheduledJob:
 
 
 class ScheduleManager:
-    def __init__(self, path: str):
+    def __init__(self, path: str, program: str | None = None):
         self._path = path
+        self._program = program   # 'onhouse' | 'main' — 주면 예약이 바뀔 때마다 서버(텔레그램 봇용)에 목록을 올린다
         self._jobs: list[ScheduledJob] = []
         self._load()
+        self._sync()
+
+    def _sync(self):
+        if not self._program:
+            return
+        try:
+            from license_gate import report_schedules
+            report_schedules(self._program, [asdict(j) for j in self._jobs])
+        except Exception:
+            pass
 
     def _load(self):
         try:
@@ -44,6 +55,7 @@ class ScheduleManager:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception:
             pass
+        self._sync()
 
     def get_all(self) -> list[ScheduledJob]:
         return list(self._jobs)

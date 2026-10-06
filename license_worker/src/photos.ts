@@ -35,12 +35,12 @@ const OH = { cookie: "", at: 0, id: "" };
 async function ensureSettings(db: D1Database) {
   await db.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)").run();
 }
-async function getSetting(db: D1Database, key: string): Promise<string> {
+export async function getSetting(db: D1Database, key: string): Promise<string> {
   await ensureSettings(db);
   const row = await db.prepare("SELECT value FROM settings WHERE key = ?").bind(key).first<{ value: string }>();
   return row?.value ?? "";
 }
-async function setSetting(db: D1Database, key: string, value: string) {
+export async function setSetting(db: D1Database, key: string, value: string) {
   await ensureSettings(db);
   await db.prepare("INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at")
     .bind(key, value, new Date().toISOString()).run();

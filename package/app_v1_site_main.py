@@ -875,7 +875,7 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self._load_send_config()
         # 텔레그램으로 "목록" / "실행 <예약이름>" 을 보내면 그 예약을 바로 돌리고 결과 엑셀을 텔레그램으로 보낸다
         self._force_tg = False
-        self.tg_cmd = auto_send.TelegramCommander(lambda: self._send_config(), "매물수집기")
+        self.tg_cmd = auto_send.TelegramCommander(lambda: self._send_config(), "매물수집기", program="main")
         self.tg_timer = QTimer(self)
         self.tg_timer.setInterval(10000)
         self.tg_timer.timeout.connect(self._poll_telegram)
@@ -890,12 +890,12 @@ class MainWindow(QMainWindow, ScheduleMixin):
             kind, arg = auto_send.TelegramCommander.parse(cmd["text"])
             if kind == "list":
                 names = [f"{'[켜짐]' if j.enabled else '[꺼짐]'} {j.name} ({'당근' if j.site == 'daangn' else '네이버'} {j.schedule_time})" for j in self._schedule_manager.get_all()]
-                self.tg_cmd.reply("[매물수집기] 예약 목록\n" + ("\n".join(names) if names else "(없음)") + "\n\n실행 <예약이름> 으로 바로 수집합니다")
+                self.tg_cmd.reply_to(cmd, "[매물수집기] 예약 목록\n" + ("\n".join(names) if names else "(없음)") + "\n\n실행 <예약이름> 으로 바로 수집합니다")
             elif kind == "help":
-                self.tg_cmd.reply("[매물수집기] " + auto_send.TelegramCommander.HELP)
+                self.tg_cmd.reply_to(cmd, "[매물수집기] " + auto_send.TelegramCommander.HELP)
             elif kind == "run":
                 self._send_log(f"텔레그램 명령: 실행 [{arg}]")
-                self.tg_cmd.reply("[매물수집기] " + self._run_job_by_name_tg(arg))
+                self.tg_cmd.reply_to(cmd, "[매물수집기] " + self._run_job_by_name_tg(arg))
 
     def _run_job_by_name_tg(self, name: str) -> str:
         name = (name or "").strip()
