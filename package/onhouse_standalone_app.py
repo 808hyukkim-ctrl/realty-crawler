@@ -568,9 +568,9 @@ class Worker(QObject):
 class ScheduleAddDialog(QDialog):
     """예약 추가: 이름 / 시각(HH:mm) / 요일(매일 또는 개별). 수집 조건은 호출 시점의 화면 설정을 그대로 저장한다."""
 
-    def __init__(self, summary: str, parent=None):
+    def __init__(self, summary: str, parent=None, preset: Optional[Tuple[str, str, List[str]]] = None):
         super().__init__(parent)
-        self.setWindowTitle("예약 자동 실행 추가")
+        self.setWindowTitle("예약 수정" if preset else "예약 자동 실행 추가")
         self.setMinimumWidth(460)
         self.result: Optional[Tuple[str, str, List[str]]] = None
         lay = QVBoxLayout(self)
@@ -605,6 +605,16 @@ class ScheduleAddDialog(QDialog):
         dl.addStretch(1)
         self.chk_daily.toggled.connect(self._on_daily)
         lay.addWidget(days_box)
+        if preset:   # 수정: 기존 이름·시각·요일을 채워 둔다
+            name0, hhmm0, days0 = preset
+            self.ed_name.setText(name0)
+            self.te_time.setTime(QTime.fromString(hhmm0, "HH:mm"))
+            if "daily" in (days0 or []):
+                self.chk_daily.setChecked(True)
+            else:
+                self.chk_daily.setChecked(False)
+                for d, cb in self.day_checks.items():
+                    cb.setChecked(d in (days0 or []))
 
         box = QGroupBox("이 예약에 저장되는 수집 조건 (현재 화면 설정)")
         bl = QVBoxLayout(box)
@@ -1068,9 +1078,20 @@ class MainWindow(QMainWindow):
         sl = QHBoxLayout(sch)
         self.lst_sched = QListWidget()
         self.lst_sched.setMinimumHeight(160)
+        self.lst_sched.setStyleSheet(
+            "QListWidget{background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:4px;font-size:13px;}"
+            "QListWidget::item{padding:6px 8px;border-radius:6px;}"
+            "QListWidget::item:selected{background:#4f46e5;color:#ffffff;}"
+            "QListWidget::item:hover{background:#1e293b;}"
+        )
+        self.lst_sched.itemDoubleClicked.connect(lambda _it: self._load_schedule_into_ui())
         sl.addWidget(self.lst_sched, 1)
         bl = QVBoxLayout()
         self.btn_sched_add2 = QPushButton("현재 설정으로 예약 추가")
+        self.btn_sched_load = QPushButton("선택 조건 화면에 불러오기")
+        self.btn_sched_edit = QPushButton("선택 수정 (현재 화면 조건으로)")
+        self.btn_sched_load.clicked.connect(self._load_schedule_into_ui)
+        self.btn_sched_edit.clicked.connect(self._edit_schedule)
         self.btn_sched_toggle = QPushButton("선택 켜기/끄기")
         self.btn_sched_run = QPushButton("선택 예약 지금 실행")
         self.btn_sched_del = QPushButton("선택 삭제")
@@ -1078,7 +1099,7 @@ class MainWindow(QMainWindow):
         self.btn_sched_toggle.clicked.connect(self._toggle_schedule)
         self.btn_sched_run.clicked.connect(self._run_schedule_now)
         self.btn_sched_del.clicked.connect(self._remove_schedule)
-        for b in (self.btn_sched_add2, self.btn_sched_toggle, self.btn_sched_run, self.btn_sched_del):
+        for b in (self.btn_sched_add2, self.btn_sched_load, self.btn_sched_edit, self.btn_sched_toggle, self.btn_sched_run, self.btn_sched_del):
             bl.addWidget(b)
         bl.addStretch(1)
         sl.addLayout(bl)
@@ -1435,6 +1456,33 @@ class MainWindow(QMainWindow):
         self.schedules.add(ScheduledJob(id=uuid.uuid4().hex[:8], name=name, site="onhouse", settings=snap, schedule_time=hhmm, days=days))
         self._refresh_schedule_list()
         self._append_log(f"예약 추가: {hhmm} {'매일' if 'daily' in days else ','.join(DAY_LABELS[d] for d in days)} — {name}")
+
+    def _load_schedule_into_ui(self):
+        job = self._selected_job()
+        if not job:
+            QMessageBox.information(self, "안내", "목록에서 예약을 먼저 고르세요.")
+            return
+        self._apply_settings(job.settings)
+        self.tabs.setCurrentIndex(0)
+        self._append_log(f"예약 [{job.name}] 조건을 화면에 불러왔습니다 — 고친 뒤 예약 탭에서 [선택 수정] 을 누르면 그 예약이 바뀝니다")
+
+    def _edit_schedule(self):
+        job = self._selected_job()
+        if not job:
+            QMessageBox.information(self, "안내", "목록에서 수정할 예약을 먼저 고르세요.")
+            return
+        snap = self._snapshot_settings()
+        if not snap["trade"]:
+            QMessageBox.warning(self, "오류", "거래유형(월세/전세/매매)을 하나 이상 선택하세요.")
+            return
+        dlg = ScheduleAddDialog(self._settings_summary(snap), self, preset=(job.name, job.schedule_time, list(job.days)))
+        if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.result:
+            return
+        name, hhmm, days = dlg.result
+        job.name, job.schedule_time, job.days, job.settings = name, hhmm, days, snap
+        self.schedules.update(job)
+        self._refresh_schedule_list()
+        self._append_log(f"예약 수정: {hhmm} {'매일' if 'daily' in days else ','.join(DAY_LABELS[d] for d in days)} — {name} (현재 화면 조건으로 저장)")
 
     def _remove_schedule(self):
         job = self._selected_job()
