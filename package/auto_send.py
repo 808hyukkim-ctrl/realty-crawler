@@ -165,7 +165,8 @@ class TelegramCommander:
     def __init__(self, get_cfg: Callable[[], Dict[str, Any]], app_label: str = "매물수집기"):
         self.get_cfg = get_cfg
         self.app_label = app_label
-        self.offset: int | None = None       # 마지막으로 처리한 update_id
+        self.offset: int | None = None       # 다음 조회의 offset (2분 지난 메시지까지 확인한 뒤의 값)
+        self._seen_ids: set = set()
         self._pending: List[Dict[str, Any]] = []
         self._lock = _threading.Lock()
         self._busy = False
@@ -189,24 +190,37 @@ class TelegramCommander:
         _threading.Thread(target=self._api, args=("sendMessage",), kwargs={"chat_id": chat, "text": text[:3900]}, daemon=True).start()
 
     def _fetch(self) -> None:
+        """텔레그램 getUpdates. 봇 하나를 여러 프로그램(온하우스·통합 수집기)이 같이 보므로, 메시지를 바로 '확인(offset)' 하지 않고
+        2분 지난 것만 확인한다 → 모든 프로그램이 같은 명령을 받을 수 있다. 같은 메시지는 update_id 로 한 번만 처리."""
         try:
-            d = self._api("getUpdates", offset=(self.offset + 1) if self.offset is not None else None, timeout=0)
+            import time as _time
+            d = self._api("getUpdates", timeout=0, **({"offset": self.offset} if self.offset else {}))
             if not d or not d.get("ok"):
                 return
             chat_ok = str(self.get_cfg().get("tg_chat", "")).strip()
+            now = _time.time()
+            confirm_upto = None
             for item in d.get("result") or []:
                 uid = int(item.get("update_id", 0))
-                if self.offset is None or uid > self.offset:
-                    self.offset = uid
-                if not self._primed:
-                    continue   # 프로그램 켜기 전에 쌓인 옛 메시지는 무시
                 msg = item.get("message") or {}
+                ts = float(msg.get("date") or 0)
+                if ts and now - ts > 120:
+                    confirm_upto = max(confirm_upto or 0, uid)   # 2분 지난 메시지는 다음 조회부터 안 받도록 확인
+                if uid in self._seen_ids:
+                    continue
+                self._seen_ids.add(uid)
+                if not self._primed or (ts and now - ts > 120):
+                    continue   # 프로그램 켜기 전에 쌓인 옛 메시지는 무시
                 chat = str((msg.get("chat") or {}).get("id", ""))
                 text = str(msg.get("text") or "").strip()
                 if not text or (chat_ok and chat != chat_ok):
                     continue
                 with self._lock:
                     self._pending.append({"text": text, "chat": chat})
+            if confirm_upto is not None:
+                self.offset = confirm_upto + 1
+            if len(self._seen_ids) > 2000:
+                self._seen_ids = set(sorted(self._seen_ids)[-500:])
             self._primed = True
         finally:
             self._busy = False
