@@ -49,7 +49,7 @@ export async function setSetting(db: D1Database, key: string, value: string) {
 // ---------------------------------------------------------------- 링크 판별
 const naverNo = (u: string) => (u.match(/articleNo=(\d{6,})/) || u.match(/land\.naver\.com\/.*?article(?:s|\/info)?\/(\d{6,})/) || [])[1] || "";
 const daangnId = (u: string) => (u.match(/daangn\.com\/(?:kr\/)?(?:realty\/)?articles\/(\d+)/) || [])[1] || "";
-const onhouseId = (u: string) => (u.match(/onhouse\.com\/index\/rent_view\/(\d+)/) || [])[1] || "";
+const onhouseId = (u: string) => (/onhouse\.com/.test(u) ? (u.match(/rent_view\/(\d+)/) || [])[1] : "") || "";   // 로그인 리다이렉트(?login=true&callback=/index/rent_view/N) 꼴도
 const safeName = (s: string) => String(s || "").replace(/[\\/:*?"<>|\s]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60) || "사진";
 const dedupe = (urls: string[]) => { const out: string[] = []; const seen = new Set<string>(); for (const u of urls) { const k = u.split("?")[0]; if (seen.has(k)) continue; seen.add(k); out.push(u); } return out; };
 const stripTags = (s: string) => String(s || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -97,8 +97,12 @@ async function photosOnhouse(hid: string, db: D1Database): Promise<Found> {
   if (!page.includes("topMainTitleArea")) page = await get(await onhouseLogin(id, pw));
   if (!page.includes("topMainTitleArea")) throw new Error("온하우스 상세를 열 수 없습니다 (유료 회원사만 조회 가능)");
   const seen = new Map<string, string>();
+  // 직방 연동 매물 사진(ic.zigbang.com, ?w= 필수) + 온하우스 자체 사진/건물 사진(cloudfront). 큰 폭을 요청해 받아 950 으로 줄인다
+  for (const m of page.matchAll(/https:\/\/ic\.zigbang\.com\/vp\/rooms\/[A-Za-z0-9]+\/([A-Za-z0-9]+\.(?:jpg|jpeg|png|webp))/gi)) {
+    const k = "zb:" + m[1].toLowerCase(); if (!seen.has(k)) seen.set(k, m[0] + "?w=1900");
+  }
   for (const m of page.matchAll(/https:\/\/[a-z0-9.-]+\.cloudfront\.net\/(?:room_img|building_img|[a-z_]*img)\/([A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp))/gi)) {
-    const k = m[1].toLowerCase(); if (!seen.has(k)) seen.set(k, m[0] + "?w=1900");   // CDN 에 큰 폭을 요청해 받아 950 으로 줄인다 (안 되면 화면이 인자 없는 원본으로 재시도)
+    const k = m[1].toLowerCase(); if (!seen.has(k)) seen.set(k, m[0] + "?w=1900");
   }
   const title = stripTags((page.match(/class="addr_title"[^>]*>([\s\S]*?)<\/h6>/) || [])[1] || "");
   return { label: `온하우스_${hid}` + (title ? `_${safeName(title)}` : ""), photos: [...seen.values()], referer: ONHOUSE_HOST + "/" };
@@ -160,7 +164,7 @@ photos.post("/admin/photos/collect", async (c) => {
   return c.json({ items: out });
 });
 
-const PROXY_HOST_OK = /(\.pstatic\.net|\.gcp-karroter\.net|\.cloudfront\.net|\.daangn\.com|\.naver\.(com|net)|\.onhouse\.com)$/i;
+const PROXY_HOST_OK = /(\.pstatic\.net|\.gcp-karroter\.net|\.cloudfront\.net|\.daangn\.com|\.naver\.(com|net)|\.onhouse\.com|\.zigbang\.com)$/i;
 photos.get("/admin/photos/img", async (c) => {
   const u = c.req.query("u") || "";
   const ref = c.req.query("r") || "";
@@ -170,7 +174,8 @@ photos.get("/admin/photos/img", async (c) => {
   const headers: Record<string, string> = { "User-Agent": BROWSER_HEADERS["User-Agent"], Accept: "image/avif,image/webp,image/*,*/*;q=0.8" };
   if (ref) headers.Referer = ref;
   let r = await fetch(target.toString(), { headers, cf: { cacheTtl: 3600, cacheEverything: true } } as any);
-  if (!r.ok && target.search) r = await fetch(target.origin + target.pathname, { headers } as any);   // 크기 인자를 못 받는 파일은 원본으로
+  if (!r.ok && /[?&]w=\d+/.test(target.search)) r = await fetch(target.toString().replace(/([?&])w=\d+/, "$1w=873"), { headers } as any);   // 큰 폭을 못 받으면 873
+  if (!r.ok && target.search) r = await fetch(target.origin + target.pathname, { headers } as any);   // 그래도 안 되면 인자 없는 원본으로
   if (!r.ok) return c.text(`image ${r.status}`, 502);
   const ct = r.headers.get("content-type") || "application/octet-stream";
   if (!/^image\//.test(ct) && !PROXY_HOST_OK.test(target.hostname)) return c.text("not image", 415);

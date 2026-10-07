@@ -74,7 +74,10 @@ def daangn_id(url: str) -> str:
 
 
 def onhouse_id(url: str) -> str:
-    m = re.search(r"onhouse\.com/index/rent_view/(\d+)", url)
+    # https://www.onhouse.com/index/rent_view/3376113 또는 로그인 리다이렉트 꼴 https://www.onhouse.com/?login=true&callback=/index/rent_view/3376113
+    if "onhouse.com" not in url:
+        return ""
+    m = re.search(r"rent_view/(\d+)", url)
     return m.group(1) if m else ""
 
 
@@ -123,9 +126,12 @@ def photos_onhouse(hid: str, crawler: OnhouseCrawler) -> Tuple[str, List[str]]:
     if len(html) < 400 and ("로그인" in html or "유료" in html):
         raise RuntimeError("온하우스 상세를 열 수 없습니다 — 유료 회원사 계정으로 로그인해야 합니다")
     seen: Dict[str, str] = {}
-    # 매물 사진은 room_img/, 건물 사진은 building_img/ 아래 (…_resize.jpg). ?w=… 를 떼면 원본
+    # 매물 사진: 직방 연동 매물은 ic.zigbang.com/vp/rooms/…(?w= 필수), 온하우스 자체 매물은 cloudfront room_img/. 건물 사진은 cloudfront building_img/.
+    # 둘 다 CDN 리사이저에 큰 폭을 요청해 받은 뒤 950 으로 줄인다 (직방은 인자 없으면 400 → 실패 시 ?w=873 로 재시도)
+    for m in re.finditer(r"https://ic\.zigbang\.com/vp/rooms/[A-Za-z0-9]+/([A-Za-z0-9]+\.(?:jpg|jpeg|png|webp))", html, re.I):
+        seen.setdefault("zb:" + m.group(1).lower(), m.group(0) + "?w=1900")
     for m in re.finditer(r"https://[a-z0-9.-]+\.cloudfront\.net/(?:room_img|building_img|[a-z_]*img)/([A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp))", html, re.I):
-        seen.setdefault(m.group(1).lower(), m.group(0) + "?w=1900")   # CDN 리사이저에 큰 폭을 요청해 받은 뒤 950 으로 줄인다
+        seen.setdefault(m.group(1).lower(), m.group(0) + "?w=1900")
     title = ""
     tm = re.search(r'class="addr_title"[^>]*>\s*([^<]+)<', html)
     if tm:
@@ -255,8 +261,10 @@ def process_link(
         if cancelled():
             break
         im = fetch_image(u, referer)
+        if im is None and "?w=" in u:
+            im = fetch_image(re.sub(r"\?w=\d+", "?w=873", u), referer)   # 큰 폭을 못 받는 파일은 873 으로
         if im is None and "?" in u:
-            im = fetch_image(u.split("?")[0], referer)   # 크기 인자(?w=…)를 못 받는 파일은 원본으로
+            im = fetch_image(u.split("?")[0], referer)   # 그래도 안 되면 인자 없는 원본으로
         if im is None:
             log(f"    [{i}] 내려받기 실패: {u[:90]}")
             continue
