@@ -31,7 +31,7 @@ async function ensure(db: D1Database) {
     data TEXT NOT NULL,
     first_at TEXT NOT NULL, last_at TEXT NOT NULL, seen INTEGER NOT NULL DEFAULT 1,
     UNIQUE(site, listing_no, deal))`).run();
-  for (const col of ["phone TEXT NOT NULL DEFAULT ''", "memo TEXT NOT NULL DEFAULT ''"]) {   // 10-08 추가 열 (이미 있으면 무시)
+  for (const col of ["phone TEXT NOT NULL DEFAULT ''", "memo TEXT NOT NULL DEFAULT ''", "contacts TEXT NOT NULL DEFAULT ''"]) {   // 10-08 추가 열 (이미 있으면 무시)
     try { await db.prepare("ALTER TABLE listings ADD COLUMN " + col).run(); } catch (e) { /* 있음 */ }
   }
   await db.prepare("CREATE INDEX IF NOT EXISTS listings_last ON listings(last_at DESC)").run();
@@ -84,6 +84,39 @@ function landlordPhone(row: Record<string, any>): string {
     || [first(row, "임대인", "임대인정보", "소유자", "집주인")].filter((v) => /\d{3,}/.test(v))[0]   // "관리부동산 (0502-4226-6779)" 처럼 이름+번호 섞인 칸
     || first(row, "안심번호");
 }
+/** 한국 전화번호: 010·011~019, 02, 031~064, 070, 080, 050x(안심) — "010-1234-5678", "02 555 1234", "(0502)4226-6776" 등 */
+const PHONE_RE = /(0(?:2|[3-6][1-5]|70|80|50\d|1[016789]))[-.\s)]*(\d{3,4})[-.\s]*(\d{4})(?!\d)/g;
+export const phoneDigits = (v: string) => v.replace(/\D/g, "");
+/** 열 이름으로 역할: 임대인 / 임차인 / 관리 / 중개 / 안심 / 연락처(역할 없음) / 본문(설명·메모 같은 글) */
+export function roleOf(col: string): string {
+  if (/임대인|소유자|집주인|주인/.test(col)) return "임대인";
+  if (/임차인|세입자|거주자|입주자/.test(col)) return "임차인";
+  if (/관리|경비|소장/.test(col)) return "관리";
+  if (/중개|부동산|공인/.test(col)) return "중개";
+  if (/안심/.test(col)) return "안심";
+  if (/연락처|전화|휴대폰|핸드폰|폰|TEL|tel|HP/.test(col)) return "연락처";
+  return "본문";
+}
+const SKIP_COL = /URL|url|링크|위도|경도|좌표|일시|날짜|등록일|확인일|승인일|입주가능|번호$/;   // 번호를 찾지 않을 열 (매물번호·사업자번호·우편번호 등)
+/** 행의 모든 칸에서 전화번호를 찾아 "역할 번호" 로 — 임대인 연락처(primary)와 같은 번호는 뺀다 */
+export function extractContacts(row: Record<string, any>, primary: string): string {
+  const seen = new Set<string>(phoneDigits(primary) ? [phoneDigits(primary)] : []);
+  const out: string[] = [];
+  for (const [col, raw] of Object.entries(row)) {
+    if (SKIP_COL.test(col) && roleOf(col) === "본문") continue;
+    const v = s(raw); if (!v || !/\d{4}/.test(v)) continue;
+    const role = roleOf(col);
+    for (const m of v.matchAll(PHONE_RE)) {
+      const num = `${m[1]}-${m[2]}-${m[3]}`; const d = phoneDigits(num);
+      if (seen.has(d)) continue; seen.add(d);
+      out.push((role === "연락처" ? "" : role + " ") + num);
+      if (out.length >= 8) break;
+    }
+    if (out.length >= 8) break;
+  }
+  return out.join(" · ").slice(0, 300);
+}
+
 /** 주소 뒤에 호수 열이 따로 있으면 붙인다 ("논현동 124-12" + "302" → "논현동 124-12 302호") */
 function withHo(addr: string, row: Record<string, any>): string {
   const ho = first(row, "호수", "호실", "호");
@@ -128,7 +161,8 @@ export function summarize(site: string, row: Record<string, any>) {
   }
   const phone = landlordPhone(row);
   const memo = first(row, "메모", "비고", "특이사항");
-  return { no: no.slice(0, 80), url: url.slice(0, 500), addr: addr.slice(0, 200), kind: kind.slice(0, 40), deal: deal.slice(0, 20), price: price.slice(0, 60), title: title.slice(0, 200), phone: phone.slice(0, 120), memo: memo.slice(0, 500) };
+  const contacts = first(row, "기타 연락처", "임차인·관리 등") || extractContacts(row, phone);   // 수기 입력은 적은 그대로, 엑셀은 번호 패턴으로
+  return { no: no.slice(0, 80), url: url.slice(0, 500), addr: addr.slice(0, 200), kind: kind.slice(0, 40), deal: deal.slice(0, 20), price: price.slice(0, 60), title: title.slice(0, 200), phone: phone.slice(0, 120), memo: memo.slice(0, 500), contacts: contacts.slice(0, 300) };
 }
 
 // ---------------------------------------------------------------- 프로그램 API
@@ -160,7 +194,7 @@ listings.post("/admin/listings/manual", async (c) => {
   const g = (k: string) => String(form.get(k) ?? "").trim();
   const addr = g("addr");
   if (!addr) return c.redirect("/admin/listings?err=" + encodeURIComponent("지번·호수를 적어주세요."));
-  const row: Record<string, string> = { "지번·호수": addr, "임대인 연락처": g("phone"), "종류": g("kind"), "거래": g("deal"), "금액": g("price"), "이름": g("title"), "메모": g("memo") };
+  const row: Record<string, string> = { "지번·호수": addr, "임대인 연락처": g("phone"), "기타 연락처": g("contacts"), "종류": g("kind"), "거래": g("deal"), "금액": g("price"), "이름": g("title"), "메모": g("memo") };
   for (const k of Object.keys(row)) if (!row[k]) delete row[k];
   const r = await ingest(c.env.DB, c.env.ADMIN_USER || "admin", g("site") || "임대인", "수기 입력", [row]);
   return c.redirect("/admin/listings?added=" + (r.inserted ? 1 : 0) + "&site=" + encodeURIComponent(r.site));
@@ -188,14 +222,15 @@ async function ingest(db: D1Database, username: string, siteHint: string, fileNa
     if (keys.has(no + "|" + sum.deal)) continue;                      // 같은 파일 안의 중복 (한 statement 묶음 안에서 두 번 upsert 방지)
     keys.add(no + "|" + sum.deal);
     stmts.push(db.prepare(
-      `INSERT INTO listings (site, listing_no, url, username, file, addr, kind, deal, price, title, phone, memo, data, first_at, last_at, seen)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      `INSERT INTO listings (site, listing_no, url, username, file, addr, kind, deal, price, title, phone, memo, contacts, data, first_at, last_at, seen)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
        ON CONFLICT(site, listing_no, deal) DO UPDATE SET url = excluded.url, username = excluded.username, file = excluded.file,
          addr = excluded.addr, kind = excluded.kind, deal = excluded.deal, price = excluded.price, title = excluded.title,
          phone = CASE WHEN excluded.phone <> '' THEN excluded.phone ELSE listings.phone END,
          memo = CASE WHEN excluded.memo <> '' THEN excluded.memo ELSE listings.memo END,
+         contacts = CASE WHEN excluded.contacts <> '' THEN excluded.contacts ELSE listings.contacts END,
          data = excluded.data, last_at = excluded.last_at, seen = listings.seen + 1`
-    ).bind(site, no, sum.url, username, file, sum.addr, sum.kind, sum.deal, sum.price, sum.title, sum.phone, sum.memo, json, at, at));
+    ).bind(site, no, sum.url, username, file, sum.addr, sum.kind, sum.deal, sum.price, sum.title, sum.phone, sum.memo, sum.contacts, json, at, at));
   }
   const before = (await db.prepare("SELECT COUNT(*) n FROM listings WHERE site = ?").bind(site).first<{ n: number }>())?.n ?? 0;
   for (let i = 0; i < stmts.length; i += 40) await db.batch(stmts.slice(i, i + 40));
@@ -212,6 +247,7 @@ listings.post("/admin/listings/:id/edit", async (c) => {
   const sets: string[] = []; const binds: any[] = [];
   if (typeof body.phone === "string") { sets.push("phone = ?"); binds.push(body.phone.trim().slice(0, 120)); }
   if (typeof body.memo === "string") { sets.push("memo = ?"); binds.push(body.memo.trim().slice(0, 500)); }
+  if (typeof body.contacts === "string") { sets.push("contacts = ?"); binds.push(body.contacts.trim().slice(0, 300)); }
   if (typeof body.addr === "string" && body.addr.trim()) { sets.push("addr = ?"); binds.push(body.addr.trim().slice(0, 200)); }
   if (!sets.length || !Number.isFinite(id)) return c.json({ success: false, message: "고칠 내용이 없습니다." }, 400);
   await c.env.DB.prepare(`UPDATE listings SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, id).run();
@@ -241,8 +277,8 @@ function whereOf(f: Filter): [string, any[]] {
   if (f.to && /^\d{4}-\d{2}-\d{2}$/.test(f.to)) { w.push("last_at <= ?"); b.push(kstDayEnd(f.to)); }
   if (f.q) {
     const like = `%${f.q}%`; const digits = f.q.replace(/\D/g, "");
-    w.push("(addr LIKE ? OR phone LIKE ? OR memo LIKE ? OR title LIKE ? OR listing_no LIKE ? OR price LIKE ? OR kind LIKE ? OR data LIKE ?" + (digits.length >= 4 ? " OR REPLACE(REPLACE(phone, '-', ''), ' ', '') LIKE ?" : "") + ")");
-    b.push(like, like, like, like, like, like, like, like); if (digits.length >= 4) b.push(`%${digits}%`);
+    w.push("(addr LIKE ? OR phone LIKE ? OR contacts LIKE ? OR memo LIKE ? OR title LIKE ? OR listing_no LIKE ? OR price LIKE ? OR kind LIKE ? OR data LIKE ?" + (digits.length >= 4 ? " OR REPLACE(REPLACE(phone, '-', ''), ' ', '') LIKE ? OR REPLACE(REPLACE(contacts, '-', ''), ' ', '') LIKE ?" : "") + ")");
+    b.push(like, like, like, like, like, like, like, like, like); if (digits.length >= 4) b.push(`%${digits}%`, `%${digits}%`);
   }
   return [w.length ? " WHERE " + w.join(" AND ") : "", b];
 }
@@ -276,6 +312,7 @@ listings.get("/admin/listings", async (c) => {
     return html`<tr data-id="${r.id}">
       <td class="addr ed" data-f="addr" title="클릭해서 고치기">${r.addr ?? ""}</td>
       <td class="phone ed" data-f="phone" title="클릭해서 고치기">${r.phone ?? ""}</td>
+      <td class="small contacts ed" data-f="contacts" title="임차인·세입자·관리·중개 등 (클릭해서 고치기)">${r.contacts ?? ""}</td>
       <td><span class="badge ${r.site === "naver" ? "status-active" : r.site === "daangn" ? "status-soon" : r.site === "onhouse" ? "status-unlimited" : "status-pink"}">${siteLabel(r.site)}</span></td>
       <td class="small">${r.kind ?? ""}</td>
       <td class="small">${r.deal ?? ""}</td>
@@ -309,6 +346,7 @@ listings.get("/admin/listings", async (c) => {
       <b>수기 입력</b>
       <input type="text" name="addr" placeholder="지번·호수 (예: 논현동 124-12 302호)" required style="min-width:260px">
       <input type="text" name="phone" placeholder="임대인 연락처" style="min-width:150px">
+      <input type="text" name="contacts" placeholder="임차인·관리 등 (예: 임차인 010-… 관리 02-…)" style="min-width:230px">
       <input type="text" name="kind" placeholder="종류" style="width:90px">
       <input type="text" name="deal" placeholder="거래" style="width:70px">
       <input type="text" name="price" placeholder="금액" style="width:110px">
@@ -322,7 +360,7 @@ listings.get("/admin/listings", async (c) => {
       <input type="text" id="upsite" placeholder="구분 (예: 임대인)" value="임대인" title="네이버·당근·온하우스 수집기 엑셀은 열 이름으로 자동 판별됩니다">
       <input type="file" id="upfile" accept=".xlsx,.xls,.csv" multiple>
       <button type="button" class="btn btn-primary" id="upgo">올리기</button>
-      <span class="small muted" id="upmsg">열 이름 줄은 자동으로 찾습니다(위에 제목 줄이 있어도 됨). 지번·주소와 연락처 열은 알아서 맨 앞에 정리되고, 같은 행을 다시 올리면 중복 없이 갱신됩니다.</span>
+      <span class="small muted" id="upmsg">열 이름 줄은 자동으로 찾습니다(위에 제목 줄이 있어도 됨). 지번·주소와 임대인 연락처는 맨 앞에, 임차인·세입자·관리·중개 번호(010·02·0502…)는 그 옆 칸에 정리됩니다. 같은 행을 다시 올리면 중복 없이 갱신됩니다.</span>
     </div>
     <form class="search-form lf" method="get" id="lf">
       <select name="site"><option value="">전체 구분</option>${siteOpts}</select>
@@ -338,8 +376,8 @@ listings.get("/admin/listings", async (c) => {
     <div id="xlmsg" class="small muted" style="margin:-8px 0 12px"></div>
     ${recent.length ? html`<div class="recent"><b>최근 올린 파일</b> ${recent.map((r: any) => html`<a class="chip" href="/admin/listings?${raw(qs({ site: "", q: "", from: "", to: "", user: "", file: r.file }))}" title="${r.username} · ${kst(r.t)}">${siteLabel(r.site)} · ${r.file} <em>${r.n}</em></a>`)}</div>` : ""}
     <table class="user-table lt">
-      <thead><tr><th>지번·호수</th><th>임대인 연락처</th><th>구분</th><th>종류</th><th>거래</th><th>금액</th><th>이름·제목</th><th>메모</th><th>올린 날</th><th></th></tr></thead>
-      <tbody>${rows.length ? rows : html`<tr><td colspan="10" class="empty">${total ? "이 페이지에는 없습니다." : "아직 비어 있습니다. 위에서 수기로 넣거나 엑셀을 올리면 쌓입니다."}</td></tr>`}</tbody>
+      <thead><tr><th>지번·호수</th><th>임대인 연락처</th><th>임차인·관리 등</th><th>구분</th><th>종류</th><th>거래</th><th>금액</th><th>이름·제목</th><th>메모</th><th>올린 날</th><th></th></tr></thead>
+      <tbody>${rows.length ? rows : html`<tr><td colspan="11" class="empty">${total ? "이 페이지에는 없습니다." : "아직 비어 있습니다. 위에서 수기로 넣거나 엑셀을 올리면 쌓입니다."}</td></tr>`}</tbody>
     </table>
     <div class="pager">${page > 1 ? pageLink(page - 1, "‹ 이전") : ""}<span class="small">${page} / ${pages} 페이지 · ${total}건</span>${page < pages ? pageLink(page + 1, "다음 ›") : ""}</div>
     <form method="post" action="/admin/listings/delete" id="delf" style="display:none">
@@ -359,7 +397,7 @@ export function lookupWhere(q: string): [string, any[]] {
   const w: string[] = []; const b: any[] = [];
   for (const t of toks) { w.push("REPLACE(REPLACE(addr, ' ', ''), ',', '') LIKE ?"); b.push(`%${t.replace(/,/g, "")}%`); }
   let sql = "(" + w.join(" AND ") + ")";
-  if (digits.length >= 7 && toks.length === 1) { sql += " OR REPLACE(REPLACE(phone, '-', ''), ' ', '') LIKE ?"; b.push(`%${digits}%`); }
+  if (digits.length >= 7 && toks.length === 1) { sql += " OR REPLACE(REPLACE(phone, '-', ''), ' ', '') LIKE ? OR REPLACE(REPLACE(contacts, '-', ''), ' ', '') LIKE ?"; b.push(`%${digits}%`, `%${digits}%`); }
   return [" WHERE " + sql, b];
 }
 listings.get("/admin/listings/lookup.json", async (c) => {
@@ -367,8 +405,8 @@ listings.get("/admin/listings/lookup.json", async (c) => {
   const q = (c.req.query("q") ?? c.req.query("jibun") ?? "").toString().trim();
   if (q.length < 2) return c.json({ q, rows: [], count: 0 });
   const [where, binds] = lookupWhere(q);
-  const { results } = await c.env.DB.prepare("SELECT id, site, addr, phone, memo, kind, deal, price, title, url, last_at FROM listings" + where + " ORDER BY addr, id LIMIT 300").bind(...binds).all();
-  const rows = (results ?? []).map((r: any) => ({ id: r.id, site: siteLabel(r.site), addr: r.addr, phone: r.phone, memo: r.memo, kind: r.kind, deal: r.deal, price: r.price, title: r.title, url: r.url, last_at: kst(r.last_at) }));
+  const { results } = await c.env.DB.prepare("SELECT id, site, addr, phone, contacts, memo, kind, deal, price, title, url, last_at FROM listings" + where + " ORDER BY addr, id LIMIT 300").bind(...binds).all();
+  const rows = (results ?? []).map((r: any) => ({ id: r.id, site: siteLabel(r.site), addr: r.addr, phone: r.phone, contacts: r.contacts, memo: r.memo, kind: r.kind, deal: r.deal, price: r.price, title: r.title, url: r.url, last_at: kst(r.last_at) }));
   return c.json({ q, count: rows.length, rows });
 });
 
@@ -379,8 +417,8 @@ listings.get("/admin/listings/rows.json", async (c) => {
   const after = parseInt(c.req.query("after") ?? "0", 10) || 0;
   const limit = Math.min(2000, Math.max(1, parseInt(c.req.query("limit") ?? "1000", 10) || 1000));
   const [where, binds] = whereOf(f);
-  const { results } = await c.env.DB.prepare("SELECT id, site, listing_no, url, username, file, addr, phone, memo, kind, deal, price, title, first_at, last_at, seen, data FROM listings" + (where ? where + " AND" : " WHERE") + " id > ? ORDER BY id LIMIT ?").bind(...binds, after, limit).all();
-  const rows = (results ?? []).map((r: any) => ({ id: r.id, site: siteLabel(r.site), no: showNo(r.listing_no), url: r.url, username: r.username, file: r.file, addr: r.addr, phone: r.phone, memo: r.memo, kind: r.kind, deal: r.deal, price: r.price, title: r.title, first_at: kst(r.first_at), last_at: kst(r.last_at), seen: r.seen, data: (() => { try { return JSON.parse(r.data); } catch { return {}; } })() }));
+  const { results } = await c.env.DB.prepare("SELECT id, site, listing_no, url, username, file, addr, phone, contacts, memo, kind, deal, price, title, first_at, last_at, seen, data FROM listings" + (where ? where + " AND" : " WHERE") + " id > ? ORDER BY id LIMIT ?").bind(...binds, after, limit).all();
+  const rows = (results ?? []).map((r: any) => ({ id: r.id, site: siteLabel(r.site), no: showNo(r.listing_no), url: r.url, username: r.username, file: r.file, addr: r.addr, phone: r.phone, contacts: r.contacts, memo: r.memo, kind: r.kind, deal: r.deal, price: r.price, title: r.title, first_at: kst(r.first_at), last_at: kst(r.last_at), seen: r.seen, data: (() => { try { return JSON.parse(r.data); } catch { return {}; } })() }));
   return c.json({ rows, next: rows.length === limit ? rows[rows.length - 1].id : null });
 });
 
@@ -407,6 +445,7 @@ const LT_STYLE = `
 .lt td.addr{font-weight:700;color:var(--accent-dark);max-width:320px}
 .lt td.phone{font-family:Consolas,monospace;font-weight:600;min-width:130px}
 .lt td.memo{max-width:180px}
+.lt td.contacts,#lkres td.contacts{max-width:230px;white-space:normal;font-size:12px;line-height:1.5;min-width:120px}
 .lt td.ttl{max-width:160px}
 .lt td.nowrap{white-space:nowrap}
 .lt td.ed{cursor:text}
@@ -504,8 +543,8 @@ const LT_JS = `
       var r=await fetch('/admin/listings/lookup.json?q='+encodeURIComponent(q)).then(function(x){return x.json()});
       if($('lkq').value.trim()!==q) return;
       if(!r.rows.length){ res.innerHTML='<div class="lknone">"'+esc(q)+'" 에 해당하는 줄이 없습니다. 위 수기 입력으로 넣어두세요.</div>'; msg.textContent='0건'; return; }
-      var h='<table><thead><tr><th>지번·호수</th><th>임대인 연락처</th><th>구분</th><th>종류</th><th>거래</th><th>금액</th><th>이름·제목</th><th>메모</th><th>올린 날</th></tr></thead><tbody>';
-      r.rows.forEach(function(x){ h+='<tr data-id="'+x.id+'"><td class="addr ed" data-f="addr">'+esc(x.addr)+'</td><td class="phone ed" data-f="phone">'+esc(x.phone)+'</td><td>'+esc(x.site)+'</td><td>'+esc(x.kind)+'</td><td>'+esc(x.deal)+'</td><td>'+esc(x.price)+'</td><td>'+esc(x.title)+'</td><td class="memo ed" data-f="memo">'+esc(x.memo)+'</td><td class="small">'+esc(x.last_at)+'</td></tr>'; });
+      var h='<table><thead><tr><th>지번·호수</th><th>임대인 연락처</th><th>임차인·관리 등</th><th>구분</th><th>종류</th><th>거래</th><th>금액</th><th>이름·제목</th><th>메모</th><th>올린 날</th></tr></thead><tbody>';
+      r.rows.forEach(function(x){ h+='<tr data-id="'+x.id+'"><td class="addr ed" data-f="addr">'+esc(x.addr)+'</td><td class="phone ed" data-f="phone">'+esc(x.phone)+'</td><td class="contacts ed" data-f="contacts">'+esc(x.contacts)+'</td><td>'+esc(x.site)+'</td><td>'+esc(x.kind)+'</td><td>'+esc(x.deal)+'</td><td>'+esc(x.price)+'</td><td>'+esc(x.title)+'</td><td class="memo ed" data-f="memo">'+esc(x.memo)+'</td><td class="small">'+esc(x.last_at)+'</td></tr>'; });
       h+='</tbody></table>'+(r.count>=300?'<div class="lkmore">300건까지만 보입니다. 지번을 더 자세히 치세요.</div>':'');
       res.innerHTML=h; msg.textContent=r.count+'건';
     }catch(e){ msg.textContent='오류: '+e.message; }
@@ -537,11 +576,11 @@ const LT_JS = `
         all=all.concat(r.rows); if(!r.next) break; after=r.next;
       }
       if(!all.length){ msg.textContent='내려받을 행이 없습니다.'; btn.disabled=false; return; }
-      var meta=['지번·호수','임대인 연락처','구분','종류','거래','금액','이름·제목','메모','번호(DB)','링크(DB)','올린 계정','파일','처음 올림','최근 올림','올린 횟수'];
+      var meta=['지번·호수','임대인 연락처','임차인·관리 등','구분','종류','거래','금액','이름·제목','메모','번호(DB)','링크(DB)','올린 계정','파일','처음 올림','최근 올림','올린 횟수'];
       var cols=[]; var seen={};
       all.forEach(function(r){ Object.keys(r.data).forEach(function(k){ if(!seen[k]){ seen[k]=1; cols.push(k); } }); });
       var aoa=[meta.concat(cols)];
-      all.forEach(function(r){ var row=[r.addr||'',r.phone||'',r.site,r.kind||'',r.deal||'',r.price||'',r.title||'',r.memo||'',r.no,r.url||'',r.username,r.file||'',r.first_at,r.last_at,r.seen]; cols.forEach(function(k){ var v=r.data[k]; row.push(v==null?'':String(v)); }); aoa.push(row); });
+      all.forEach(function(r){ var row=[r.addr||'',r.phone||'',r.contacts||'',r.site,r.kind||'',r.deal||'',r.price||'',r.title||'',r.memo||'',r.no,r.url||'',r.username,r.file||'',r.first_at,r.last_at,r.seen]; cols.forEach(function(k){ var v=r.data[k]; row.push(v==null?'':String(v)); }); aoa.push(row); });
       var ws=XLSX.utils.aoa_to_sheet(aoa);
       for(var i=1;i<aoa.length;i++){ aoa[i].forEach(function(v,j){ if(typeof v==='string' && /^https?:\\/\\//.test(v)){ var cc=ws[XLSX.utils.encode_cell({r:i,c:j})]; if(cc) cc.l={Target:v}; } }); }
       ws['!cols']=aoa[0].map(function(h,j){ var w=Math.min(60,Math.max(8,String(h).length*2)); for(var i=1;i<Math.min(aoa.length,300);i++){ var v=aoa[i][j]; if(v!=null) w=Math.max(w,Math.min(60,String(v).length*1.1)); } return {wch:w}; });
