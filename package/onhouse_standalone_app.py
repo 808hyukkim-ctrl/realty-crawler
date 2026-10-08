@@ -49,7 +49,7 @@ from PySide6.QtWidgets import (
 import auto_send
 from app_main_common import (
     APP_STYLESHEET, DetailFilters, MultiSelectCombo, RangeInput, contains_any_keyword, parse_keywords_csv, wrap_in_scroll,
-    parse_saved_output_path_from_finish_message,
+    split_excel_by_category,
 )
 from onhouse_crawler import OnhouseCrawler
 from schedule_manager import DAY_NAMES, ScheduleManager, ScheduledJob
@@ -552,6 +552,9 @@ class Worker(QObject):
                 out_dir, f"온하우스_{self.p['region_label']}{period_part}_{len(all_rows)}건_{ts}.xlsx"
             )
             crawler.crawl_details_to_excel(rows=all_rows, output_path=out_path)
+            sheets = split_excel_by_category(out_path)
+            if sheets:
+                self.log.emit(f"종류별 시트 추가: {', '.join(sheets)}")
             prefix = "중단 저장 완료" if stopped else "저장 완료"
             send_cfg = self.p.get("send") or {}
             if send_cfg.get("mail_on") or send_cfg.get("tg_on"):
@@ -1681,9 +1684,6 @@ class MainWindow(QMainWindow):
             from license_gate import report_activity
             m = re.search(r"(\d+)건", msg)
             report_activity("수집", f"온하우스 · {os.path.basename(msg.split(': ', 1)[-1].split(' (')[0]) if '저장' in msg else msg}", int(m.group(1)) if m else None)
-            if "저장 완료" in msg:
-                from license_gate import upload_listings
-                upload_listings("온하우스", parse_saved_output_path_from_finish_message(msg))   # 서버 '매물 DB' 에 쌓기
         except Exception:
             pass
         self.progress.setValue(100)

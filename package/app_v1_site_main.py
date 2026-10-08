@@ -61,6 +61,7 @@ from app_main_common import (
     parse_keywords_csv as _parse_keywords_csv,
     parse_saved_output_path_from_finish_message,
     wrap_in_scroll,
+    split_excel_by_category,
 )
 from schedule_mixin import ScheduleMixin
 
@@ -182,6 +183,9 @@ class DaangnWorker(QObject):
                     region = self.params.get("region_for_file", "전체_전체_전체")
                     out = os.path.join(out_dir, f"{site}_{region}_{len(all_results)}건_{ts}.xlsx")
                 crawler._save_to_excel([daangn_excel_row(r) for r in all_results], filepath=out, columns=DAANGN_EXCEL_COLUMNS)
+                sheets = split_excel_by_category(out)
+                if sheets:
+                    self.status.emit(f"종류별 시트 추가: {', '.join(sheets)}")
                 prefix = "중단 저장 완료" if stopped else "저장 완료"
                 self.finished.emit(f"{prefix}: {out} ({len(all_results)}건)")
             else:
@@ -414,6 +418,9 @@ class OnhouseWorker(QObject):
             out_dir = self.params.get("out_dir", os.getcwd())
             out_path = os.path.join(out_dir, f"{site}_{region}_{len(all_rows)}건_{ts}.xlsx")
             crawler.crawl_details_to_excel(rows=all_rows, output_path=out_path)
+            sheets = split_excel_by_category(out_path)
+            if sheets:
+                self.status.emit(f"종류별 시트 추가: {', '.join(sheets)}")
             prefix = "중단 저장 완료" if stopped else "저장 완료"
             self.finished.emit(f"{prefix}: {out_path} ({len(all_rows)}건)")
         except Exception as e:
@@ -654,6 +661,9 @@ class NaverWorker(QObject):
             self._apply_excel_hyperlinks(out_path)
             if keywords:
                 self._apply_keyword_highlight(out_path, keywords)
+            sheets = split_excel_by_category(out_path)
+            if sheets:
+                self.status.emit(f"종류별 시트 추가: {', '.join(sheets)}")
             prefix = "중단 저장 완료" if self._cancel else "저장 완료"
             self.finished.emit(f"{prefix}: {out_path} ({len(matched_rows)}건)")
         except Exception as e:
@@ -2460,9 +2470,6 @@ class MainWindow(QMainWindow, ScheduleMixin):
             site = self.tabs.tabText(self.tabs.currentIndex()) if hasattr(self, "tabs") else ""
             m = re.search(r"(\d+)건", msg)
             report_activity("수집", f"{site} · {os.path.basename(self._last_output_path) if self._last_output_path else msg[:200]}", int(m.group(1)) if m else None)
-            if self._last_output_path:
-                from license_gate import upload_listings
-                upload_listings(site, self._last_output_path)   # 서버 '매물 DB' 에 쌓기
         except Exception:
             pass
         self._auto_send_after_save()

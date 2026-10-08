@@ -71,6 +71,92 @@ def contains_any_keyword(text: Any, keywords: List[str]) -> bool:
     return bool(rx.search(str(text or "")))
 
 
+# ---------------------------------------------------------------------------
+# 수집 결과 엑셀을 종류별 시트로 나누기 (2026-10-08, 사용자: "원룸은 원룸대로 투룸은 투룸대로 사무실·상가… 카테고리별로 엑셀 정리")
+#   첫 시트는 '전체'(원본 그대로), 그 뒤에 종류별 시트를 건수 많은 순으로 붙인다. 서식·하이퍼링크·키워드 강조(리치텍스트)도 같이 복사.
+CATEGORY_COLUMNS = ("종류", "매물유형", "건축물용도")          # 네이버 '종류', 당근 '매물유형'
+CATEGORY_TAG_COLUMNS = ("전세_태그", "월세_태그", "매매_태그")   # 온하우스는 태그 첫 항목이 방 종류 ("투룸, 2002년")
+
+
+def normalize_category(value) -> str:
+    """'원룸(분리형)'·'오픈형원룸'·'주방분리형원룸' → '원룸', '쓰리룸+' → '쓰리룸', '단독/다가구' → '단독·다가구'. 빈 값은 '기타'."""
+    v = re.sub(r"\(.*?\)", "", str(value if value is not None else "")).strip()
+    v = v.split(",")[0].strip()
+    if not v:
+        return "기타"
+    for key in ("원룸", "투룸", "쓰리룸", "사무실", "상가", "오피스텔", "아파트", "빌라"):
+        if key in v:
+            return key
+    return re.sub(r"[\[\]:*?/\\]", "·", v)[:31]
+
+
+def split_excel_by_category(path: str) -> List[str]:
+    """저장된 xlsx 의 첫 시트를 종류별 시트로 나눠 같은 파일에 덧붙인다. 돌려주는 값: 만든 시트 이름들(나눌 게 없으면 빈 목록).
+    실패해도 예외를 밖으로 내지 않는다 — 엑셀 저장 자체는 이미 끝난 뒤라 수집 결과에 영향이 없어야 한다."""
+    try:
+        import openpyxl
+        from copy import copy
+
+        wb = openpyxl.load_workbook(path, rich_text=True)
+        ws = wb.worksheets[0]
+        headers = [str(c.value or "").strip() for c in ws[1]]
+        cat_cols = [headers.index(h) for h in CATEGORY_COLUMNS if h in headers]
+        tag_cols = [headers.index(h) for h in CATEGORY_TAG_COLUMNS if h in headers]
+        if not cat_cols and not tag_cols:
+            return []
+
+        def category_of(cells) -> Optional[str]:
+            if not any(c.value not in (None, "") for c in cells):
+                return None                                  # 빈 행
+            if cat_cols:
+                return normalize_category(cells[cat_cols[0]].value)
+            for i in tag_cols:
+                if cells[i].value not in (None, ""):
+                    return normalize_category(cells[i].value)
+            return "기타"
+
+        groups: dict = {}
+        for row in ws.iter_rows(min_row=2):
+            cat = category_of(row)
+            if cat is None:
+                continue
+            groups.setdefault(cat, []).append(row)
+        if len(groups) <= 1:
+            return []                                        # 한 종류뿐이면 나눌 필요 없음
+
+        for extra in wb.worksheets[1:]:                       # 다시 돌릴 때 이전 종류 시트 제거
+            wb.remove(extra)
+        ws.title = "전체"
+        made: List[str] = []
+        used = {"전체"}
+        for cat, rows in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+            title = cat
+            n = 2
+            while title in used:
+                title = f"{cat}{n}"; n += 1
+            used.add(title)
+            new = wb.create_sheet(title)
+            for col_letter, dim in ws.column_dimensions.items():
+                if dim.width:
+                    new.column_dimensions[col_letter].width = dim.width
+            r_out = 0
+            for src_row in [ws[1], *rows]:
+                r_out += 1
+                for cell in src_row:
+                    dst = new.cell(row=r_out, column=cell.column)
+                    dst.value = cell.value
+                    if cell.has_style:
+                        dst._style = copy(cell._style)
+                    if cell.hyperlink:
+                        dst.hyperlink = copy(cell.hyperlink)
+            new.freeze_panes = "A2"
+            made.append(title)
+        wb.save(path)
+        return made
+    except Exception:
+        return []
+
+
 def parse_saved_output_path_from_finish_message(msg: str) -> Optional[str]:
     """Worker finished 메시지에서 저장된 파일 경로 추출. (저장 완료|중단 저장 완료): path (N건) 형식."""
     s = str(msg or "").strip()
