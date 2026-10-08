@@ -98,6 +98,15 @@ export function roleOf(col: string): string {
   return "본문";
 }
 const SKIP_COL = /URL|url|링크|위도|경도|좌표|일시|날짜|등록일|확인일|승인일|입주가능|번호$/;   // 번호를 찾지 않을 열 (매물번호·사업자번호·우편번호 등)
+/** 번호 바로 앞에 붙은 글("세입자-010…", "동생 010…", "관리부동산 (0502…)")을 그 번호의 역할로 쓴다. 전화/연락처/층/호 같은 말은 역할이 아님 */
+const LABEL_STOP = /^(전화|연락처|연락|번호|핸드폰|휴대폰|폰|전번|tel|hp|phone|층|호|동|번지|참고|문의|직통|대표)$/i;
+export function inlineLabel(text: string, idx: number): string {
+  const pre = text.slice(Math.max(0, idx - 24), idx);
+  const m = pre.match(/([가-힣A-Za-z]{2,10})\s*[-:：(（]?\s*$/);
+  if (!m) return "";
+  const w = m[1].replace(/(연락처|전화번호|전화|번호|핸드폰|휴대폰)$/, "");   // "세입자연락처" → "세입자"
+  return !w || LABEL_STOP.test(w) ? "" : w;
+}
 /** 행의 모든 칸에서 전화번호를 찾아 "역할 번호" 로 — 임대인 연락처(primary)와 같은 번호는 뺀다 */
 export function extractContacts(row: Record<string, any>, primary: string): string {
   const seen = new Set<string>(phoneDigits(primary) ? [phoneDigits(primary)] : []);
@@ -105,11 +114,12 @@ export function extractContacts(row: Record<string, any>, primary: string): stri
   for (const [col, raw] of Object.entries(row)) {
     if (SKIP_COL.test(col) && roleOf(col) === "본문") continue;
     const v = s(raw); if (!v || !/\d{4}/.test(v)) continue;
-    const role = roleOf(col);
+    const colRole = roleOf(col);
     for (const m of v.matchAll(PHONE_RE)) {
       const num = `${m[1]}-${m[2]}-${m[3]}`; const d = phoneDigits(num);
       if (seen.has(d)) continue; seen.add(d);
-      out.push((role === "연락처" ? "" : role + " ") + num);
+      const role = inlineLabel(v, m.index ?? 0) || (colRole === "연락처" ? "" : colRole);
+      out.push((role ? role + " " : "") + num);
       if (out.length >= 8) break;
     }
     if (out.length >= 8) break;
@@ -313,13 +323,12 @@ listings.get("/admin/listings", async (c) => {
       <td class="addr ed" data-f="addr" title="클릭해서 고치기">${r.addr ?? ""}</td>
       <td class="phone ed" data-f="phone" title="클릭해서 고치기">${r.phone ?? ""}</td>
       <td class="small contacts ed" data-f="contacts" title="임차인·세입자·관리·중개 등 (클릭해서 고치기)">${r.contacts ?? ""}</td>
-      <td><span class="badge ${r.site === "naver" ? "status-active" : r.site === "daangn" ? "status-soon" : r.site === "onhouse" ? "status-unlimited" : "status-pink"}">${siteLabel(r.site)}</span></td>
       <td class="small">${r.kind ?? ""}</td>
       <td class="small">${r.deal ?? ""}</td>
       <td class="mono small">${r.price ?? ""}</td>
       <td class="small ttl">${r.title ?? ""}</td>
       <td class="small memo ed" data-f="memo" title="클릭해서 고치기">${r.memo ?? ""}</td>
-      <td class="mono small" title="처음 ${kst(r.first_at)} · ${r.seen}회 · ${r.username} · ${r.file ?? ""}">${kst(r.last_at)}${r.seen > 1 ? html` <span class="seen">×${r.seen}</span>` : ""}</td>
+      <td class="mono small" title="처음 ${kst(r.first_at)} · ${r.seen}회 · ${siteLabel(r.site)} · ${r.username} · ${r.file ?? ""}">${kst(r.last_at)}${r.seen > 1 ? html` <span class="seen">×${r.seen}</span>` : ""}</td>
       <td class="nowrap"><details class="det"><summary>상세</summary><div class="detbox">${r.url ? html`<div class="kv"><b>링크</b><span><a href="${r.url}" target="_blank" rel="noopener">${r.url}</a></span></div>` : ""}${detail}</div></details>
         <form method="post" action="/admin/listings/${r.id}/delete" class="inline-form" onsubmit="return confirm('이 줄을 삭제할까요?')"><button type="submit" class="x" title="삭제">✕</button></form></td>
     </tr>`;
@@ -376,8 +385,8 @@ listings.get("/admin/listings", async (c) => {
     <div id="xlmsg" class="small muted" style="margin:-8px 0 12px"></div>
     ${recent.length ? html`<div class="recent"><b>최근 올린 파일</b> ${recent.map((r: any) => html`<a class="chip" href="/admin/listings?${raw(qs({ site: "", q: "", from: "", to: "", user: "", file: r.file }))}" title="${r.username} · ${kst(r.t)}">${siteLabel(r.site)} · ${r.file} <em>${r.n}</em></a>`)}</div>` : ""}
     <table class="user-table lt">
-      <thead><tr><th>지번·호수</th><th>임대인 연락처</th><th>임차인·관리 등</th><th>구분</th><th>종류</th><th>거래</th><th>금액</th><th>이름·제목</th><th>메모</th><th>올린 날</th><th></th></tr></thead>
-      <tbody>${rows.length ? rows : html`<tr><td colspan="11" class="empty">${total ? "이 페이지에는 없습니다." : "아직 비어 있습니다. 위에서 수기로 넣거나 엑셀을 올리면 쌓입니다."}</td></tr>`}</tbody>
+      <thead><tr><th>지번·호수</th><th>임대인 연락처</th><th>임차인·관리 등</th><th>종류</th><th>거래</th><th>금액</th><th>이름·제목</th><th>메모</th><th>올린 날</th><th></th></tr></thead>
+      <tbody>${rows.length ? rows : html`<tr><td colspan="10" class="empty">${total ? "이 페이지에는 없습니다." : "아직 비어 있습니다. 위에서 수기로 넣거나 엑셀을 올리면 쌓입니다."}</td></tr>`}</tbody>
     </table>
     <div class="pager">${page > 1 ? pageLink(page - 1, "‹ 이전") : ""}<span class="small">${page} / ${pages} 페이지 · ${total}건</span>${page < pages ? pageLink(page + 1, "다음 ›") : ""}</div>
     <form method="post" action="/admin/listings/delete" id="delf" style="display:none">
@@ -543,8 +552,8 @@ const LT_JS = `
       var r=await fetch('/admin/listings/lookup.json?q='+encodeURIComponent(q)).then(function(x){return x.json()});
       if($('lkq').value.trim()!==q) return;
       if(!r.rows.length){ res.innerHTML='<div class="lknone">"'+esc(q)+'" 에 해당하는 줄이 없습니다. 위 수기 입력으로 넣어두세요.</div>'; msg.textContent='0건'; return; }
-      var h='<table><thead><tr><th>지번·호수</th><th>임대인 연락처</th><th>임차인·관리 등</th><th>구분</th><th>종류</th><th>거래</th><th>금액</th><th>이름·제목</th><th>메모</th><th>올린 날</th></tr></thead><tbody>';
-      r.rows.forEach(function(x){ h+='<tr data-id="'+x.id+'"><td class="addr ed" data-f="addr">'+esc(x.addr)+'</td><td class="phone ed" data-f="phone">'+esc(x.phone)+'</td><td class="contacts ed" data-f="contacts">'+esc(x.contacts)+'</td><td>'+esc(x.site)+'</td><td>'+esc(x.kind)+'</td><td>'+esc(x.deal)+'</td><td>'+esc(x.price)+'</td><td>'+esc(x.title)+'</td><td class="memo ed" data-f="memo">'+esc(x.memo)+'</td><td class="small">'+esc(x.last_at)+'</td></tr>'; });
+      var h='<table><thead><tr><th>지번·호수</th><th>임대인 연락처</th><th>임차인·관리 등</th><th>종류</th><th>거래</th><th>금액</th><th>이름·제목</th><th>메모</th><th>올린 날</th></tr></thead><tbody>';
+      r.rows.forEach(function(x){ h+='<tr data-id="'+x.id+'"><td class="addr ed" data-f="addr">'+esc(x.addr)+'</td><td class="phone ed" data-f="phone">'+esc(x.phone)+'</td><td class="contacts ed" data-f="contacts">'+esc(x.contacts)+'</td><td>'+esc(x.kind)+'</td><td>'+esc(x.deal)+'</td><td>'+esc(x.price)+'</td><td>'+esc(x.title)+'</td><td class="memo ed" data-f="memo">'+esc(x.memo)+'</td><td class="small">'+esc(x.last_at)+'</td></tr>'; });
       h+='</tbody></table>'+(r.count>=300?'<div class="lkmore">300건까지만 보입니다. 지번을 더 자세히 치세요.</div>':'');
       res.innerHTML=h; msg.textContent=r.count+'건';
     }catch(e){ msg.textContent='오류: '+e.message; }
@@ -576,11 +585,11 @@ const LT_JS = `
         all=all.concat(r.rows); if(!r.next) break; after=r.next;
       }
       if(!all.length){ msg.textContent='내려받을 행이 없습니다.'; btn.disabled=false; return; }
-      var meta=['지번·호수','임대인 연락처','임차인·관리 등','구분','종류','거래','금액','이름·제목','메모','번호(DB)','링크(DB)','올린 계정','파일','처음 올림','최근 올림','올린 횟수'];
+      var meta=['지번·호수','임대인 연락처','임차인·관리 등','종류','거래','금액','이름·제목','메모','번호(DB)','링크(DB)','구분','올린 계정','파일','처음 올림','최근 올림','올린 횟수'];
       var cols=[]; var seen={};
       all.forEach(function(r){ Object.keys(r.data).forEach(function(k){ if(!seen[k]){ seen[k]=1; cols.push(k); } }); });
       var aoa=[meta.concat(cols)];
-      all.forEach(function(r){ var row=[r.addr||'',r.phone||'',r.contacts||'',r.site,r.kind||'',r.deal||'',r.price||'',r.title||'',r.memo||'',r.no,r.url||'',r.username,r.file||'',r.first_at,r.last_at,r.seen]; cols.forEach(function(k){ var v=r.data[k]; row.push(v==null?'':String(v)); }); aoa.push(row); });
+      all.forEach(function(r){ var row=[r.addr||'',r.phone||'',r.contacts||'',r.kind||'',r.deal||'',r.price||'',r.title||'',r.memo||'',r.no,r.url||'',r.site,r.username,r.file||'',r.first_at,r.last_at,r.seen]; cols.forEach(function(k){ var v=r.data[k]; row.push(v==null?'':String(v)); }); aoa.push(row); });
       var ws=XLSX.utils.aoa_to_sheet(aoa);
       for(var i=1;i<aoa.length;i++){ aoa[i].forEach(function(v,j){ if(typeof v==='string' && /^https?:\\/\\//.test(v)){ var cc=ws[XLSX.utils.encode_cell({r:i,c:j})]; if(cc) cc.l={Target:v}; } }); }
       ws['!cols']=aoa[0].map(function(h,j){ var w=Math.min(60,Math.max(8,String(h).length*2)); for(var i=1;i<Math.min(aoa.length,300);i++){ var v=aoa[i][j]; if(v!=null) w=Math.max(w,Math.min(60,String(v).length*1.1)); } return {wch:w}; });
