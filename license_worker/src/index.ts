@@ -407,7 +407,7 @@ app.get("/admin/logs", async (c) => {
     <div class="page-head"><h1>활동 기록</h1><span class="small" style="color:var(--muted)">최근 500건 · 로그인과 수집/사진 작업이 남습니다 (프로그램이 끝날 때 보냄)</span></div>
     <form class="search-form" method="get">
       <input type="text" name="q" placeholder="아이디 검색" value="${q}">
-      <select name="app" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:#0d121c;color:var(--text)">
+      <select name="app" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text)">
         <option value="" ${appF === "" ? "selected" : ""}>전체 프로그램</option>
         <option value="crawl" ${appF === "crawl" ? "selected" : ""}>매물 수집기</option>
         <option value="photo" ${appF === "photo" ? "selected" : ""}>사진950</option>

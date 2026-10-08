@@ -221,16 +221,16 @@ const PH_STYLE = `
 .ph-grid{display:grid;grid-template-columns:minmax(0,3fr) minmax(280px,2fr);gap:16px;align-items:start}
 @media(max-width:860px){.ph-grid{grid-template-columns:1fr}}
 .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px}
-.panel textarea{display:block;width:100%;margin-top:6px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:#0d121c;color:var(--text);font-size:13px;font-family:Consolas,monospace;resize:vertical}
+.panel textarea{display:block;width:100%;margin-top:6px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);font-size:13px;font-family:Consolas,monospace;resize:vertical}
 .ph-opts{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:end;margin:4px 0 8px}
 .ph-opts label{margin:0}
 .ph-opts input[type=number]{width:96px;display:inline-block}
 .ph-chk{display:flex!important;align-items:center;gap:6px;color:var(--text)!important}
 .ph-chk input[type=checkbox]{width:auto;display:inline-block;margin:0}
 .ph-status{font-size:13px;color:var(--muted);align-self:center}
-.ph-bar{height:8px;background:#0d121c;border:1px solid var(--border);border-radius:999px;overflow:hidden;margin:12px 0}
+.ph-bar{height:8px;background:var(--soft);border:1px solid var(--border);border-radius:999px;overflow:hidden;margin:12px 0}
 .ph-bar div{height:100%;width:0;background:var(--accent);transition:width .2s}
-.ph-log{font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;background:#0d121c;border:1px solid var(--border);border-radius:8px;padding:10px;max-height:320px;overflow:auto;color:#cbd5e1}
+.ph-log{font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;background:var(--soft);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:320px;overflow:auto;color:var(--text)}
 .ph-ok{color:var(--ok);font-size:13px;margin-bottom:8px}
 .ph-thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px}
 .ph-thumbs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;border:1px solid var(--border)}
