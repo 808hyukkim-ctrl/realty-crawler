@@ -7,7 +7,7 @@ import { Hono } from "hono";
 import { html, raw } from "hono/html";
 import { layout } from "./layout";
 
-type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string; ENGINE_URL?: string; ENGINE_SECRET?: string };
+type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string; ENGINE_URL?: string; ENGINE_SECRET?: string; PARSE?: Fetcher };
 export const photos = new Hono<{ Bindings: Bindings }>();
 
 const PARSE_API = "https://bridge-parse.808hyukkim.workers.dev/parse";
@@ -69,9 +69,12 @@ async function photosNaver(no: string): Promise<Found> {
   return { label: `네이버_${no}` + (title ? `_${safeName(title)}` : ""), photos: dedupe(urls), referer: "https://new.land.naver.com/" };
 }
 
-async function photosDaangn(id: string, url: string): Promise<Found> {
-  const r = await fetch(`${PARSE_API}?url=${encodeURIComponent(url)}`);
-  const j: any = await r.json();
+async function photosDaangn(id: string, url: string, parse?: Fetcher): Promise<Found> {
+  // 같은 계정의 workers.dev 워커를 fetch 로 부르면 "error code: 1042" — 서비스 바인딩(PARSE)이 있으면 그걸로
+  const target = `${PARSE_API}?url=${encodeURIComponent(url)}`;
+  const r = parse ? await parse.fetch(target) : await fetch(target);
+  const txt = await r.text();
+  let j: any; try { j = JSON.parse(txt); } catch { throw new Error(`당근 링크 읽기 실패: 정리 서버 응답이 JSON 이 아닙니다 (${txt.slice(0, 40)})`); }
   if (j.error) throw new Error(`당근 링크 읽기 실패: ${j.error}`);
   const urls = (j.photos || []).map((u: any) => String(u).split("?")[0]);   // 크기 인자 제거 = 원본
   const title = String(j.building || j.address_q || "").trim();
@@ -103,6 +106,20 @@ async function photosOnhouse(hid: string, db: D1Database): Promise<Found> {
   }
   for (const m of page.matchAll(/https:\/\/[a-z0-9.-]+\.cloudfront\.net\/(?:room_img|building_img|[a-z_]*img)\/([A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp))/gi)) {
     const k = m[1].toLowerCase(); if (!seen.has(k)) seen.set(k, m[0] + "?w=1900");
+  }
+  // 네모 연동 매물(img.nemoapp.kr/article-photos/<id>/_origin.jpg?w=…) — ?w= 를 떼면 원본 (2026-10-08, 3556491)
+  for (const m of page.matchAll(/https:\/\/img\.nemoapp\.kr\/article-photos\/([A-Za-z0-9-]+)\/[A-Za-z0-9_]+\.(?:jpg|jpeg|png|webp)/gi)) {
+    const k = "nemo:" + m[1].toLowerCase(); if (!seen.has(k)) seen.set(k, m[0]);
+  }
+  // 직방 신규 CDN(resource.zigbang.io) — ?w= 무시되므로 원본 그대로
+  for (const m of page.matchAll(/https:\/\/resource\.zigbang\.io\/images\/[A-Za-z0-9_\/.-]+?\/([A-Za-z0-9-]+(?:\.[0-9]+)?\.(?:jpg|jpeg|png|webp))/gi)) {
+    const k = "zi:" + m[1].toLowerCase(); if (!seen.has(k)) seen.set(k, m[0]);
+  }
+  // 안전장치: 알려진 서버에 하나도 안 걸리면 사진 슬라이드의 <img> 를 호스트 상관없이 (크기 인자 제거)
+  if (!seen.size) {
+    for (const m of page.matchAll(/<div class="swiper-slide"[^>]*>\s*<img[^>]+src="(https?:\/\/[^"]+)"/gi)) {
+      const u = m[1].replace(/&amp;/g, "&").replace(/\?w=\d+$/, ""); const k = "any:" + u.toLowerCase(); if (!seen.has(k)) seen.set(k, u);
+    }
   }
   const title = stripTags((page.match(/class="addr_title"[^>]*>([\s\S]*?)<\/h6>/) || [])[1] || "");
   return { label: `온하우스_${hid}` + (title ? `_${safeName(title)}` : ""), photos: [...seen.values()], referer: ONHOUSE_HOST + "/" };
@@ -155,7 +172,7 @@ photos.post("/admin/photos/collect", async (c) => {
   for (const url of urls) {
     try {
       const no = naverNo(url), did = daangnId(url), hid = onhouseId(url);
-      const f = no ? await photosNaver(no) : did ? await photosDaangn(did, url) : hid ? await photosOnhouse(hid, c.env.DB) : await photosGeneric(url);
+      const f = no ? await photosNaver(no) : did ? await photosDaangn(did, url, c.env.PARSE) : hid ? await photosOnhouse(hid, c.env.DB) : await photosGeneric(url);
       out.push({ url, ok: true, site: no ? "naver" : did ? "daangn" : hid ? "onhouse" : "generic", ...f });
     } catch (e: any) {
       out.push({ url, ok: false, error: e?.message || String(e) });
@@ -164,7 +181,7 @@ photos.post("/admin/photos/collect", async (c) => {
   return c.json({ items: out });
 });
 
-const PROXY_HOST_OK = /(\.pstatic\.net|\.gcp-karroter\.net|\.cloudfront\.net|\.daangn\.com|\.naver\.(com|net)|\.onhouse\.com|\.zigbang\.com)$/i;
+const PROXY_HOST_OK = /(\.pstatic\.net|\.gcp-karroter\.net|\.cloudfront\.net|\.daangn\.com|\.naver\.(com|net)|\.onhouse\.com|\.zigbang\.(com|io)|\.nemoapp\.kr|\.amazonaws\.com)$/i;
 photos.get("/admin/photos/img", async (c) => {
   const u = c.req.query("u") || "";
   const ref = c.req.query("r") || "";

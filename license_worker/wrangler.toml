@@ -6,3 +6,8 @@ compatibility_date = "2026-01-01"
 binding = "DB"
 database_name = "license_db"
 database_id = "562d4ba7-ab26-4958-b6b4-12ac11ef21dc"
+
+# 당근 링크 사진은 bridge-parse 워커가 읽는다 — workers.dev 끼리 fetch 는 error 1042 로 막히므로 서비스 바인딩으로 호출 (2026-10-08)
+[[services]]
+binding = "PARSE"
+service = "bridge-parse"
