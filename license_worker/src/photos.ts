@@ -7,7 +7,7 @@ import { Hono } from "hono";
 import { html, raw } from "hono/html";
 import { layout } from "./layout";
 
-type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string };
+type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string; ENGINE_URL?: string; ENGINE_SECRET?: string };
 export const photos = new Hono<{ Bindings: Bindings }>();
 
 const PARSE_API = "https://bridge-parse.808hyukkim.workers.dev/parse";
@@ -173,12 +173,33 @@ photos.get("/admin/photos/img", async (c) => {
   if (!/^https?:$/.test(target.protocol)) return c.text("bad url", 400);
   const headers: Record<string, string> = { "User-Agent": BROWSER_HEADERS["User-Agent"], Accept: "image/avif,image/webp,image/*,*/*;q=0.8" };
   if (ref) headers.Referer = ref;
-  let r = await fetch(target.toString(), { headers, cf: { cacheTtl: 3600, cacheEverything: true } } as any);
-  if (!r.ok && /[?&]w=\d+/.test(target.search)) r = await fetch(target.toString().replace(/([?&])w=\d+/, "$1w=873"), { headers } as any);   // 큰 폭을 못 받으면 873
-  if (!r.ok && target.search) r = await fetch(target.origin + target.pathname, { headers } as any);   // 그래도 안 되면 인자 없는 원본으로
-  if (!r.ok) return c.text(`image ${r.status}`, 502);
-  const ct = r.headers.get("content-type") || "application/octet-stream";
+  // 온하우스 사진 서버(cloudfront)는 한국 밖 요청을 막아 Cloudflare 엣지에서는 못 받는다 → 라운지 서버(한국)의 엔진 /img 로 받는다 (2026-10-08). 다른 호스트도 직접 실패하면 엔진으로 한 번 더.
+  const viaEngine = async (): Promise<Response | null> => {
+    const base = String(c.env.ENGINE_URL || "").replace(/\/$/, "");
+    if (!base || !c.env.ENGINE_SECRET) return null;
+    try {
+      const er = await fetch(`${base}/img?u=${encodeURIComponent(target.toString())}&r=${encodeURIComponent(ref)}`, { headers: { Authorization: `Bearer ${c.env.ENGINE_SECRET}` }, cf: { cacheTtl: 3600, cacheEverything: true } } as any);
+      if (!er.ok) return null;
+      let ect = er.headers.get("content-type") || "";
+      if (!/^image\//i.test(ect)) ect = /\.png(\?|$)/i.test(target.pathname) ? "image/png" : /\.webp(\?|$)/i.test(target.pathname) ? "image/webp" : "image/jpeg";
+      return new Response(er.body, { status: 200, headers: { "Content-Type": ect, "Cache-Control": "private, max-age=3600" } });
+    } catch { return null; }
+  };
+  const geoBlocked = /\.cloudfront\.net$/i.test(target.hostname) || /onhouse\.com$/i.test(target.hostname);
+  if (geoBlocked) { const e = await viaEngine(); if (e) return e; }
+  let r: Response | null = null;
+  try {
+    r = await fetch(target.toString(), { headers, cf: { cacheTtl: 3600, cacheEverything: true } } as any);
+    if (!r.ok && /[?&]w=\d+/.test(target.search)) r = await fetch(target.toString().replace(/([?&])w=\d+/, "$1w=873"), { headers } as any);   // 큰 폭을 못 받으면 873
+    if (!r.ok && target.search) r = await fetch(target.origin + target.pathname, { headers } as any);   // 그래도 안 되면 인자 없는 원본으로
+  } catch { r = null; }
+  if (!r || !r.ok) {
+    const e = await viaEngine(); if (e) return e;
+    return c.text(`image ${r ? r.status : "fetch"}`, 502);
+  }
+  let ct = r.headers.get("content-type") || "application/octet-stream";
   if (!/^image\//.test(ct) && !PROXY_HOST_OK.test(target.hostname)) return c.text("not image", 415);
+  if (!/^image\//i.test(ct)) ct = /\.png(\?|$)/i.test(target.pathname) ? "image/png" : /\.webp(\?|$)/i.test(target.pathname) ? "image/webp" : "image/jpeg";
   return new Response(r.body, { status: 200, headers: { "Content-Type": ct, "Cache-Control": "private, max-age=3600" } });
 });
 
@@ -189,12 +210,12 @@ function PAGE(ohId: string, hasPw: boolean, saved: boolean) {
 <p class="muted" style="margin:-8px 0 16px;color:var(--muted);font-size:13px">매물 링크를 넣으면 사진만 모아 가로 950px 로 바꿔 zip 으로 내려받습니다. 네이버부동산 · 당근 · 온하우스(계정 필요) · 그 밖의 사이트.</p>
 <div class="ph-grid">
   <section class="panel">
-    <label>매물 링크 (한 줄에 하나)<textarea id="links" rows="6" placeholder="https://new.land.naver.com/rooms?articleNo=2652272081&#10;https://realty.daangn.com/articles/4401448&#10;https://www.onhouse.com/index/rent_view/3554712"></textarea></label>
+    <label>매물 링크 (여러 개 가능 — 줄바꿈·쉼표·공백으로 구분)<textarea id="links" rows="6" placeholder="https://new.land.naver.com/rooms?articleNo=2652272081&#10;https://realty.daangn.com/articles/4401448&#10;https://www.onhouse.com/index/rent_view/3554712"></textarea></label>
     <div class="ph-opts">
       <label>가로(px)<input type="number" id="w" value="950" min="50" max="5000"></label>
       <label class="ph-chk"><input type="checkbox" id="fixh"> 세로 고정 <input type="number" id="h" value="950" min="100" max="5000" disabled></label>
       <label>JPG 품질<input type="number" id="q" value="92" min="50" max="100"></label>
-      <label class="ph-chk"><input type="checkbox" id="onezip" checked> 링크마다 zip 하나씩 (끄면 전부 한 zip)</label>
+      <label class="ph-chk"><input type="checkbox" id="onezip"> 링크마다 zip 하나씩 <span class="small" style="color:var(--muted)">(기본은 한 zip 안에 매물별 폴더 — 링크마다 zip 이면 브라우저가 "여러 파일 다운로드 허용"을 물어봅니다)</span></label>
     </div>
     <div class="form-actions"><button class="btn btn-primary" id="go">사진 가져와서 950으로 저장</button><button class="btn" id="stop" disabled>중단</button><span id="status" class="ph-status"></span></div>
     <div class="ph-bar"><div id="bar"></div></div>
@@ -243,7 +264,7 @@ const PH_JS = `
   $('fixh').onchange=function(){ $('h').disabled=!this.checked; };
   function log(s){ var el=$('log'); el.textContent+=s+'\\n'; el.scrollTop=el.scrollHeight; }
   function setBar(p){ $('bar').style.width=Math.max(0,Math.min(100,p))+'%'; }
-  function links(){ var out=[],seen={}; $('links').value.split(/\\s+/).forEach(function(t){ t=t.trim(); if(/^https?:\\/\\//.test(t)&&!seen[t]){seen[t]=1;out.push(t);} }); return out; }
+  function links(){ var out=[],seen={}; $('links').value.split(/[\\s,;]+/).forEach(function(t){ t=t.trim(); if(/^https?:\\/\\//.test(t)&&!seen[t]){seen[t]=1;out.push(t);} }); return out; }
   function loadImg(url, ref){ return new Promise(function(ok,bad){ var im=new Image(); im.onload=function(){ok(im)}; im.onerror=function(){bad(new Error('load'))}; im.src='/admin/photos/img?u='+encodeURIComponent(url)+(ref?'&r='+encodeURIComponent(ref):''); }); }
   function resize(im, w, h, q){ var cw=w, ch=h>0?h:Math.max(1,Math.round(im.naturalHeight*w/im.naturalWidth)); var c=document.createElement('canvas'); c.width=cw; c.height=ch; var x=c.getContext('2d'); x.imageSmoothingQuality='high';
     if(h>0){ var s=Math.max(cw/im.naturalWidth, ch/im.naturalHeight); var dw=im.naturalWidth*s, dh=im.naturalHeight*s; x.drawImage(im,(cw-dw)/2,(ch-dh)/2,dw,dh); } else { x.drawImage(im,0,0,cw,ch); }
@@ -251,12 +272,16 @@ const PH_JS = `
   function save(blob, name){ var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(function(){URL.revokeObjectURL(a.href); a.remove();},2000); }
   $('stop').onclick=function(){ stopReq=true; };
   $('go').onclick=async function(){
-    if(running) return; var urls=links(); if(!urls.length){ alert('링크를 한 줄에 하나씩 넣어주세요'); return; }
+    if(running) return; var urls=links(); if(!urls.length){ alert('매물 링크를 넣어주세요 (여러 개면 줄바꿈·쉼표·공백으로 구분)'); return; }
     running=true; stopReq=false; $('go').disabled=true; $('stop').disabled=false; $('log').textContent=''; $('thumbs').innerHTML=''; setBar(0);
     var w=parseInt($('w').value)||950, h=$('fixh').checked?(parseInt($('h').value)||0):0, q=parseInt($('q').value)||92, perLink=$('onezip').checked;
     $('status').textContent='사진 주소 모으는 중…';
-    var res; try{ res=await fetch('/admin/photos/collect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({urls:urls})}).then(function(r){return r.json()}); }catch(e){ log('서버 오류: '+e.message); running=false; $('go').disabled=false; $('stop').disabled=true; return; }
-    var items=res.items||[]; var total=0; items.forEach(function(it){ if(it.ok) total+=it.photos.length; }); var done=0, savedN=0;
+    var items=[];
+    for(var ci=0; ci<urls.length; ci+=20){
+      $('status').textContent='사진 주소 모으는 중… '+Math.min(ci+20,urls.length)+'/'+urls.length+'개 링크';
+      var res; try{ res=await fetch('/admin/photos/collect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({urls:urls.slice(ci,ci+20)})}).then(function(r){return r.json()}); }catch(e){ log('서버 오류: '+e.message); running=false; $('go').disabled=false; $('stop').disabled=true; return; }
+      items=items.concat(res.items||[]);
+    } var total=0; items.forEach(function(it){ if(it.ok) total+=it.photos.length; }); var done=0, savedN=0;
     var allZip = perLink?null:new JSZip();
     for(var i=0;i<items.length;i++){
       var it=items[i]; if(stopReq){ log('중단'); break; }
