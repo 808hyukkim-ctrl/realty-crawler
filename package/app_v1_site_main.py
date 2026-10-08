@@ -2460,6 +2460,9 @@ class MainWindow(QMainWindow, ScheduleMixin):
             site = self.tabs.tabText(self.tabs.currentIndex()) if hasattr(self, "tabs") else ""
             m = re.search(r"(\d+)건", msg)
             report_activity("수집", f"{site} · {os.path.basename(self._last_output_path) if self._last_output_path else msg[:200]}", int(m.group(1)) if m else None)
+            if self._last_output_path:
+                from license_gate import upload_listings
+                upload_listings(site, self._last_output_path)   # 서버 '매물 DB' 에 쌓기
         except Exception:
             pass
         self._auto_send_after_save()

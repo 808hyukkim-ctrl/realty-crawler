@@ -13,7 +13,7 @@ export function layout(title: string, body: unknown) {
 <body>
 <header class="topbar">
   <div class="brand">전국부동산매물수집기 · 라이선스 관리</div>
-  <nav class="nav"><a href="/admin/dashboard">사용자 관리</a><a href="/admin/logs">활동 기록</a><a href="/admin/telegram">텔레그램 봇</a><a href="/admin/photos">사진 950</a></nav>
+  <nav class="nav"><a href="/admin/dashboard">사용자 관리</a><a href="/admin/logs">활동 기록</a><a href="/admin/telegram">텔레그램 봇</a><a href="/admin/photos">사진 950</a><a href="/admin/listings">매물 DB</a></nav>
 </header>
 <main class="container">${body}</main>
 </body>

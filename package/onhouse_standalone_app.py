@@ -49,6 +49,7 @@ from PySide6.QtWidgets import (
 import auto_send
 from app_main_common import (
     APP_STYLESHEET, DetailFilters, MultiSelectCombo, RangeInput, contains_any_keyword, parse_keywords_csv, wrap_in_scroll,
+    parse_saved_output_path_from_finish_message,
 )
 from onhouse_crawler import OnhouseCrawler
 from schedule_manager import DAY_NAMES, ScheduleManager, ScheduledJob
@@ -1680,6 +1681,9 @@ class MainWindow(QMainWindow):
             from license_gate import report_activity
             m = re.search(r"(\d+)건", msg)
             report_activity("수집", f"온하우스 · {os.path.basename(msg.split(': ', 1)[-1].split(' (')[0]) if '저장' in msg else msg}", int(m.group(1)) if m else None)
+            if "저장 완료" in msg:
+                from license_gate import upload_listings
+                upload_listings("온하우스", parse_saved_output_path_from_finish_message(msg))   # 서버 '매물 DB' 에 쌓기
         except Exception:
             pass
         self.progress.setValue(100)

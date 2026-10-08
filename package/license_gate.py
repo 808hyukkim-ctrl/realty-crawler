@@ -113,6 +113,54 @@ def command_done(cmd_id, text: str) -> None:
     threading.Thread(target=lambda: _swallow(lambda: _api_json("POST", f"/commands/{cmd_id}/done", payload)), daemon=True).start()
 
 
+def upload_listings(site: str, path: str) -> None:
+    """저장한 엑셀의 행을 서버 '매물 DB' 에 쌓는다 (어드민 /admin/listings). 백그라운드, 실패는 조용히."""
+    if not SESSION.get("username") or not SESSION.get("token") or not path or not os.path.isfile(path):
+        return
+
+    def _run():
+        try:
+            rows = read_excel_rows(path)
+            if not rows:
+                return
+            base = {"username": SESSION["username"], "token": SESSION["token"], "program": SESSION.get("app", "crawl"),
+                    "site": str(site or ""), "file": os.path.basename(path)}
+            for i in range(0, len(rows), 300):
+                payload = dict(base, rows=rows[i:i + 300], part=i // 300 + 1, parts=(len(rows) + 299) // 300)
+                _api_json("POST", "/listings", payload, timeout=60)
+        except Exception:
+            pass
+
+    import threading
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def read_excel_rows(path: str) -> list:
+    """엑셀 첫 시트 → [{열이름: 값}] (값은 문자열, 빈 행 제외). 하이퍼링크 셀은 표시값(URL) 그대로."""
+    import openpyxl
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    try:
+        ws = wb.active
+        it = ws.iter_rows(values_only=True)
+        headers = [str(h).strip() if h is not None else "" for h in (next(it, None) or ())]
+        out = []
+        for vals in it:
+            row = {}
+            for h, v in zip(headers, vals):
+                if not h or v is None:
+                    continue
+                if hasattr(v, "isoformat"):
+                    v = v.isoformat(sep=" ") if hasattr(v, "hour") else v.isoformat()
+                sv = str(v)
+                if sv.strip():
+                    row[h] = sv
+            if row:
+                out.append(row)
+        return out
+    finally:
+        wb.close()
+
+
 def _swallow(fn):
     try:
         fn()

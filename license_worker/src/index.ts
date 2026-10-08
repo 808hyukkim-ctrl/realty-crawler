@@ -3,6 +3,7 @@ import { html } from "hono/html";
 import { basicAuth } from "hono/basic-auth";
 import { photos } from "./photos";
 import { telegram } from "./telegram";
+import { listings } from "./listings";
 import { layout } from "./layout";
 
 type Bindings = {
@@ -123,6 +124,7 @@ app.use("/admin/*", async (c, next) => {
 });
 app.route("/", photos);   // 사진 950 (src/photos.ts)
 app.route("/", telegram);   // 텔레그램 봇·예약 대기열 (src/telegram.ts)
+app.route("/", listings);   // 매물 DB (src/listings.ts)
 
 // ---------------------------------------------------------------- dashboard
 
