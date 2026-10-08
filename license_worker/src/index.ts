@@ -4,6 +4,7 @@ import { basicAuth } from "hono/basic-auth";
 import { photos } from "./photos";
 import { telegram } from "./telegram";
 import { listings } from "./listings";
+import { staffdb } from "./staffdb";
 import { layout } from "./layout";
 
 type Bindings = {
@@ -27,7 +28,7 @@ const DURATION_PRESETS: Record<string, [string, number | null]> = {
 };
 
 // 계정별 기능: 수집기(crawl) / 사진950(photo). 둘 다 체크면 둘 다, 하나만 체크면 그것만 쓸 수 있다 (2026-10-02)
-const FEATURES: [string, string][] = [["crawl", "매물 수집"], ["photo", "사진950"]];
+const FEATURES: [string, string][] = [["crawl", "매물 수집"], ["photo", "사진950"], ["db", "DB 조회"]];   // db = 직원용 /db 지번 조회 (2026-10-08)
 let featuresReady = false;
 async function ensureFeatures(db: D1Database) {
   if (featuresReady) return;
@@ -54,7 +55,7 @@ async function hmacHex(secret: string, msg: string): Promise<string> {
   return toHex(new Uint8Array(sig));
 }
 const logToken = (secret: string, username: string) => hmacHex(secret, "log:" + username);
-const APP_LABEL: Record<string, string> = { crawl: "매물 수집기", photo: "사진950" };
+const APP_LABEL: Record<string, string> = { crawl: "매물 수집기", photo: "사진950", db: "DB 조회" };
 
 const featureList = (s: any) => String(s ?? "crawl").split(",").map((x) => x.trim()).filter(Boolean);
 const featureLabel = (key: string) => (FEATURES.find(([k]) => k === key) || [key, key])[1];
@@ -125,6 +126,7 @@ app.use("/admin/*", async (c, next) => {
 app.route("/", photos);   // 사진 950 (src/photos.ts)
 app.route("/", telegram);   // 텔레그램 봇·예약 대기열 (src/telegram.ts)
 app.route("/", listings);   // 매물 DB (src/listings.ts)
+app.route("/", staffdb);    // 직원용 DB 조회 /db (src/staffdb.ts)
 
 // ---------------------------------------------------------------- dashboard
 
@@ -397,7 +399,7 @@ app.get("/admin/logs", async (c) => {
   const rows = (results ?? []).map((r: any) => html`<tr>
     <td class="mono small">${kst(r.at)}</td>
     <td class="mono">${r.username}</td>
-    <td><span class="badge ${r.app === "photo" ? "status-unlimited" : "status-active"}">${APP_LABEL[r.app] ?? r.app}</span></td>
+    <td><span class="badge ${r.app === "photo" ? "status-unlimited" : r.app === "db" ? "status-soon" : "status-active"}">${APP_LABEL[r.app] ?? r.app}</span></td>
     <td>${r.action}</td>
     <td class="small">${r.detail ?? ""}</td>
     <td class="mono">${r.count ?? ""}</td>
@@ -411,6 +413,7 @@ app.get("/admin/logs", async (c) => {
         <option value="" ${appF === "" ? "selected" : ""}>전체 프로그램</option>
         <option value="crawl" ${appF === "crawl" ? "selected" : ""}>매물 수집기</option>
         <option value="photo" ${appF === "photo" ? "selected" : ""}>사진950</option>
+        <option value="db" ${appF === "db" ? "selected" : ""}>DB 조회</option>
       </select>
       <button type="submit" class="btn">검색</button>
     </form>

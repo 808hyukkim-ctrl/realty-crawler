@@ -21,6 +21,7 @@ const siteLabel = (s: string) => SITE_LABEL[s] || s;
 const cleanSite = (h: string) => h.trim().replace(/[^a-zA-Z0-9가-힣_ ]/g, "").trim().slice(0, 20);
 
 let ready = false;
+export { ensure as ensureListings };
 async function ensure(db: D1Database) {
   if (ready) return;
   await db.prepare(`CREATE TABLE IF NOT EXISTS listings (
@@ -298,7 +299,7 @@ const qs = (f: Filter, extra: Record<string, any> = {}) => {
   return p.toString();
 };
 const showNo = (no: string) => (String(no || "").startsWith("h:") ? "" : no);   // 번호가 없던 행은 내용 해시가 키 — 화면·엑셀엔 빈칸
-const kst = (iso: string) => { try { return new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false, year: "2-digit", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
+export const kst = (iso: string) => { try { return new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false, year: "2-digit", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
 
 // ---------------------------------------------------------------- 어드민 화면
 listings.get("/admin/listings", async (c) => {
