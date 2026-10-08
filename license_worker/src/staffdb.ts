@@ -15,12 +15,19 @@ export const staffdb = new Hono<{ Bindings: Bindings }>();
 const COOKIE = "db_s";
 const DAYS = 30;
 const MAX_ROWS = 5;
-/** 직원 조회는 "○○동 123-4" 꼴만 허용. 전화번호 모양이나 숫자만(호수) 치면 거부 */
+/** 직원 조회: "821-6" 처럼 번지만, 또는 "논현동 821-6". 전화번호 모양은 거부, 동 이름만도 거부 (2026-10-08 직원이 번지만 치는 걸로 확인) */
 export function jibunCheck(q: string): string {
   const t = q.trim();
-  if (/0\d{1,2}[-\s).]*\d{3,4}[-\s]*\d{4}/.test(t) || /^[\d\s-]+$/.test(t)) return "전화번호나 호수만으로는 찾을 수 없습니다. 지번으로 찾아주세요. 예: 논현동 124-12";
-  if (!/[가-힣]{1,10}(동|리|가|읍|면)\s*(산\s*)?\d{1,4}(-\d{1,4})?/.test(t)) return "동 이름과 번지를 같이 적어주세요. 예: 논현동 124-12";
+  if (/0\d{1,2}[-\s).]*\d{3,4}[-\s]*\d{4}/.test(t) || /^\d{7,}$/.test(t.replace(/\D/g, "")) && !/[가-힣]/.test(t)) return "전화번호로는 찾을 수 없습니다. 지번(번지)으로 찾아주세요. 예: 821-6";
+  if (/^\s*(산\s*)?\d{1,4}(\s*-\s*\d{1,4})?\s*(번지)?\s*$/.test(t)) return "";                      // 번지만
+  if (!/[가-힣]{1,10}(동|리|가|읍|면)\s*(산\s*)?\d{1,4}(-\d{1,4})?/.test(t)) return "번지를 적어주세요. 예: 821-6 또는 논현동 821-6";
   return "";
+}
+/** 번지만 쳤을 때: 주소에서 '공백 + 번지 + (숫자·호 아님)' 로만 맞춘다 → 호수(302호)나 다른 번지의 일부(1821-6)는 안 걸림 */
+export function lotWhere(q: string): [string, any[]] {
+  const lot = q.replace(/번지/g, "").replace(/\s+/g, "");
+  // 앞에 '○○동/리/가 ' 가 있어야 번지로 본다 → "2층 302" 같은 호수는 안 걸림
+  return [" WHERE (addr GLOB ? OR addr GLOB ?)", [`*[동리가읍면] ${lot}[^0-9호]*`, `*[동리가읍면] ${lot}`]];
 }
 
 async function hmacHex(secret: string, msg: string): Promise<string> {
@@ -84,9 +91,9 @@ staffdb.get("/db", async (c) => {
     <div class="page-head"><h1>지번으로 찾기</h1><span class="small muted">${u} · <form method="post" action="/db/logout" class="inline-form"><button type="submit" class="x" style="font-size:12px">로그아웃</button></form></span></div>
     <div class="lookup">
       <div class="lkrow">
-        <input type="text" id="lkq" placeholder="지번만 치세요 — 예: 논현동 124-12 (호수·전화번호도 됨)" value="${q}" autofocus autocomplete="off">
+        <input type="text" id="lkq" placeholder="번지만 치세요 — 예: 821-6 (논현동 821-6 도 됨)" value="${q}" autofocus autocomplete="off">
         <button type="button" class="btn btn-primary" id="lkgo">찾기</button>
-        <span class="small muted" id="lkmsg">동 이름과 번지를 같이 치세요. 5건까지 보입니다.</span>
+        <span class="small muted" id="lkmsg">번지(예: 821-6)를 치면 바로 찾습니다. 5건까지 보입니다.</span>
       </div>
       <div id="lkres"></div>
     </div>
@@ -116,7 +123,8 @@ staffdb.get("/db/lookup.json", async (c) => {
   if (q.length < 2) return c.json({ q, rows: [], count: 0 });
   const bad = jibunCheck(q);
   if (bad) { await log(c.env.DB, u, q + " (거부)", 0); return c.json({ q, rows: [], count: 0, error: bad }); }
-  const [where, binds] = lookupWhere(q, false);
+  const lotOnly = /^\s*(산\s*)?\d{1,4}(\s*-\s*\d{1,4})?\s*(번지)?\s*$/.test(q);
+  const [where, binds] = lotOnly ? lotWhere(q) : lookupWhere(q, false);
   const { results } = await c.env.DB.prepare("SELECT addr, phone, contacts, memo, kind, deal, price, title, last_at FROM listings" + where + " ORDER BY addr, id LIMIT ?").bind(...binds, MAX_ROWS + 1).all();
   const all = (results ?? []).map((r: any) => ({ addr: r.addr, phone: r.phone, contacts: r.contacts, memo: r.memo, kind: r.kind, deal: r.deal, price: r.price, title: r.title, last_at: kst(r.last_at) }));
   const rows = all.slice(0, MAX_ROWS);
@@ -148,7 +156,7 @@ const DB_JS = `
   var t=null,last='';
   async function lookup(){
     var q=$('lkq').value.trim(); var res=$('lkres'), msg=$('lkmsg');
-    if(q.length<2){ res.innerHTML=''; msg.textContent='동 이름과 번지를 같이 치세요. 5건까지 보입니다.'; return; }
+    if(q.length<2){ res.innerHTML=''; msg.textContent='번지(예: 821-6)를 치면 바로 찾습니다. 5건까지 보입니다.'; return; }
     if(q===last) return; last=q; msg.textContent='찾는 중…';
     try{
       var r=await fetch('/db/lookup.json?q='+encodeURIComponent(q)).then(function(x){ if(x.status===401){ location.href='/db'; throw new Error('로그인 필요'); } return x.json(); });
