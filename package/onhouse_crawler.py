@@ -9,6 +9,16 @@ from bs4 import BeautifulSoup
 from typing import Optional, Dict, Any, List, Union, Callable
 
 
+class OnhouseLoginError(RuntimeError):
+    """로그인 실패(아이디·비밀번호 불일치) 또는 수집 중 세션 끊김(다시 로그인해도 안 됨)"""
+
+
+def is_login_wall(html: str) -> bool:
+    """상세 대신 돌아오는 짧은 응답: alert('로그인후 이용 가능합니다.'); location.replace('/?login=true&callback=…')"""
+    h = html or ""
+    return len(h) < 600 and ("로그인후 이용" in h or "login=true" in h)
+
+
 class OnhouseCrawler:
     LOGIN_URL = "https://www.onhouse.com/index.php/dataFunction/login"
     SEARCH_URL = "https://www.onhouse.com/index.php/dataFunction/rentMapList"
@@ -67,6 +77,12 @@ class OnhouseCrawler:
             timeout=self.timeout_sec,
         )
         r.raise_for_status()
+        # 실패해도 200 으로 alert 스크립트가 온다: "일치하는 정보가 없습니다." → 이걸 성공으로 보면 상세가 전부 '로그인후 이용' 빈 응답이 된다 (2026-10-08)
+        body = r.text or ""
+        if "일치하는 정보가 없습니다" in body or ("alert(" in body and len(body) < 400 and "location.replace('/index')" in body):
+            self._logged_in = False
+            self._log("login FAILED: no matching account")
+            raise OnhouseLoginError("온하우스 로그인 실패 — 아이디 또는 비밀번호가 맞지 않습니다. onhouse.com 에서 직접 로그인해 확인하세요.")
         # 로그인 후 세션 설정용 GET 요청
         self.session.get(
             f"{self.host}/login_opt/toLoginNormal",
@@ -319,6 +335,16 @@ class OnhouseCrawler:
         r = self.session.get(url, impersonate="chrome", timeout=self.timeout_sec)
         r.raise_for_status()
         self._log(f"fetch_detail done id={id} status={r.status_code} body_len={len(r.text)}")
+        if is_login_wall(r.text):
+            # 수집 중 세션이 끊김(다른 곳에서 같은 계정 로그인 등). 한 번 다시 로그인해 보고, 그래도 안 되면 멈춘다 — 빈 행을 쌓지 않는다
+            self._log(f"fetch_detail id={id}: login wall → re-login")
+            if not (self.id and self.pwd):
+                raise OnhouseLoginError("온하우스 로그인이 풀렸습니다 — 다시 로그인하세요.")
+            self.login()
+            r = self.session.get(url, impersonate="chrome", timeout=self.timeout_sec)
+            r.raise_for_status()
+            if is_login_wall(r.text):
+                raise OnhouseLoginError("온하우스 로그인 세션이 끊겼습니다 (다른 기기에서 같은 계정으로 로그인했거나 사이트가 로그아웃시킴). 다시 로그인해도 상세를 열 수 없어 여기서 멈춥니다.")
         return r.text
 
     def _parse_detail_html(self, html: str, id: str) -> Dict[str, Any]:

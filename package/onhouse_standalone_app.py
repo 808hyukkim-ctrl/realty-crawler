@@ -51,7 +51,7 @@ from app_main_common import (
     APP_STYLESHEET, DetailFilters, MultiSelectCombo, RangeInput, contains_any_keyword, parse_keywords_csv, wrap_in_scroll,
     split_excel_by_category,
 )
-from onhouse_crawler import OnhouseCrawler
+from onhouse_crawler import OnhouseCrawler, OnhouseLoginError
 from schedule_manager import DAY_NAMES, ScheduleManager, ScheduledJob
 
 DAY_LABELS = {"mon": "월", "tue": "화", "wed": "수", "thu": "목", "fri": "금", "sat": "토", "sun": "일"}
@@ -336,6 +336,7 @@ class Worker(QObject):
             total = len(regions)
             stopped = False
             checked_access = False
+            login_lost = ""   # 수집 중 로그인 세션이 끊긴 이유 (있으면 멈추고 모은 것까지만 저장)
 
             for ri, region in enumerate(regions, 1):
                 if self._cancel:
@@ -501,8 +502,18 @@ class Worker(QObject):
                         except InterruptedError:
                             stopped = True
                             break
+                        except OnhouseLoginError as e:
+                            login_lost = str(e)
+                            self.log.emit(f"  중단: {e}")
+                            stopped = True
+                            break
                         except Exception as e:
                             row = {"매물ID": hid, "URL": f"{crawler.DETAIL_URL}/{hid}", **({} if by_reg else {"확인일": it["chk"][:19]}), "지역": region, "오류": str(e)}
+                        if not login_lost and not row.get("오류") and not (row.get("전체주소") or row.get("주소_호실") or row.get("물건번호")):
+                            # 상세가 비어 있는 행(로그인 벽·빈 페이지)은 저장하지 않는다
+                            self.log.emit(f"  {hid} 상세 내용이 비어 있어 건너뜀")
+                            self._sleep_between()
+                            continue
                         all_rows.append(row)
                         addr = row.get("전체주소") or row.get("주소_호실") or ""
                         price = next(
@@ -539,9 +550,14 @@ class Worker(QObject):
                     + (f" / 종료 시 잔여: {quota_last}" if quota_last else "")
                 )
 
+            if login_lost and not all_rows:
+                self.failed.emit(login_lost)
+                return
             if not all_rows:
                 self.finished.emit("중단됨 (저장할 데이터 없음)" if stopped else "수집된 매물이 없습니다.")
                 return
+            if login_lost:
+                self.log.emit(f"로그인이 끊겨 {len(all_rows)}건까지만 저장합니다. 다시 로그인한 뒤 이어서 수집하세요.")
 
             out_dir = self.p["out_dir"]
             os.makedirs(out_dir, exist_ok=True)

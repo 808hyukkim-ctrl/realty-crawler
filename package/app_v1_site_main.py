@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
 import auto_send
 from daangn_realty_crawler import DaangnRealtyCrawler
 from peterpan_crawler import PeterpanCrawler
-from onhouse_crawler import OnhouseCrawler
+from onhouse_crawler import OnhouseCrawler, OnhouseLoginError
 from naver_crawler import NaverCrawler
 from app_main_common import (
     DetailFilters,
@@ -330,6 +330,7 @@ class OnhouseWorker(QObject):
             crawler = OnhouseCrawler(id=self.params["uid"], pwd=self.params["pwd"])
             self.status.emit("온하우스 로그인 중...")
             crawler.login()
+            login_lost = ""
             region_names = self.params["regions"]
             if not region_names:
                 self.finished.emit("선택된 지역이 없습니다.")
@@ -393,8 +394,15 @@ class OnhouseWorker(QObject):
                         except InterruptedError:
                             stopped = True
                             break
+                        except OnhouseLoginError as e:
+                            self.status.emit(f"중단: {e}")
+                            login_lost = str(e)
+                            stopped = True
+                            break
                         except Exception as e:
                             row = {"매물ID": hid_s, "URL": f"{crawler.DETAIL_URL}/{hid_s}", "오류": str(e)}
+                        if not row.get("오류") and not (row.get("전체주소") or row.get("주소_호실") or row.get("물건번호")):
+                            continue   # 상세가 비어 있는 행은 저장하지 않는다
                         all_rows.append(row)
                         self.row_ready.emit(MainWindow.item_to_display_row(row))
                     if stopped:
@@ -408,6 +416,9 @@ class OnhouseWorker(QObject):
 
                 self.progress.emit(idx, total)
 
+            if login_lost and not all_rows:
+                self.failed.emit(login_lost)
+                return
             if not all_rows:
                 self.finished.emit("중단됨 (저장할 데이터 없음)" if stopped else "수집된 매물이 없습니다.")
                 return
