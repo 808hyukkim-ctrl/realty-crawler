@@ -165,26 +165,30 @@ photos.post("/admin/photos/settings", async (c) => {
   return c.redirect("/admin/photos?saved=1");
 });
 
-photos.post("/admin/photos/collect", async (c) => {
-  const body: any = await c.req.json().catch(() => ({}));
-  const urls: string[] = Array.isArray(body.urls) ? body.urls.map((u: any) => String(u).trim()).filter((u: string) => /^https?:\/\//.test(u)).slice(0, 50) : [];
+// 링크 목록 → 링크별 사진 주소 (어드민 /admin/photos 와 직원 포털 /daangn 사진 950 탭이 같이 씀, 2026-10-08)
+export async function collectPhotos(env: any, rawUrls: unknown): Promise<any[]> {
+  const urls: string[] = Array.isArray(rawUrls) ? rawUrls.map((u: any) => String(u).trim()).filter((u: string) => /^https?:\/\//.test(u)).slice(0, 50) : [];
   const out: any[] = [];
   for (const url of urls) {
     try {
       const no = naverNo(url), did = daangnId(url), hid = onhouseId(url);
-      const f = no ? await photosNaver(no) : did ? await photosDaangn(did, url, c.env.PARSE) : hid ? await photosOnhouse(hid, c.env.DB) : await photosGeneric(url);
+      const f = no ? await photosNaver(no) : did ? await photosDaangn(did, url, env.PARSE) : hid ? await photosOnhouse(hid, env.DB) : await photosGeneric(url);
       out.push({ url, ok: true, site: no ? "naver" : did ? "daangn" : hid ? "onhouse" : "generic", ...f });
     } catch (e: any) {
       out.push({ url, ok: false, error: e?.message || String(e) });
     }
   }
-  return c.json({ items: out });
+  return out;
+}
+photos.post("/admin/photos/collect", async (c) => {
+  const body: any = await c.req.json().catch(() => ({}));
+  return c.json({ items: await collectPhotos(c.env, body.urls) });
 });
 
 const PROXY_HOST_OK = /(\.pstatic\.net|\.gcp-karroter\.net|\.cloudfront\.net|\.daangn\.com|\.naver\.(com|net)|\.onhouse\.com|\.zigbang\.(com|io)|\.nemoapp\.kr|\.amazonaws\.com)$/i;
-photos.get("/admin/photos/img", async (c) => {
-  const u = c.req.query("u") || "";
-  const ref = c.req.query("r") || "";
+photos.get("/admin/photos/img", (c) => proxyImage(c, c.req.query("u") || "", c.req.query("r") || ""));
+// 사진 바이트 중계 (같은 출처여야 캔버스에서 쓸 수 있다) — 직원 포털도 같이 씀
+export async function proxyImage(c: any, u: string, ref: string): Promise<Response> {
   let target: URL;
   try { target = new URL(u); } catch { return c.text("bad url", 400); }
   if (!/^https?:$/.test(target.protocol)) return c.text("bad url", 400);
@@ -218,7 +222,7 @@ photos.get("/admin/photos/img", async (c) => {
   if (!/^image\//.test(ct) && !PROXY_HOST_OK.test(target.hostname)) return c.text("not image", 415);
   if (!/^image\//i.test(ct)) ct = /\.png(\?|$)/i.test(target.pathname) ? "image/png" : /\.webp(\?|$)/i.test(target.pathname) ? "image/webp" : "image/jpeg";
   return new Response(r.body, { status: 200, headers: { "Content-Type": ct, "Cache-Control": "private, max-age=3600" } });
-});
+}
 
 // ---------------------------------------------------------------- 화면
 function PAGE(ohId: string, hasPw: boolean, saved: boolean) {

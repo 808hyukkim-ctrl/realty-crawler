@@ -1,16 +1,22 @@
-// 당근 광고자동화 (2026-10-08) — 라운지와 별개로 라이선스 서버 안에서 돌아가는 "붙여넣기 → 정리 → 당근 등록 → 기록" 기능
-//   화면: GET /daangn (라이선스 계정으로 로그인, 기능 'daangn' 권한 필요)
+// 직원 포털 = 당근 광고자동화 + 사진 950 + 내 활동 (2026-10-08) — 라운지와 별개로 라이선스 서버 안에서 돌아간다
+//   화면: GET /daangn (라이선스 계정으로 로그인; 기능 'daangn'(당근 광고) 또는 'photo'(사진950) 가 있어야 들어옴. 탭은 가진 기능만 보임)
 //   API : /daangn/api/<action> — 인트라넷 화면이 쓰던 이름을 그대로 써서 화면 코드를 거의 바꾸지 않는다
-//         login · summary · address · building · img · daangn-connect/start · daangn-connect/poll · daangn-disconnect ·
-//         daangn-direct · uploads · upload-close · upload-edit
+//         login · summary · my-log
+//         (daangn) address · building · img · daangn-connect(start/poll/cancel) · daangn-disconnect · daangn-direct · uploads · upload-close · upload-edit
+//         (photo)  photos-collect · photos-img
 //   당근 로그인·글 등록은 엔진(ENGINE_URL, Bearer ENGINE_SECRET)이 하고, 사용자별 당근 세션(암호문)·기록은 이 서버의 D1 에만 둔다.
+//   활동 기록: 로그인·당근 등록·사진950 을 activity_log(app=daangn/photo)에 남긴다 → 어드민 활동 기록 탭과 포털 '내 활동' 탭.
 import { Hono } from "hono";
 import { html } from "hono/html";
 import DAANGN_HTML from "./daangn.html";
 import { layout } from "./layout";
+import { verifyPassword } from "./auth";
+import { collectPhotos, proxyImage } from "./photos";
 
 type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string; ENGINE_URL: string; ENGINE_SECRET: string };
 export const daangn = new Hono<{ Bindings: Bindings }>();
+
+const PORTAL_FEATURES = ["daangn", "photo"];   // 이 중 하나라도 있으면 포털에 들어올 수 있다
 
 // ---------------------------------------------------------------- 표
 let ready = false;
@@ -24,15 +30,19 @@ async function ensure(db: D1Database) {
     status TEXT NOT NULL, article_no TEXT, url TEXT, reason TEXT, closed INTEGER NOT NULL DEFAULT 0, closed_at TEXT, data TEXT)`).run();
   await db.prepare(`CREATE INDEX IF NOT EXISTS daangn_uploads_user ON daangn_uploads(username, created_at DESC)`).run();
   await db.prepare(`CREATE INDEX IF NOT EXISTS daangn_uploads_key ON daangn_uploads(key)`).run();
+  // index.ts 의 activity_log 와 같은 정의 (먼저 만들어져 있어도 무해)
+  await db.prepare("CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, username TEXT NOT NULL, app TEXT NOT NULL, action TEXT NOT NULL, detail TEXT, count INTEGER, mac TEXT)").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS activity_log_at ON activity_log(at DESC)").run();
   ready = true;
 }
 const nowIso = () => new Date().toISOString();
 const str = (v: unknown) => (v === null || v === undefined ? "" : String(v).trim());
 const json = (c: any, body: unknown, status = 200) => c.json(body, status);
 const normKey = (road: unknown, dong: unknown, ho: unknown) => [road, dong, ho].map((v) => str(v).replace(/\s+/g, "").replace(/호$/, "").replace(/동$/, "").toLowerCase()).join("|");
-
-// 비밀번호 검증 — index.ts 와 같은 방식(PBKDF2/SHA 포맷은 verifyPassword 를 그대로 가져다 씀)
-import { verifyPassword } from "./auth";
+const featsOf = (s: unknown) => String(s ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+async function addLog(db: D1Database, username: string, app: string, action: string, detail: string, count: number | null) {
+  try { await db.prepare("INSERT INTO activity_log (at, username, app, action, detail, count, mac) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(nowIso(), username, app, action, detail.slice(0, 500), count, "web").run(); } catch { /* 기록 실패는 기능을 막지 않는다 */ }
+}
 
 async function engine(c: any, path: string, init: RequestInit = {}): Promise<Response> {
   const base = String(c.env.ENGINE_URL || "").replace(/\/$/, "");
@@ -47,20 +57,22 @@ async function engineJson(c: any, path: string, body?: unknown, method = "POST")
 }
 
 // ---------------------------------------------------------------- 세션(웹 토큰)
-async function userOf(c: any): Promise<{ username: string } | null> {
+type Me = { username: string; features: string[] };
+async function userOf(c: any): Promise<Me | null> {
   await ensure(c.env.DB);
   const tok = str(c.req.header("x-intranet-token") || c.req.query("token"));
   if (!tok) return null;
   const row: any = await c.env.DB.prepare("SELECT username, last_at FROM daangn_web_sessions WHERE token = ?").bind(tok).first();
   if (!row) return null;
   if (Date.now() - new Date(row.last_at).getTime() > 14 * 86400e3) { await c.env.DB.prepare("DELETE FROM daangn_web_sessions WHERE token = ?").bind(tok).run(); return null; }
-  // 계정이 아직 유효한지(비활성·만료·권한)
+  // 계정이 아직 유효한지(비활성·만료·권한) — 어드민에서 권한을 빼면 다음 요청부터 바로 막힌다
   const u: any = await c.env.DB.prepare("SELECT username, is_active, expires_at, features FROM users WHERE username = ?").bind(row.username).first();
   if (!u || !u.is_active) return null;
   if (u.expires_at && new Date(u.expires_at).getTime() < Date.now()) return null;
-  if (!String(u.features ?? "").split(",").map((x: string) => x.trim()).includes("daangn")) return null;
+  const features = featsOf(u.features);
+  if (!features.some((f) => PORTAL_FEATURES.includes(f))) return null;
   if (Date.now() - new Date(row.last_at).getTime() > 3600e3) c.env.DB.prepare("UPDATE daangn_web_sessions SET last_at = ? WHERE token = ?").bind(nowIso(), tok).run().catch(() => {});
-  return { username: row.username };
+  return { username: row.username, features };
 }
 const randomToken = () => { const a = new Uint8Array(24); crypto.getRandomValues(a); return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join(""); };
 
@@ -79,10 +91,12 @@ daangn.post("/daangn/api/login", async (c) => {
   if (!row || !(await verifyPassword(password, row.password_hash))) return json(c, { error: "아이디 또는 비밀번호가 올바르지 않습니다." }, 401);
   if (!row.is_active) return json(c, { error: "비활성화된 계정입니다. 관리자에게 문의하세요." }, 403);
   if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) return json(c, { error: "이용권이 만료되었습니다." }, 403);
-  if (!String(row.features ?? "").split(",").map((x: string) => x.trim()).includes("daangn")) return json(c, { error: "이 계정은 '당근 광고' 이용권이 없습니다. 관리자에게 문의하세요." }, 403);
+  const features = featsOf(row.features);
+  if (!features.some((f) => PORTAL_FEATURES.includes(f))) return json(c, { error: "이 계정은 '당근 광고'·'사진950' 이용권이 없습니다. 관리자에게 문의하세요." }, 403);
   const token = randomToken();
   await c.env.DB.prepare("INSERT INTO daangn_web_sessions (token, username, created_at, last_at) VALUES (?, ?, ?, ?)").bind(token, username, nowIso(), nowIso()).run();
-  return json(c, { ok: true, token, username });
+  await addLog(c.env.DB, username, features.includes("daangn") ? "daangn" : "photo", "로그인", "웹 포털", null);
+  return json(c, { ok: true, token, username, features });
 });
 
 daangn.all("/daangn/api/:action", async (c) => {
@@ -95,13 +109,32 @@ async function apiHandler(c: any) {
   if (!me) return json(c, { error: "토큰이 없거나 만료됐습니다." }, 401);
   const db = c.env.DB;
   const q = (k: string) => str(c.req.query(k));
+  const hasDaangn = me.features.includes("daangn"), hasPhoto = me.features.includes("photo");
 
   if (action === "summary") {
-    const s: any = await db.prepare("SELECT phone, name, broker, connected_at FROM daangn_sessions WHERE username = ?").bind(me.username).first();
-    const cnt: any = await db.prepare("SELECT COUNT(*) n FROM daangn_uploads WHERE username = ? AND status = 'ok' AND closed = 0").bind(me.username).first();
-    return json(c, { label: me.username, scopes: ["create", "building"], create: { pending: 0 }, review: { listings: 0, signups: 0 },
+    const s: any = hasDaangn ? await db.prepare("SELECT phone, name, broker, connected_at FROM daangn_sessions WHERE username = ?").bind(me.username).first() : null;
+    const cnt: any = hasDaangn ? await db.prepare("SELECT COUNT(*) n FROM daangn_uploads WHERE username = ? AND status = 'ok' AND closed = 0").bind(me.username).first() : null;
+    return json(c, { label: me.username, features: me.features, scopes: hasDaangn ? ["create", "building"] : [], create: { pending: 0 }, review: { listings: 0, signups: 0 },
       daangn: s ? { connected: true, phone: s.phone ?? "", name: s.name ?? "", broker: s.broker ?? "", connected_at: s.connected_at } : { connected: false }, uploads_active: cnt?.n ?? 0 });
   }
+  if (action === "my-log") {
+    const { results } = await db.prepare("SELECT at, app, action, detail, count FROM activity_log WHERE username = ? ORDER BY id DESC LIMIT 300").bind(me.username).all();
+    return json(c, { rows: results ?? [] });
+  }
+
+  // ---- 사진 950 (기능 photo)
+  if (action === "photos-collect" || action === "photos-img") {
+    if (!hasPhoto) return json(c, { error: "이 계정에는 '사진950' 이용권이 없습니다." }, 403);
+    if (action === "photos-img") return proxyImage(c, q("u"), q("r"));
+    const body = await c.req.json().catch(() => ({}));
+    const items = await collectPhotos(c.env, body.urls);
+    const n = items.filter((it: any) => it.ok).reduce((a: number, it: any) => a + ((it.photos || []).length), 0);
+    await addLog(db, me.username, "photo", "사진950", `${items.length}개 링크 (${items.map((it: any) => it.site || "x").filter((v: string, i: number, arr: string[]) => arr.indexOf(v) === i).join("·")})`, n);
+    return json(c, { items });
+  }
+
+  // ---- 당근 (기능 daangn)
+  if (!hasDaangn) return json(c, { error: "이 계정에는 '당근 광고' 이용권이 없습니다." }, 403);
   if (action === "address") {
     if (q("q").length < 2) return json(c, { error: "검색어는 2글자 이상." }, 400);
     const r = await engineJson(c, "/address?q=" + encodeURIComponent(q("q")), undefined, "GET"); return json(c, r.data, r.status);
@@ -124,6 +157,7 @@ async function apiHandler(c: any) {
       const v = r.data.viewer || {};
       await db.prepare("INSERT INTO daangn_sessions (username, blob, phone, name, broker, connected_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(username) DO UPDATE SET blob = excluded.blob, phone = excluded.phone, name = excluded.name, broker = excluded.broker, connected_at = excluded.connected_at")
         .bind(me.username, String(r.data.session), str(v.phone), str(v.name), str(v.broker), nowIso()).run();
+      await addLog(db, me.username, "daangn", "당근 연결", [v.name, v.phone, v.broker].filter(Boolean).join(" · "), null);
       return json(c, { status: "success", viewer: v });
     }
     return json(c, r.data, r.status);
@@ -153,6 +187,7 @@ async function apiHandler(c: any) {
     const status = d.ok ? "ok" : d.code === "daangn_dup" ? "dup" : "fail";
     await db.prepare("INSERT INTO daangn_uploads (username, key, created_at, addr, ho, deal, price, phone, role, source, status, article_no, url, reason, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
       .bind(me.username, key, nowIso(), label.addr, label.ho, label.deal, label.price, label.phone, label.role, label.source, status, str(d.articleNo || d.articleId), str(d.url), status === "ok" ? null : str(d.error || d.reason).slice(0, 500), JSON.stringify({ summary: d.summary ?? null, variant: d.variant ?? null, by: d.by ?? null, fields: { property_type: body.property_type, area_exclusive: body.area_exclusive, floor_no: body.floor_no, total_floors: body.total_floors, room_count: body.room_count, bathroom_count: body.bathroom_count, available_date: body.available_date, photos: Array.isArray(body.photos) ? body.photos.length : 0 } }).slice(0, 4000)).run();
+    await addLog(db, me.username, "daangn", status === "ok" ? "당근 등록" : status === "dup" ? "당근 중복" : "당근 등록 실패", `${label.addr} ${label.ho} ${label.deal} ${label.price}`.trim() + (status === "ok" ? ` → ${str(d.articleNo || d.articleId)}` : ` — ${str(d.error || d.reason).slice(0, 160)}`), status === "ok" ? 1 : 0);
     if (d.code === "no_session") await db.prepare("DELETE FROM daangn_sessions WHERE username = ?").bind(me.username).run();
     return json(c, d.ok ? { ok: true, url: d.url ?? null, articleId: d.articleNo ?? d.articleId ?? null, articleNo: d.articleNo ?? null, direct: true, variant: d.variant } : { ...d, code: d.code === "no_session" ? "no_cookies" : d.code }, r.status === 200 ? 200 : r.status);
   }
@@ -205,12 +240,12 @@ daangn.get("/admin/daangn", async (c) => {
   try { const r = await engine(c, "/health", { method: "GET" }); const j: any = await r.json(); engineOk = r.ok ? `정상 (QR 세션 ${j.sessions ?? 0}개, 키 vworld:${j.keys?.vworld ? "O" : "X"} juso:${j.keys?.juso ? "O" : "X"} hub:${j.keys?.hub ? "O" : "X"})` : `응답 ${r.status}`; } catch (e) { engineOk = "연결 실패: " + (e instanceof Error ? e.message : String(e)); }
   return c.html(layout("당근 광고자동화", html`
     <h1>🥕 당근 광고자동화</h1>
-    <p class="muted">사용자 화면: <a href="/daangn" target="_blank">/daangn</a> (라이선스 계정으로 로그인, 기능 '당근 광고' 권한 필요) · 엔진: ${engineOk}</p>
+    <p class="muted">직원 화면: <a href="/daangn" target="_blank">/daangn</a> (라이선스 계정으로 로그인 · 기능 '당근 광고' 또는 '사진950' 권한이 있는 계정만, 탭은 가진 기능만 보임) · 엔진: ${engineOk}</p>
     <h2>사용자별 연결·등록</h2>
     <table><thead><tr><th>아이디</th><th>당근 광고 권한</th><th>당근 연결</th><th>연결 계정</th><th>성공</th><th>실패·중복</th><th>마지막</th></tr></thead><tbody>
     ${(users ?? []).map((u: any) => html`<tr>
       <td>${u.username}</td>
-      <td>${String(u.features ?? "").split(",").includes("daangn") ? "O" : html`<span class="muted">X</span>`}</td>
+      <td>${featsOf(u.features).includes("daangn") ? "O" : html`<span class="muted">X</span>`}</td>
       <td>${u.connected_at ? html`<b>연결됨</b> <span class="small muted">${dt(u.connected_at)}</span>` : html`<span class="muted">-</span>`}</td>
       <td class="small">${[u.name, u.phone, u.broker].filter(Boolean).join(" · ")}</td>
       <td>${u.ok_n}</td><td>${u.fail_n}</td><td class="small muted">${dt(u.last_at)}</td></tr>`)}

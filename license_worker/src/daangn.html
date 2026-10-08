@@ -157,7 +157,7 @@
   table.bulk .btn{padding:3px 8px; font-size:11px}
   table.bulk tr.done td{background:#f7fdf9; color:#4b5563}
 </style>
-<style>#csubmit,#cdaangn,#bregister,label:has(#blgall),label:has(input[data-lg]){display:none!important}</style>
+<style>#csubmit,#cdaangn,#bregister,label:has(#blgall),label:has(input[data-lg]){display:none!important}.tab[data-t=photo] .n,.tab[data-t=log] .n{display:none}</style>
 </head>
 <body>
 
@@ -169,7 +169,7 @@
 <script>
   const CONFIG = {
     API_BASE: '/daangn/api',
-    REFRESH_MS: 30000,          // 현황 자동 새로고침 주기
+    REFRESH_MS: 300000,          // 현황 자동 새로고침 주기
     // 네이버 매물 링크 정리 서버 (브라우저에서 네이버를 직접 부를 수 없어 워커가 대신 읽는다). 비우면 글 붙여넣기만 동작
     PARSE_API: 'https://daangn-parse.808hyukkim.workers.dev/parse',
   }
@@ -263,7 +263,7 @@ function renderGate(err) {
   el.innerHTML = `
     <div class="wrap"><div class="gate">
       <div class="brand" style="font-size:20px">당근 <span>광고자동화</span></div>
-      <p style="margin-top:6px">매물수집기 계정(아이디·비밀번호)으로 로그인하세요. '당근 광고' 이용권이 있는 계정만 들어올 수 있습니다.</p>
+      <p style="margin-top:6px">매물수집기 계정(아이디·비밀번호)으로 로그인하세요. '당근 광고' 또는 '사진950' 이용권이 있는 계정만 들어올 수 있습니다. 탭은 가진 기능만 보입니다.</p>
       ${err ? `<div class="err">${esc(err)}</div>` : ''}
       <input id="lg_id" placeholder="아이디" autocomplete="username" spellcheck="false" style="margin-bottom:8px">
       <input id="lg_pw" type="password" placeholder="비밀번호" autocomplete="current-password">
@@ -291,7 +291,7 @@ async function boot() {
   if (!token()) return renderGate()
   el.innerHTML = `<div class="wrap"><div class="empty" style="margin-top:20vh">불러오는 중…</div></div>`
   try { S.me = await api('summary') } catch (e) { if (e.message !== '401') renderGate(e.message); return }
-  const order = ['create','uploads','supply','review','cs'].filter(s => s === 'uploads' ? S.me.scopes.includes('create') : S.me.scopes.includes(s))
+  const fts = S.me.features || []; const order = [].concat(fts.includes('daangn') ? ['create', 'uploads'] : [], fts.includes('photo') ? ['photo'] : [], ['log'])
   if (!order.length) return renderGate('이 토큰에는 열람 권한이 없습니다.')
   if (!order.includes(S.tab)) S.tab = order[0]
   renderShell(order)
@@ -306,7 +306,7 @@ async function refresh() {
 }
 
 /* ── 껍데기 ───────────────────────────────────────────── */
-const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함' }
+const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함', photo:'사진 950', log:'내 활동' }
 function renderShell(order) {
   el.innerHTML = `
     <header>
@@ -367,7 +367,8 @@ async function load(tab, quiet) {
     if (!(S.data.create && restoreCreate())) paintCreate()
     S.painted = 'create'; return
   }
-  const paint = { supply: paintSupply, review: paintReview, cs: paintCS, uploads: paintUploads }[tab]
+  const paint = { supply: paintSupply, review: paintReview, cs: paintCS, uploads: paintUploads, photo: paintPhoto, log: paintLog }[tab]
+  if (tab === 'photo') { paintPhoto(); S.painted = 'photo'; return }
   if (S.data[tab]) { paint(); S.painted = tab }   // 캐시로 먼저 그리고 뒤에서 갱신 (늦게 보이던 문제)
   else if (!quiet) { body.innerHTML = `<div class="empty" style="padding:60px">불러오는 중…</div>`; S.painted = tab }
   let fresh
@@ -376,6 +377,7 @@ async function load(tab, quiet) {
     if (tab === 'review') fresh = { l: await api('listings'), s: await api('signups') }
     if (tab === 'cs') fresh = await api('cs')
     if (tab === 'uploads') fresh = await api('uploads?days=' + (S.upDays || 30))
+    if (tab === 'log') fresh = await api('my-log')
   } catch (e) {
     if (S.tab !== tab || seq !== S.loadSeq) return
     if (e.message !== '401') { if (S.data[tab]) toast('새로 불러오지 못했습니다: ' + e.message); else body.innerHTML = `<div class="err">${esc(e.message)}</div>` }
@@ -2030,7 +2032,95 @@ function dgcStop(cancel) {
   DGC.sid = ''; DGC.state = ''; DGC.qr = ''; if (cancel) { DGC.msg = ''; paintDgConn() }
 }
 
-const BUILD = '2026-10-08 19:58 당근'
+
+/* ── 직원 포털 탭: 사진 950 (기능 photo) · 내 활동 ── build_daangn_html.py 가 daangn.html 에 끼워 넣는다 */
+const APP_KO = { daangn: '당근 광고', photo: '사진950', crawl: '매물 수집기', db: 'DB 조회' }
+function paintLog() {
+  S.painted = 'log'
+  const rows = (S.data.log && S.data.log.rows) || []
+  document.getElementById('body').innerHTML = `
+    <div class="card scroll"><div style="font-weight:800;margin-bottom:8px">내 활동 <span style="font-weight:400;color:var(--dim);font-size:12px">이 계정의 최근 ${rows.length}건 — 로그인 · 당근 등록 · 사진950 · 수집기</span></div>
+    ${rows.length ? `<table><thead><tr><th>일시</th><th>프로그램</th><th>작업</th><th>내용</th><th>건수</th></tr></thead><tbody>
+      ${rows.map(r => `<tr><td style="white-space:nowrap">${esc(dt(r.at))}</td><td>${esc(APP_KO[r.app] || r.app)}</td><td>${esc(r.action)}</td><td style="max-width:520px;word-break:break-all">${esc(r.detail || '')}</td><td>${r.count == null ? '' : esc(r.count)}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">아직 기록이 없습니다.</div>'}</div>`
+}
+
+const PH = { running: false, stop: false }
+function paintPhoto() {
+  S.painted = 'photo'
+  const body = document.getElementById('body')
+  if (document.getElementById('ph_links')) return   // 작업 중인 화면은 다시 그리지 않는다
+  body.innerHTML = `
+    <div class="paste">
+      <div style="font-weight:800">📷 사진 950 <span style="font-weight:400;color:var(--dim);font-size:12px">매물 링크를 넣으면 사진만 모아 가로 950px 로 바꿔 zip 으로 내려받습니다 (네이버부동산 · 당근 · 온하우스 · 그 밖의 사이트). 변환은 이 브라우저에서 합니다.</span></div>
+      <textarea id="ph_links" rows="6" placeholder="https://new.land.naver.com/rooms?articleNo=...&#10;https://realty.daangn.com/articles/...&#10;https://www.onhouse.com/index/rent_view/...   (여러 개는 줄바꿈·쉼표·공백으로 구분)"></textarea>
+      <div class="row-acts" style="align-items:center;flex-wrap:wrap;gap:10px 16px">
+        <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:13px">가로(px) <input type="number" id="ph_w" value="950" min="50" max="5000" style="width:80px;font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:6px"></label>
+        <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:13px"><input type="checkbox" id="ph_fixh" style="width:auto;margin:0"> 세로 고정 <input type="number" id="ph_h" value="950" min="100" max="5000" disabled style="width:80px;font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:6px"></label>
+        <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:13px">JPG 품질 <input type="number" id="ph_q" value="92" min="50" max="100" style="width:64px;font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:6px"></label>
+        <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:13px" title="기본은 한 zip 안에 매물별 폴더. 링크마다 zip 이면 브라우저가 '여러 파일 다운로드 허용'을 물을 수 있습니다"><input type="checkbox" id="ph_onezip" style="width:auto;margin:0"> 링크마다 zip 하나씩</label>
+      </div>
+      <div class="row-acts" style="align-items:center"><button class="btn b" id="ph_go">사진 가져와서 950으로 저장</button><button class="btn" id="ph_stop" disabled>중단</button><span class="hint" id="ph_status" style="margin:0"></span></div>
+      <div style="height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin:10px 0"><div id="ph_bar" style="height:100%;width:0;background:#2563eb;transition:width .2s"></div></div>
+      <div id="ph_log" style="font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:300px;overflow:auto"></div>
+      <div id="ph_thumbs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px;margin-top:10px"></div>
+    </div>`
+  const $p = id => document.getElementById(id)
+  $p('ph_fixh').onchange = () => { $p('ph_h').disabled = !$p('ph_fixh').checked }
+  const log = s => { const e = $p('ph_log'); if (!e) return; e.textContent += s + '\n'; e.scrollTop = e.scrollHeight }
+  const bar = p => { const e = $p('ph_bar'); if (e) e.style.width = Math.max(0, Math.min(100, p)) + '%' }
+  const status = s => { const e = $p('ph_status'); if (e) e.textContent = s }
+  const links = () => { const out = [], seen = {}; $p('ph_links').value.split(/[\s,;]+/).forEach(t => { t = t.trim(); if (/^https?:\/\//.test(t) && !seen[t]) { seen[t] = 1; out.push(t) } }); return out }
+  const imgUrl = (u, ref) => CONFIG.API_BASE + '/photos-img?u=' + encodeURIComponent(u) + (ref ? '&r=' + encodeURIComponent(ref) : '') + '&token=' + encodeURIComponent(token())
+  const loadImg = (u, ref) => new Promise((ok, bad) => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => bad(new Error('load')); im.src = imgUrl(u, ref) })
+  const resize = (im, w, h, q) => { const cw = w, ch = h > 0 ? h : Math.max(1, Math.round(im.naturalHeight * w / im.naturalWidth)); const c = document.createElement('canvas'); c.width = cw; c.height = ch; const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'
+    if (h > 0) { const s = Math.max(cw / im.naturalWidth, ch / im.naturalHeight), dw = im.naturalWidth * s, dh = im.naturalHeight * s; x.drawImage(im, (cw - dw) / 2, (ch - dh) / 2, dw, dh) } else x.drawImage(im, 0, 0, cw, ch)
+    return new Promise(ok => c.toBlob(b => ok({ blob: b, w: cw, h: ch }), 'image/jpeg', q / 100)) }
+  const save = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove() }, 2000) }
+  const ensureZip = () => window.JSZip ? Promise.resolve() : new Promise((ok, bad) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; s.onload = ok; s.onerror = () => bad(new Error('zip 라이브러리를 불러오지 못했습니다')); document.head.appendChild(s) })
+  $p('ph_stop').onclick = () => { PH.stop = true }
+  $p('ph_go').onclick = async () => {
+    if (PH.running) return
+    const urls = links(); if (!urls.length) return toast('매물 링크를 넣어주세요')
+    PH.running = true; PH.stop = false; $p('ph_go').disabled = true; $p('ph_stop').disabled = false; $p('ph_log').textContent = ''; $p('ph_thumbs').innerHTML = ''; bar(0)
+    const w = parseInt($p('ph_w').value) || 950, h = $p('ph_fixh').checked ? (parseInt($p('ph_h').value) || 0) : 0, q = parseInt($p('ph_q').value) || 92, perLink = $p('ph_onezip').checked
+    const done_ = () => { PH.running = false; const g = $p('ph_go'), s = $p('ph_stop'); if (g) g.disabled = false; if (s) s.disabled = true }
+    try {
+      await ensureZip()
+      status('사진 주소 모으는 중…'); let items = []
+      for (let ci = 0; ci < urls.length; ci += 20) {
+        status(`사진 주소 모으는 중… ${Math.min(ci + 20, urls.length)}/${urls.length}개 링크`)
+        const res = await api('photos-collect', { urls: urls.slice(ci, ci + 20) }); items = items.concat(res.items || [])
+      }
+      let total = 0; items.forEach(it => { if (it.ok) total += it.photos.length }); let done = 0, savedN = 0
+      const allZip = perLink ? null : new JSZip()
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i]; if (PH.stop) { log('중단'); break }
+        log(`[${i + 1}/${items.length}] ${it.url}`)
+        if (!it.ok) { log('  오류: ' + it.error); continue }
+        if (!it.photos.length) { log('  사진 주소를 찾지 못했습니다'); continue }
+        log(`  사진 후보 ${it.photos.length}장 → ${it.label}`)
+        const zip = perLink ? new JSZip() : allZip.folder(it.label); let n = 0
+        for (let k = 0; k < it.photos.length; k++) {
+          if (PH.stop) break; const u = it.photos[k]
+          try { const im = await loadImg(u, it.referer); if (it.site === 'generic' && Math.min(im.naturalWidth, im.naturalHeight) < 400) { done++; bar(done / total * 100); continue }
+            const r = await resize(im, w, h, q); n++; const name = (n < 10 ? '0' : '') + n + '.jpg'; zip.file(name, r.blob)
+            log(`    [${name}] ${im.naturalWidth}x${im.naturalHeight} → ${r.w}x${r.h}`)
+            const th = $p('ph_thumbs'); if (th && th.children.length < 60) { const t = document.createElement('img'); t.src = URL.createObjectURL(r.blob); t.style.cssText = 'width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;border:1px solid var(--line)'; th.appendChild(t) }
+          } catch (e) { log('    내려받기 실패: ' + u.slice(0, 90)) }
+          done++; bar(done / total * 100); status(`${done}/${total}장`)
+        }
+        if (perLink && n) { const b = await zip.generateAsync({ type: 'blob' }); save(b, it.label + '.zip'); savedN += n; log(`  저장 ${n}장 → ${it.label}.zip`) }
+        else if (!perLink) savedN += n
+      }
+      if (!perLink && savedN) { const b2 = await allZip.generateAsync({ type: 'blob' }); save(b2, '매물사진950_' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '') + '.zip'); log(`저장 ${savedN}장 → 한 zip`) }
+      status(`완료 — 사진 ${savedN}장`); bar(100)
+    } catch (e) { log('오류: ' + e.message); status('실패: ' + e.message); if (e.message !== '401') toast(e.message) }
+    finally { done_() }
+  }
+}
+
+const BUILD = '2026-10-08 23:46 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()
@@ -2042,7 +2132,7 @@ async function watchBuild() {
     document.body.appendChild(d); document.getElementById('upd_go').onclick = () => location.reload()
   } catch (_) { /* 네트워크 문제면 조용히 */ }
 }
-setTimeout(watchBuild, 15000); setInterval(watchBuild, 180000)
+setTimeout(watchBuild, 15000); setInterval(watchBuild, 600000)
 boot()
 </script>
 </body>
