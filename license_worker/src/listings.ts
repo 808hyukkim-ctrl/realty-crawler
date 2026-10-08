@@ -5,6 +5,7 @@
 //   POST /admin/listings/upload {site, file, rows}         브라우저가 SheetJS 로 읽은 행 (헤더 줄은 브라우저가 자동으로 찾음)
 //   POST /admin/listings/:id/edit {phone?, memo?}          연락처·메모 수정
 //   POST /admin/listings/:id/delete                        한 줄 삭제
+//   GET  /admin/listings/lookup.json?q=논현동 124-12       지번(띄어쓰기 무시, 낱말 모두 포함)으로 바로 찾기 — 화면 맨 위 '지번 조회' 칸과 외부 호출(curl -u admin:비번)이 같이 씀
 //   GET  /admin/listings/rows.json?...&after=&limit=       필터 결과 → 브라우저가 엑셀 생성 (지번·연락처가 맨 앞)
 //   POST /admin/listings/delete (form)                     필터 결과 삭제
 //   POST /api/v1/listings {username, token, site, file, rows}  프로그램용 (log_token) — 현재 수집기는 쓰지 않음
@@ -116,7 +117,7 @@ export function summarize(site: string, row: Record<string, any>) {
   } else {
     // 팀 매물장·임대인 명단처럼 열 이름이 제각각인 엑셀
     no = first(row, "매물번호", "매물ID", "ID", "id", "번호", "No", "no") || byWord(row, ["번호"], ["전화", "연락", "안심", "등록", "사업자", "우편"]);
-    url = first(row, "URL", "매물_URL", "링크", "url") || byWord(row, ["URL", "링크"]);
+    url = first(row, "URL", "매물_URL", "링크", "url") || byWord(row, ["URL", "링크"], ["사진", "이미지"]);   // 사진 URL 열은 링크로 안 씀
     addr = withHo(first(row, "지번·호수", "지번주소", "지번", "주소", "세부주소", "전체주소", "소재지", "도로명주소") || byWord(row, ["지번", "주소", "소재지"]), row);
     kind = first(row, "종류", "매물유형", "용도", "건물종류") || byWord(row, ["종류", "유형", "용도"], ["대장"]);
     deal = first(row, "거래방식", "거래유형", "거래") || byWord(row, ["거래"]);
@@ -296,6 +297,14 @@ listings.get("/admin/listings", async (c) => {
       <span class="small muted">전체 ${bySite.reduce((a: number, r: any) => a + r.n, 0)}건 (${bySite.map((r: any) => `${siteLabel(r.site)} ${r.n}`).join(" · ") || "없음"})</span>
     </div>
     ${notice ? html`<div class="notice">${notice}</div>` : ""}
+    <div class="lookup">
+      <div class="lkrow"><b>지번 조회</b>
+        <input type="text" id="lkq" placeholder="지번만 치세요 — 예: 논현동 124-12 (호수·전화번호도 됨)" value="${c.req.query("jibun") ?? ""}" autofocus autocomplete="off">
+        <button type="button" class="btn btn-primary" id="lkgo">찾기</button>
+        <span class="small muted" id="lkmsg">치는 대로 바로 찾습니다. 결과의 연락처·메모 칸도 클릭해서 고칠 수 있습니다.</span>
+      </div>
+      <div id="lkres"></div>
+    </div>
     <form class="upbox manual" method="post" action="/admin/listings/manual">
       <b>수기 입력</b>
       <input type="text" name="addr" placeholder="지번·호수 (예: 논현동 124-12 302호)" required style="min-width:260px">
@@ -340,6 +349,27 @@ listings.get("/admin/listings", async (c) => {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>var LT_QS=${raw(JSON.stringify(qs(f)))}, LT_TOTAL=${total}, LT_SITE=${raw(JSON.stringify(f.site ? siteLabel(f.site) : "전체"))};${raw(LT_JS)}</script>`;
   return c.html(layout("매물·임대인 DB", body));
+});
+
+// 지번 조회: "논현동 124-12", "논현동124-12 302", "역삼동 777" 처럼 치면 띄어쓰기를 무시하고 낱말이 모두 들어간 주소를 찾는다 (전화번호 숫자로도 찾힘)
+export function lookupWhere(q: string): [string, any[]] {
+  const toks = q.trim().split(/\s+/).map((t) => t.replace(/번지$/, "")).filter(Boolean).slice(0, 6);
+  if (!toks.length) return ["", []];
+  const digits = q.replace(/\D/g, "");
+  const w: string[] = []; const b: any[] = [];
+  for (const t of toks) { w.push("REPLACE(REPLACE(addr, ' ', ''), ',', '') LIKE ?"); b.push(`%${t.replace(/,/g, "")}%`); }
+  let sql = "(" + w.join(" AND ") + ")";
+  if (digits.length >= 7 && toks.length === 1) { sql += " OR REPLACE(REPLACE(phone, '-', ''), ' ', '') LIKE ?"; b.push(`%${digits}%`); }
+  return [" WHERE " + sql, b];
+}
+listings.get("/admin/listings/lookup.json", async (c) => {
+  await ensure(c.env.DB);
+  const q = (c.req.query("q") ?? c.req.query("jibun") ?? "").toString().trim();
+  if (q.length < 2) return c.json({ q, rows: [], count: 0 });
+  const [where, binds] = lookupWhere(q);
+  const { results } = await c.env.DB.prepare("SELECT id, site, addr, phone, memo, kind, deal, price, title, url, last_at FROM listings" + where + " ORDER BY addr, id LIMIT 300").bind(...binds).all();
+  const rows = (results ?? []).map((r: any) => ({ id: r.id, site: siteLabel(r.site), addr: r.addr, phone: r.phone, memo: r.memo, kind: r.kind, deal: r.deal, price: r.price, title: r.title, url: r.url, last_at: kst(r.last_at) }));
+  return c.json({ q, count: rows.length, rows });
 });
 
 // 필터 결과를 id 오름차순으로 (after 커서) — 엑셀 만들 때 브라우저가 끝까지 긁어 간다
@@ -397,6 +427,21 @@ const LT_STYLE = `
 .upbox input[type=text]{width:140px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);margin:0;display:inline-block}
 .upbox input[type=file]{color:var(--muted);font-size:12px;display:inline-block;width:auto;margin:0}
 .status-pink{background:rgba(255,92,154,.15);color:var(--accent-dark)}
+.lookup{background:linear-gradient(135deg,#fff0f6,#ffffff);border:2px solid var(--accent);border-radius:14px;padding:14px 16px;margin-bottom:14px;box-shadow:0 8px 28px rgba(255,92,154,.12)}
+.lkrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:13px}
+.lkrow b{color:var(--accent-dark);font-size:15px}
+.lkrow input{display:inline-block;width:auto;min-width:340px;margin:0;padding:11px 14px;font-size:15px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--text)}
+#lkres{margin-top:10px}
+#lkres table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+#lkres th,#lkres td{padding:8px 10px;border-bottom:1px solid #fbe3ec;font-size:13px;text-align:left;white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+#lkres th{background:var(--soft);color:var(--accent-dark);font-weight:700}
+#lkres td.addr{font-weight:700;color:var(--accent-dark);max-width:340px}
+#lkres td.phone{font-family:Consolas,monospace;font-weight:700;font-size:14px;min-width:140px}
+#lkres td.ed{cursor:text}
+#lkres td.ed:hover{background:var(--soft)}
+#lkres td.ed input{width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid var(--accent);border-radius:6px;font-size:13px;background:#fff;color:var(--text)}
+#lkres .lknone{color:var(--muted);font-size:13px;padding:6px 2px}
+#lkres .lkmore{color:var(--muted);font-size:12px;padding:6px 2px}
 `;
 
 // 브라우저 쪽: 헤더 줄 찾기 → 올리기 / 칸 클릭 수정 / 엑셀 만들기(지번·연락처가 맨 앞) / 조건 삭제
@@ -447,9 +492,31 @@ const LT_JS = `
     $('upgo').disabled=false;
     if(totalIns||totalUpd) setTimeout(function(){ location.href='/admin/listings'; },1500);
   };
-  // 칸 클릭 → 입력칸 → Enter/포커스 벗어나면 저장, Esc 취소
-  document.querySelectorAll('td.ed').forEach(function(td){
-    td.addEventListener('click',function(){
+  // 지번 조회: 치는 대로(0.3초 뒤) 찾기, Enter·[찾기]도 됨. 결과 표의 연락처·메모·지번 칸도 클릭 수정.
+  var esc=function(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')};
+  var lkTimer=null, lkLast='';
+  async function lookup(){
+    var q=$('lkq').value.trim(); var res=$('lkres'), msg=$('lkmsg');
+    if(q.length<2){ res.innerHTML=''; msg.textContent='치는 대로 바로 찾습니다. 결과의 연락처·메모 칸도 클릭해서 고칠 수 있습니다.'; return; }
+    if(q===lkLast) return; lkLast=q;
+    msg.textContent='찾는 중…';
+    try{
+      var r=await fetch('/admin/listings/lookup.json?q='+encodeURIComponent(q)).then(function(x){return x.json()});
+      if($('lkq').value.trim()!==q) return;
+      if(!r.rows.length){ res.innerHTML='<div class="lknone">"'+esc(q)+'" 에 해당하는 줄이 없습니다. 위 수기 입력으로 넣어두세요.</div>'; msg.textContent='0건'; return; }
+      var h='<table><thead><tr><th>지번·호수</th><th>임대인 연락처</th><th>구분</th><th>종류</th><th>거래</th><th>금액</th><th>이름·제목</th><th>메모</th><th>올린 날</th></tr></thead><tbody>';
+      r.rows.forEach(function(x){ h+='<tr data-id="'+x.id+'"><td class="addr ed" data-f="addr">'+esc(x.addr)+'</td><td class="phone ed" data-f="phone">'+esc(x.phone)+'</td><td>'+esc(x.site)+'</td><td>'+esc(x.kind)+'</td><td>'+esc(x.deal)+'</td><td>'+esc(x.price)+'</td><td>'+esc(x.title)+'</td><td class="memo ed" data-f="memo">'+esc(x.memo)+'</td><td class="small">'+esc(x.last_at)+'</td></tr>'; });
+      h+='</tbody></table>'+(r.count>=300?'<div class="lkmore">300건까지만 보입니다. 지번을 더 자세히 치세요.</div>':'');
+      res.innerHTML=h; msg.textContent=r.count+'건';
+    }catch(e){ msg.textContent='오류: '+e.message; }
+  }
+  $('lkq').addEventListener('input',function(){ clearTimeout(lkTimer); lkTimer=setTimeout(lookup,300); });
+  $('lkq').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(lkTimer); lkLast=''; lookup(); } });
+  $('lkgo').onclick=function(){ lkLast=''; lookup(); };
+  if($('lkq').value.trim().length>=2) lookup();
+  // 칸 클릭 → 입력칸 → Enter/포커스 벗어나면 저장, Esc 취소 (목록 표·조회 결과 둘 다)
+  document.addEventListener('click',function(ev){
+      var td=ev.target.closest&&ev.target.closest('td.ed'); if(!td) return;
       if(td.querySelector('input')) return;
       var old=td.textContent, id=td.parentNode.getAttribute('data-id'), f=td.getAttribute('data-f');
       var inp=document.createElement('input'); inp.value=old; td.textContent=''; td.appendChild(inp); inp.focus(); inp.select();
@@ -459,7 +526,6 @@ const LT_JS = `
         fetch('/admin/listings/'+id+'/edit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json()}).then(function(r){ td.textContent=r.success?v:old; if(!r.success) alert(r.message||'저장 실패'); }).catch(function(){ td.textContent=old; alert('저장 실패'); }); }
       inp.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); save(); } if(e.key==='Escape'){ done=true; td.textContent=old; } });
       inp.addEventListener('blur',save);
-    });
   });
   $('del').onclick=function(){ if(confirm('현재 검색 조건의 '+LT_TOTAL+'건을 삭제할까요? 되돌릴 수 없습니다.')) $('delf').submit(); };
   $('xl').onclick=async function(){
