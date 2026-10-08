@@ -227,7 +227,7 @@ listings.post("/admin/listings/manual", async (c) => {
 });
 
 /** 행 묶음을 upsert — 돌아오는 값: 구분, 추가/갱신 건수, 그 구분의 총 건수 */
-async function ingest(db: D1Database, username: string, siteHint: string, fileName: string, rowsIn: any[]) {
+export async function ingest(db: D1Database, username: string, siteHint: string, fileName: string, rowsIn: any[]) {
   await ensure(db);
   if (!rowsIn.length) return { site: cleanSite(siteHint) || "기타", inserted: 0, updated: 0, total: 0 };
   const cols = Object.keys(rowsIn[0] || {});
