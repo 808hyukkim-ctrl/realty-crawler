@@ -77,3 +77,24 @@ Cloudflare Workers 무료 티어: 하루 10만 요청, D1 무료 티어: 하루 
 - 상단 **활동 기록** 탭(`/admin/logs`): 누가(아이디) 어느 프로그램(매물 수집기/사진950)으로 무엇을(로그인 / 수집 / 사진950) 몇 건 했는지, 기기(MAC)까지 최근 500건. 아이디 검색·프로그램 필터. 대시보드 각 사용자 줄의 [기록] 버튼으로 그 사람 것만 봅니다.
 - 로그인은 서버가 바로 기록하고, 수집/사진 작업은 프로그램이 끝날 때 `POST /api/v1/log` 로 보냅니다(로그인 응답의 `log_token` 으로 본인 확인). 2026-10-02 이후 빌드된 exe 만 작업 기록을 보냅니다(옛 exe 는 로그인만 남음).
 - 표: D1 `activity_log` (첫 요청 때 자동 생성).
+
+## 텔레그램 봇을 서버가 받기 (2026-10-06)
+
+- 어드민 **텔레그램 봇** 탭(`/admin/telegram`): 봇 토큰·챗 ID 저장 → [저장 + 웹훅 등록]. 등록하면 텔레그램 메시지가 서버로 오고, 프로그램이 꺼져 있어도 답합니다.
+  - `목록` → 올라온 예약 목록(프로그램별, 켜짐/꺼짐 표시) · `실행 <이름>` → 대기열에 넣고, 프로그램이 켜져 있으면 10초 안에 시작, 꺼져 있으면 켜질 때(12시간 내) 실행 · `상태` · `도움`
+- 프로그램(온하우스 수집기·매물수집기)은 로그인하면 예약 목록을 `POST /api/v1/schedules` 로 올리고(예약이 바뀔 때마다 갱신), 10초마다 `GET /api/v1/commands` 로 대기 명령을 가져가며 결과를 `POST /api/v1/commands/:id/done` 으로 알리면 서버가 텔레그램 답장을 보냅니다.
+- [웹훅 해제]를 누르면 예전처럼 프로그램이 봇을 직접 봅니다(getUpdates). 웹훅이 켜져 있는 동안은 2026-10-06 이후 빌드 exe 만 명령을 받습니다.
+- 표: D1 `app_schedules`, `app_commands` (자동 생성).
+
+
+### 2026-10-08 매물·임대인 DB — 거래 전부 표시
+- 한 매물에 매매·전세·월세가 같이 있으면 금액 칸에 `매매 5억 · 전세 3억 · 월세 5000 / 150` 처럼 전부 적고 거래 칸은 `매매·전세·월세`. 검색 필터에 **거래**(매매/전세/월세) 추가. 엑셀 다운로드·지번 조회 결과도 같음.
+
+## 당근 광고자동화 (2026-10-08)
+
+- 사용자 화면 `/daangn` — 라이선스 계정(아이디/비밀번호)으로 로그인. 어드민 사용자 관리에서 기능 **당근 광고** 를 체크한 계정만 들어옵니다.
+  매물 링크·글 붙여넣기 → 자동 정리(daangn-parse 워커) → 건축물대장 확인 → [당근 연결(QR)] 로 본인 당근 계정 연결 → [🥕 당근에 올리기] / 여러 건 일괄 → 업로드 기록 탭.
+  라운지에는 아무것도 저장하지 않습니다(당근 전용). 화면은 `라운지 인트라넷/site/index.html` 을 `Desktop/당근광고자동화/build_daangn_html.py` 가 복제해 `src/daangn.html` 로 만듭니다 — 직접 고치지 말고 인트라넷을 고친 뒤 `bash Desktop/당근광고자동화/deploy_worker.sh`.
+- 서버 코드 `src/daangn.ts`: `/daangn/api/*` (login·summary·address·building·img·daangn-connect·daangn-disconnect·daangn-direct·uploads·upload-close·upload-edit), 표 `daangn_web_sessions`·`daangn_sessions`(사용자별 당근 세션 암호문)·`daangn_uploads` (자동 생성). 어드민 **당근 광고** 탭 `/admin/daangn`.
+- 당근 로그인·등록은 라운지 서버 기계의 별도 컨테이너 `daangn-engine`(:8092, `Desktop/당근광고자동화/engine`) 이 하고, 이 워커는 시크릿 `ENGINE_URL`(`https://www.loungeplus.kr/daangn-engine`)·`ENGINE_SECRET` 으로 부릅니다. 엔진 배포 `bash engine/deploy_engine.sh`, 외부 경로(443 nginx) `bash engine/nginx_route.sh`.
+- 로컬 테스트: `python -X utf8 -I Desktop/당근광고자동화/test_worker_local.py` (가짜 엔진 + `wrangler dev --local`, 기존 verify/admin 포함 39개 검사).
