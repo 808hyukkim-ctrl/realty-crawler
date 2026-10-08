@@ -217,13 +217,14 @@ function PAGE() {
 }
 const NA_STYLE = `
 .muted{color:var(--muted)}
-.na-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.na-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.na-out{overflow-x:auto}
 @media(max-width:1000px){.na-grid{grid-template-columns:1fr}}
 .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:0 6px 24px rgba(255,92,154,.06)}
 .panel h2{margin:0 0 10px;font-size:16px;color:var(--accent-dark)}
 .panel textarea,.panel input[type=text]{width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);font-size:13px;box-sizing:border-box}
 .na-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
-.na-out{margin-top:8px}
+.na-out{margin-top:8px;max-width:100%}
 .na-card{border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff}
 .na-card.err{border-color:var(--danger)}
 .na-card .ttl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
