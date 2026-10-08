@@ -128,6 +128,12 @@ export function extractContacts(row: Record<string, any>, primary: string): stri
   return out.join(" · ").slice(0, 300);
 }
 
+/** 거래 칸 표시 — 금액에 '매매 … · 전세 … · 월세 …' 처럼 여러 거래가 적혀 있으면 전부 보여준다 */
+export function dealsOf(deal: string | null | undefined, price: string | null | undefined): string {
+  const p = String(price ?? "");
+  const found = (["매매", "전세", "월세"] as const).filter((k) => new RegExp("(^|[ ·/])" + k + "\\s").test(p));
+  return found.length > 1 ? found.join("·") : String(deal ?? "");
+}
 /** 주소 뒤에 호수 열이 따로 있으면 붙인다 ("논현동 124-12" + "302" → "논현동 124-12 302호") */
 function withHo(addr: string, row: Record<string, any>): string {
   const ho = first(row, "호수", "호실", "호");
@@ -155,8 +161,12 @@ export function summarize(site: string, row: Record<string, any>) {
     no = first(row, "매물ID", "물건번호").replace(/^No/i, ""); url = first(row, "URL");
     // 팀에서 열을 옮겨 둔 파일은 '지역' 칸에 전체 주소가 있기도 함 → 셋 중 가장 긴 것
     addr = ["전체주소", "주소_호실", "지역"].map((k) => s(row[k]).replace(/\s+/g, " ")).sort((a, b) => b.length - a.length)[0] || "";
-    const pick = (["매매", "전세", "월세"] as const).find((k) => s(row[k]));
-    if (pick) { deal = pick; price = s(row[pick]); kind = s(row[pick + "_태그"]).split(",")[0].trim(); }
+    const deals = (["매매", "전세", "월세"] as const).filter((k) => s(row[k]));
+    if (deals.length) {   // 매매·전세·월세가 같이 있는 매물은 전부 적는다 (키의 deal 은 첫 거래로 고정 → 재업로드 때 중복 행 없음)
+      deal = deals[0];
+      price = deals.length > 1 ? deals.map((k) => `${k} ${s(row[k])}`).join(" · ") : s(row[deals[0]]);
+      kind = (deals.map((k) => s(row[k + "_태그"])).find(Boolean) || "").split(",")[0].trim();
+    }
     title = first(row, "건물명", "현업종");
   } else {
     // 팀 매물장·임대인 명단처럼 열 이름이 제각각인 엑셀
@@ -167,7 +177,12 @@ export function summarize(site: string, row: Record<string, any>) {
     deal = first(row, "거래방식", "거래유형", "거래") || byWord(row, ["거래"]);
     const money = (k: string) => first(row, k, k + "(만원)") || byWord(row, [k], ["구분"]);
     const dep = money("보증금"), rent = money("월세"), sale = money("매매가") || money("매매"), jeon = money("전세금") || money("전세");
-    price = first(row, "금액", "가격") || (rent ? `${dep || "0"} / ${rent}` : dep || jeon || sale);
+    const parts: string[] = [];
+    if (sale) parts.push(`매매 ${sale}`);
+    if (jeon) parts.push(`전세 ${jeon}`);
+    if (rent) parts.push(`월세 ${dep || "0"} / ${rent}`); else if (dep && !jeon && !sale) parts.push(`보증금 ${dep}`);
+    price = first(row, "금액", "가격") || (parts.length > 1 ? parts.join(" · ") : (rent ? `${dep || "0"} / ${rent}` : dep || jeon || sale));
+    if (!deal && parts.length) deal = parts[0].split(" ")[0].replace("보증금", "월세");
     title = first(row, "임대인", "이름", "성명", "소유자", "성함", "이름/메모", "건물명", "제목", "매물명") || byWord(row, ["임대인", "이름", "성명", "소유자", "건물명", "제목"], ["연락처", "전화"]);
   }
   const phone = landlordPhone(row);
@@ -272,10 +287,10 @@ listings.post("/admin/listings/:id/delete", async (c) => {
 });
 
 // ---------------------------------------------------------------- 필터
-type Filter = { site: string; q: string; from: string; to: string; user: string; file: string };
+type Filter = { site: string; q: string; from: string; to: string; user: string; file: string; deal: string };
 function readFilter(c: any): Filter {
   const g = (k: string) => (c.req.query(k) ?? "").toString().trim();
-  return { site: g("site"), q: g("q"), from: g("from"), to: g("to"), user: g("user"), file: g("file") };
+  return { site: g("site"), q: g("q"), from: g("from"), to: g("to"), user: g("user"), file: g("file"), deal: g("deal") };
 }
 const kstDayStart = (d: string) => new Date(d + "T00:00:00+09:00").toISOString();
 const kstDayEnd = (d: string) => new Date(d + "T23:59:59.999+09:00").toISOString();
@@ -284,6 +299,7 @@ function whereOf(f: Filter): [string, any[]] {
   if (f.site) { w.push("site = ?"); b.push(f.site); }
   if (f.user) { w.push("username = ?"); b.push(f.user); }
   if (f.file) { w.push("file = ?"); b.push(f.file); }
+  if (f.deal && ["매매", "전세", "월세"].includes(f.deal)) { w.push("(deal LIKE ? OR price LIKE ?)"); b.push(`%${f.deal}%`, `%${f.deal} %`); }   // 금액에 같이 적힌 거래도
   if (f.from && /^\d{4}-\d{2}-\d{2}$/.test(f.from)) { w.push("last_at >= ?"); b.push(kstDayStart(f.from)); }
   if (f.to && /^\d{4}-\d{2}-\d{2}$/.test(f.to)) { w.push("last_at <= ?"); b.push(kstDayEnd(f.to)); }
   if (f.q) {
@@ -325,7 +341,7 @@ listings.get("/admin/listings", async (c) => {
       <td class="phone ed" data-f="phone" title="클릭해서 고치기">${r.phone ?? ""}</td>
       <td class="small contacts ed" data-f="contacts" title="임차인·세입자·관리·중개 등 (클릭해서 고치기)">${r.contacts ?? ""}</td>
       <td class="small">${r.kind ?? ""}</td>
-      <td class="small">${r.deal ?? ""}</td>
+      <td class="small">${dealsOf(r.deal, r.price)}</td>
       <td class="mono small">${r.price ?? ""}</td>
       <td class="small ttl">${r.title ?? ""}</td>
       <td class="small memo ed" data-f="memo" title="클릭해서 고치기">${r.memo ?? ""}</td>
@@ -375,6 +391,7 @@ listings.get("/admin/listings", async (c) => {
     <form class="search-form lf" method="get" id="lf">
       <select name="site"><option value="">전체 구분</option>${siteOpts}</select>
       <select name="user"><option value="">전체 계정</option>${userOpts}</select>
+      <select name="deal"><option value="">전체 거래</option>${raw(["매매", "전세", "월세"].map((d) => `<option value="${d}"${f.deal === d ? " selected" : ""}>${d}</option>`).join(""))}</select>
       <input type="text" name="q" placeholder="지번·연락처·이름·메모·내용 검색" value="${f.q}">
       <input type="date" name="from" value="${f.from}" title="올린 날 시작"> ~ <input type="date" name="to" value="${f.to}" title="올린 날 끝">
       ${f.file ? html`<input type="hidden" name="file" value="${f.file}"><span class="chip">파일: ${f.file} <a href="/admin/listings?${raw(qs({ ...f, file: "" }))}">✕</a></span>` : ""}
@@ -400,10 +417,10 @@ listings.get("/admin/listings", async (c) => {
 });
 
 // 지번 조회: "논현동 124-12", "논현동124-12 302", "역삼동 777" 처럼 치면 띄어쓰기를 무시하고 낱말이 모두 들어간 주소를 찾는다 (전화번호 숫자로도 찾힘)
-export function lookupWhere(q: string): [string, any[]] {
+export function lookupWhere(q: string, allowPhone = true): [string, any[]] {
   const toks = q.trim().split(/\s+/).map((t) => t.replace(/번지$/, "")).filter(Boolean).slice(0, 6);
   if (!toks.length) return ["", []];
-  const digits = q.replace(/\D/g, "");
+  const digits = allowPhone ? q.replace(/\D/g, "") : "";
   const w: string[] = []; const b: any[] = [];
   for (const t of toks) { w.push("REPLACE(REPLACE(addr, ' ', ''), ',', '') LIKE ?"); b.push(`%${t.replace(/,/g, "")}%`); }
   let sql = "(" + w.join(" AND ") + ")";
@@ -416,7 +433,7 @@ listings.get("/admin/listings/lookup.json", async (c) => {
   if (q.length < 2) return c.json({ q, rows: [], count: 0 });
   const [where, binds] = lookupWhere(q);
   const { results } = await c.env.DB.prepare("SELECT id, site, addr, phone, contacts, memo, kind, deal, price, title, url, last_at FROM listings" + where + " ORDER BY addr, id LIMIT 300").bind(...binds).all();
-  const rows = (results ?? []).map((r: any) => ({ id: r.id, site: siteLabel(r.site), addr: r.addr, phone: r.phone, contacts: r.contacts, memo: r.memo, kind: r.kind, deal: r.deal, price: r.price, title: r.title, url: r.url, last_at: kst(r.last_at) }));
+  const rows = (results ?? []).map((r: any) => ({ id: r.id, site: siteLabel(r.site), addr: r.addr, phone: r.phone, contacts: r.contacts, memo: r.memo, kind: r.kind, deal: dealsOf(r.deal, r.price), price: r.price, title: r.title, url: r.url, last_at: kst(r.last_at) }));
   return c.json({ q, count: rows.length, rows });
 });
 
@@ -428,7 +445,7 @@ listings.get("/admin/listings/rows.json", async (c) => {
   const limit = Math.min(2000, Math.max(1, parseInt(c.req.query("limit") ?? "1000", 10) || 1000));
   const [where, binds] = whereOf(f);
   const { results } = await c.env.DB.prepare("SELECT id, site, listing_no, url, username, file, addr, phone, contacts, memo, kind, deal, price, title, first_at, last_at, seen, data FROM listings" + (where ? where + " AND" : " WHERE") + " id > ? ORDER BY id LIMIT ?").bind(...binds, after, limit).all();
-  const rows = (results ?? []).map((r: any) => ({ id: r.id, site: siteLabel(r.site), no: showNo(r.listing_no), url: r.url, username: r.username, file: r.file, addr: r.addr, phone: r.phone, contacts: r.contacts, memo: r.memo, kind: r.kind, deal: r.deal, price: r.price, title: r.title, first_at: kst(r.first_at), last_at: kst(r.last_at), seen: r.seen, data: (() => { try { return JSON.parse(r.data); } catch { return {}; } })() }));
+  const rows = (results ?? []).map((r: any) => ({ id: r.id, site: siteLabel(r.site), no: showNo(r.listing_no), url: r.url, username: r.username, file: r.file, addr: r.addr, phone: r.phone, contacts: r.contacts, memo: r.memo, kind: r.kind, deal: dealsOf(r.deal, r.price), price: r.price, title: r.title, first_at: kst(r.first_at), last_at: kst(r.last_at), seen: r.seen, data: (() => { try { return JSON.parse(r.data); } catch { return {}; } })() }));
   return c.json({ rows, next: rows.length === limit ? rows[rows.length - 1].id : null });
 });
 

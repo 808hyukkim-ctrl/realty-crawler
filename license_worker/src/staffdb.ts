@@ -3,7 +3,7 @@
 //   GET  /db                 로그인 폼 또는 조회 화면
 //   POST /db/login           아이디·비밀번호 → 30일 쿠키(HMAC 서명)
 //   POST /db/logout
-//   GET  /db/lookup.json?q=  조회 (읽기 전용)
+//   GET  /db/lookup.json?q=  조회 (읽기 전용) — 지번(동 이름+번지)으로만, 전화번호·호수만으로는 못 찾고, 결과는 5건까지만 (DB 통째로 긁어가는 것 방지)
 import { Hono } from "hono";
 import { html, raw } from "hono/html";
 import { STYLE } from "./layout";
@@ -14,6 +14,14 @@ export const staffdb = new Hono<{ Bindings: Bindings }>();
 
 const COOKIE = "db_s";
 const DAYS = 30;
+const MAX_ROWS = 5;
+/** 직원 조회는 "○○동 123-4" 꼴만 허용. 전화번호 모양이나 숫자만(호수) 치면 거부 */
+export function jibunCheck(q: string): string {
+  const t = q.trim();
+  if (/0\d{1,2}[-\s).]*\d{3,4}[-\s]*\d{4}/.test(t) || /^[\d\s-]+$/.test(t)) return "전화번호나 호수만으로는 찾을 수 없습니다. 지번으로 찾아주세요. 예: 논현동 124-12";
+  if (!/[가-힣]{1,10}(동|리|가|읍|면)\s*(산\s*)?\d{1,4}(-\d{1,4})?/.test(t)) return "동 이름과 번지를 같이 적어주세요. 예: 논현동 124-12";
+  return "";
+}
 
 async function hmacHex(secret: string, msg: string): Promise<string> {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
@@ -78,7 +86,7 @@ staffdb.get("/db", async (c) => {
       <div class="lkrow">
         <input type="text" id="lkq" placeholder="지번만 치세요 — 예: 논현동 124-12 (호수·전화번호도 됨)" value="${q}" autofocus autocomplete="off">
         <button type="button" class="btn btn-primary" id="lkgo">찾기</button>
-        <span class="small muted" id="lkmsg">치는 대로 바로 찾습니다.</span>
+        <span class="small muted" id="lkmsg">동 이름과 번지를 같이 치세요. 5건까지 보입니다.</span>
       </div>
       <div id="lkres"></div>
     </div>
@@ -106,11 +114,14 @@ staffdb.get("/db/lookup.json", async (c) => {
   await ensureListings(c.env.DB);
   const q = (c.req.query("q") ?? "").toString().trim();
   if (q.length < 2) return c.json({ q, rows: [], count: 0 });
-  const [where, binds] = lookupWhere(q);
-  const { results } = await c.env.DB.prepare("SELECT addr, phone, contacts, memo, kind, deal, price, title, last_at FROM listings" + where + " ORDER BY addr, id LIMIT 300").bind(...binds).all();
-  const rows = (results ?? []).map((r: any) => ({ addr: r.addr, phone: r.phone, contacts: r.contacts, memo: r.memo, kind: r.kind, deal: r.deal, price: r.price, title: r.title, last_at: kst(r.last_at) }));
+  const bad = jibunCheck(q);
+  if (bad) { await log(c.env.DB, u, q + " (거부)", 0); return c.json({ q, rows: [], count: 0, error: bad }); }
+  const [where, binds] = lookupWhere(q, false);
+  const { results } = await c.env.DB.prepare("SELECT addr, phone, contacts, memo, kind, deal, price, title, last_at FROM listings" + where + " ORDER BY addr, id LIMIT ?").bind(...binds, MAX_ROWS + 1).all();
+  const all = (results ?? []).map((r: any) => ({ addr: r.addr, phone: r.phone, contacts: r.contacts, memo: r.memo, kind: r.kind, deal: r.deal, price: r.price, title: r.title, last_at: kst(r.last_at) }));
+  const rows = all.slice(0, MAX_ROWS);
   await log(c.env.DB, u, q, rows.length);
-  return c.json({ q, count: rows.length, rows });
+  return c.json({ q, count: rows.length, more: all.length > MAX_ROWS, rows });
 });
 
 const DB_STYLE = `
@@ -137,15 +148,16 @@ const DB_JS = `
   var t=null,last='';
   async function lookup(){
     var q=$('lkq').value.trim(); var res=$('lkres'), msg=$('lkmsg');
-    if(q.length<2){ res.innerHTML=''; msg.textContent='치는 대로 바로 찾습니다.'; return; }
+    if(q.length<2){ res.innerHTML=''; msg.textContent='동 이름과 번지를 같이 치세요. 5건까지 보입니다.'; return; }
     if(q===last) return; last=q; msg.textContent='찾는 중…';
     try{
       var r=await fetch('/db/lookup.json?q='+encodeURIComponent(q)).then(function(x){ if(x.status===401){ location.href='/db'; throw new Error('로그인 필요'); } return x.json(); });
       if($('lkq').value.trim()!==q) return;
+      if(r.error){ res.innerHTML='<div class="lknone">'+esc(r.error)+'</div>'; msg.textContent=''; return; }
       if(!r.rows.length){ res.innerHTML='<div class="lknone">"'+esc(q)+'" 에 해당하는 줄이 없습니다.</div>'; msg.textContent='0건'; return; }
       var h='<table><thead><tr><th>지번·호수</th><th>임대인 연락처</th><th>임차인·관리 등</th><th>종류</th><th>거래</th><th>금액</th><th>이름·제목</th><th>메모</th><th>올린 날</th></tr></thead><tbody>';
       r.rows.forEach(function(x){ h+='<tr><td class="addr">'+esc(x.addr)+'</td><td class="phone">'+esc(x.phone)+'</td><td class="contacts">'+esc(x.contacts)+'</td><td>'+esc(x.kind)+'</td><td>'+esc(x.deal)+'</td><td>'+esc(x.price)+'</td><td>'+esc(x.title)+'</td><td class="memo">'+esc(x.memo)+'</td><td class="small">'+esc(x.last_at)+'</td></tr>'; });
-      h+='</tbody></table>'; res.innerHTML=h; msg.textContent=r.count+'건';
+      h+='</tbody></table>'+(r.more?'<div class="lknone">5건까지만 보입니다. 호수까지 치면 더 정확히 나옵니다.</div>':''); res.innerHTML=h; msg.textContent=r.count+'건'+(r.more?'+':'');
     }catch(e){ msg.textContent='오류: '+e.message; }
   }
   $('lkq').addEventListener('input',function(){ clearTimeout(t); t=setTimeout(lookup,300); });
