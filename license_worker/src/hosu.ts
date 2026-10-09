@@ -200,6 +200,11 @@ function PAGE() {
   return html`
 <div class="page-head"><h1>호수 추정</h1><span class="small muted">네이버·당근·온하우스 링크를 넣으면 건축물대장 호별 면적과 대조해 호수를 찾습니다. 당근·온하우스는 글에 동 번호가 없으면 단지 전체에서 찾습니다. 저/중/고는 같은 집을 올린 다른 중개사가 층을 숫자로 적었으면 그 층으로, 없으면 구간 후보로.</span></div>
 <section class="panel">
+  <div class="hs-guide">
+    <span class="gtag naver">네이버</span><span class="gtxt">링크만 넣으면 됩니다 (동·층·면적을 네이버가 알려줌)</span>
+    <span class="gtag daangn">당근</span><span class="gtxt">아파트는 <b>링크 뒤에 동 번호</b>를 붙이세요 → <code>https://realty.daangn.com/articles/4624139 112동</code> · 빌라·오피스텔처럼 동이 없는 건물은 링크만</span>
+    <span class="gtag onhouse">온하우스</span><span class="gtxt">링크만 넣으면 됩니다 (글에 호수가 있으면 바로 확정)</span>
+  </div>
   <textarea id="hs_links" rows="4" placeholder="네이버·당근·온하우스 매물 링크 — 한 줄에 하나. 동을 알면 링크 뒤에 적으세요 (대단지 당근 매물)&#10;https://new.land.naver.com/houses?articleNo=2654182933&#10;https://realty.daangn.com/articles/4624139 112동"></textarea>
   <div class="na-bar"><button class="btn btn-primary" id="hs_go">호수 찾기</button><button class="btn" id="hs_clip">📋 클립보드에서</button><button class="btn" id="hs_xl" style="display:none">엑셀 다운로드</button><span class="small muted" id="hs_msg">링크 1개당 3~10초 (대장 조회). 한 번에 20개까지.</span></div>
   <div id="hs_out"></div>
@@ -223,6 +228,13 @@ const HS_STYLE = `
 .tag.no{background:rgba(224,74,106,.14);color:var(--danger)}
 .cand{font-size:12px;color:var(--muted);white-space:normal}
 .ev{font-size:12px;color:#4f5fd6}
+.hs-guide{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;background:var(--soft);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px}
+.gtag{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:800;font-size:12px;text-align:center;white-space:nowrap}
+.gtag.naver{background:#d8f3dc;color:#1b5e20}.gtag.daangn{background:#ffe0b2;color:#e65100}.gtag.onhouse{background:#dbe7ff;color:#1a3ea8}
+.gtxt code{background:#fff;border:1px solid var(--border);border-radius:6px;padding:1px 6px;font-size:12px}
+.needdong{display:inline-flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}
+.needdong input{width:70px;padding:5px 8px;border:1px solid #ffb74d;border-radius:8px;font-size:13px;background:#fff8e1}
+.tag.dong{background:#ffe0b2;color:#e65100}
 `;
 const HS_JS = `
 (function(){
@@ -238,9 +250,13 @@ const HS_JS = `
       var fl=(it.floor!=null?it.floor+'층':(it.band?it.band+'층':'?'))+(it.total?' / '+it.total+'층':'');
       var cands=(it.cands||[]).slice(0,12).map(function(c){return (c.dong?c.dong+' ':'')+c.ho+'호 '+c.floor+'층 '+c.area+'㎡'}).join(' · ')+((it.cands||[]).length>12?' …':'');
       var ev=[]; if(it.evidence) ev.push('<span class="ev">'+esc(it.evidence)+'</span>'); if(it.stage) ev.push(esc(it.stage)); if(it.note) ev.push(esc(it.note)); if(it.group>1) ev.push('같은 집 매물 '+it.group+'건'); if(it.pool) ev.push('대장 전유부 '+it.pool+'호 대조');
+      var needDong = it.source!=='naver' && !it.dong && ((it.cands||[]).some(function(c){return c.dong}) || /단지 전체|동 번호/.test(it.note||''));
+      if(needDong) ev.unshift('<div class="needdong"><span class="tag dong">동 번호 필요</span><input type="text" placeholder="예: 112" data-dong="'+i+'"><button type="button" class="btn btn-sm" data-redo="'+i+'">이 동으로 다시 찾기</button></div>');
       h+='<tr><td>'+(i+1)+'</td><td><span class="tag q" style="background:rgba(96,110,240,.12);color:#4f5fd6">'+esc(it.source||'')+'</span> <b>'+esc(it.name||'')+'</b><br><span class="small">'+esc(it.jibun||'')+(it.road?' · '+esc(it.road):'')+'</span><br><a class="small" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(it.no)+' ↗</a></td><td>'+esc(it.dong||'-')+' · '+esc(fl)+' · '+esc(it.area!=null?it.area+'㎡':'-')+'</td><td>'+tag(it.status)+'</td><td class="hosu">'+esc(it.hosu||'')+(cands?'<div class="cand">'+esc(cands)+'</div>':'')+'</td><td class="cand">'+ev.join('<br>')+'</td></tr>';
     });
     $('hs_out').innerHTML=h+'</table>'; $('hs_xl').style.display=ITEMS.some(function(x){return x.ok})?'':'none';
+    document.querySelectorAll('[data-redo]').forEach(function(b){ b.onclick=async function(){ var i=+b.dataset.redo; var d=(document.querySelector('[data-dong="'+i+'"]')||{}).value||''; d=d.trim().replace(/동$/,''); if(!d){ alert('동 번호를 적어주세요 (예: 112)'); return; } b.disabled=true; b.textContent='찾는 중…'; try{ var r=await fetch('/admin/hosu/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({urls:[{url:ITEMS[i].url,dong:d+'동'}]})}).then(function(x){return x.json()}); if(r.items&&r.items[0]) ITEMS[i]=r.items[0]; }catch(e){ alert('오류: '+e.message); } paint(); }; });
+    document.querySelectorAll('[data-dong]').forEach(function(inp){ inp.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); var b=document.querySelector('[data-redo="'+inp.dataset.dong+'"]'); if(b) b.click(); } }; });
   }
   async function run(){
     var urls=links(); if(!urls.length){ $('hs_msg').textContent='링크를 넣어주세요'; return; }
