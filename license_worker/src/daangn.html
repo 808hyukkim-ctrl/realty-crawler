@@ -1269,6 +1269,7 @@ function bulkBodyOf(r, hqKind) {
     photos: r.photosOn && Array.isArray(g.photos) ? g.photos.filter(s => /^https?:\/\//.test(s)).slice(0, 10) : [],
     hq_kind: hqKind, source_url: g.source_url || undefined, force: r.force === true,
     is_parking: g.is_parking || undefined, is_pet: g.is_pet || undefined, parking_total: n(g.parking_total),
+    room_type: g.room_type || undefined, building_use: g.building_use || undefined,
   }
 }
 async function bulkRegister(onlyIdx) {
@@ -1513,6 +1514,7 @@ function paintCreate() {
       <label>전용면적 (㎡)<input id="c_area_exclusive" inputmode="decimal"></label>
       <label>공급면적 (㎡)<input id="c_area_supply" inputmode="decimal"></label>
       <label>방 수<input id="c_room_count" inputmode="numeric"></label>
+      <label id="l_room_type" style="display:none">원룸 유형 (당근 필수)<select id="c_room_type"><option value="">선택 — 오픈형? 분리형?</option><option value="오픈형">오픈형 원룸 (방·주방 한 공간)</option><option value="분리형">분리형 원룸 (주방 분리)</option></select></label>
       <label>욕실 수<input id="c_bathroom_count" inputmode="numeric"></label>
       <label>향<select id="c_direction"><option value="">선택</option>${opt(DIRS, '')}</select></label>
       <label>입주 가능일<input id="c_available_date" type="date">
@@ -1607,6 +1609,8 @@ function paintCreate() {
     setV('c_sale_price', got.sale_price, '매매가'); setV('c_deposit', got.deposit, '보증금'); setV('c_monthly_rent', got.monthly_rent, '월세')
     setV('c_manage_prc', got.manage_prc, '관리비'); setV('c_bd_nm', got.bd_nm, '건물명'); setV('c_dong_nm', got.dong_nm, '동'); setV('c_ho_nm', got.ho_nm, '호수')
     if (got.property_type && PTYPES.includes(got.property_type) && !$('c_property_type').value) { $('c_property_type').value = got.property_type; filled.push('종류') }
+    if (got.room_type && /^(오픈형|분리형)/.test(got.room_type)) $('c_room_type').value = got.room_type.replace(/\s*원룸$/, '')
+    if (S.syncRoomType) setTimeout(S.syncRoomType, 0)
     setV('c_floor_no', got.floor_no, '층'); setV('c_total_floors', got.total_floors, '총층')
     setV('c_area_exclusive', got.area_exclusive, '전용면적'); setV('c_area_supply', got.area_supply, '공급면적')
     setV('c_room_count', got.room_count, '방수'); setV('c_bathroom_count', got.bathroom_count, '욕실'); setV('c_is_parking', got.is_parking, '주차'); setV('c_is_pet', got.is_pet, '반려동물'); setV('c_parking_total', got.parking_total, '총 주차대수'); setV('c_available_date', got.available_date, '입주가능일'); if ($('c_available_date').value) $('c_move_now').checked = $('c_available_date').value === todayStr()
@@ -1650,7 +1654,7 @@ function paintCreate() {
     g.deal_type = tx('c_deal_type'); g.sale_price = nn('c_sale_price'); g.deposit = nn('c_deposit'); g.monthly_rent = nn('c_monthly_rent'); g.manage_prc = nn('c_manage_prc')
     g.bd_nm = tx('c_bd_nm'); g.dong_nm = tx('c_dong_nm'); g.ho_nm = tx('c_ho_nm'); g.property_type = tx('c_property_type')
     g.floor_no = nn('c_floor_no'); g.total_floors = nn('c_total_floors'); g.area_exclusive = nn('c_area_exclusive'); g.area_supply = nn('c_area_supply')
-    g.room_count = nn('c_room_count'); g.bathroom_count = nn('c_bathroom_count'); g.direction = tx('c_direction'); g.available_date = tx('c_available_date')
+    g.room_count = nn('c_room_count'); g.bathroom_count = nn('c_bathroom_count'); g.direction = tx('c_direction'); g.available_date = tx('c_available_date'); g.room_type = tx('c_room_type'); g.building_use = BLDG.floorUse || undefined
     g.headline = tx('c_headline'); g.description = tx('c_description'); g.owner_phone = tx('c_owner_phone'); g.address_q = v('c_addr_q') || g.address_q
     g.is_parking = tx('c_is_parking'); g.is_pet = tx('c_is_pet'); g.contact_role = $('c_contact_role').value || 'landlord'; g.parking_total = nn('c_parking_total')
     if (v('c_road_addr')) { r.addrItems = [{ roadAddr: v('c_road_addr'), jibunAddr: v('c_jibun_addr'), bdNm: v('c_bd_nm') }]; r.addrIdx = 0; r.addrState = 'ok'; r.addrQ = v('c_addr_q') }
@@ -1711,6 +1715,7 @@ function paintCreate() {
     ['c_floor_no', '층', v => v !== '' && num(v) != null],
     ['c_total_floors', '총층', v => num(v) > 0],
     ['c_room_count', '방수', v => v !== '' && num(v) != null, null, () => !NO_ROOMS.has($('c_property_type').value)],
+    ['c_room_type', '원룸 유형 (오픈형/분리형)', v => !!v, null, () => $('c_property_type').value === '원룸'],
     ['c_bathroom_count', '욕실수', v => v !== '' && num(v) != null, null, () => !NO_ROOMS.has($('c_property_type').value)],
     ['c_available_date', '입주가능일', v => !!v],
     ['c_parking_total', '총 주차대수', v => v.trim() !== '' && num(v) != null && num(v) >= 0],
@@ -1750,7 +1755,7 @@ function paintCreate() {
     box.querySelectorAll('[data-miss]').forEach(b => b.onclick = () => { const el = $(b.dataset.miss); if (!el) return; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus() })
   }
   /* 건축물대장 패널 — 라운지 /api/intranet/building (building 권한) : 대장 요약 · 해당 호실 면적 · 층별 현황 · 주변 정보 */
-  const BLDG = { key: '', data: null, busy: false, usage: '', err: '', areaDiff: '' }
+  const BLDG = { key: '', data: null, busy: false, usage: '', err: '', areaDiff: '', floorUse: '' }
   const fire = el => { if (el) el.dispatchEvent(new Event('input', { bubbles: true })) }   // 코드로 바꾼 값도 점검·일괄 줄 저장에 반영
   const bNum = v => { const x = Number(v); return Number.isFinite(x) && x > 0 ? x : 0 }
   const fmtA = a => bNum(a) ? `${bNum(a).toFixed(2)}㎡ <span class="bnote">${(bNum(a) / 3.3058).toFixed(1)}평</span>` : '-'
@@ -1768,6 +1773,13 @@ function paintCreate() {
     catch (e) { BLDG.busy = false; if (key !== BLDG.key) return; BLDG.usage = ''; BLDG.err = String(e.message || '오류'); paintMissing(false); paintBldg(`<div class="bnote" style="color:var(--warn)">대장을 못 읽었습니다: ${esc(e.message)}${/권한/.test(e.message) ? ' — 이 토큰에 건축물대장(building) 권한이 없습니다. 어드민 인트라넷 토큰에서 권한을 켜주세요.' : ''}</div>`); return }
     BLDG.busy = false; if (key !== BLDG.key) return
     BLDG.data = j; BLDG.usage = (j.summary && j.summary.mainPurpose) || ''; BLDG.err = ''; BLDG.areaDiff = ''
+    // 그 층 용도 (2026-10-09): 당근 '건축물 용도'는 주용도가 아니라 광고하는 층의 용도로 보낸다. 층이 0 이하(반지하·지하)는 지하 1층
+    BLDG.floorUse = ''
+    { const fn = Number(String($('c_floor_no').value || '').trim()); const fls = Array.isArray(j.floors) ? j.floors : []
+      if (String($('c_floor_no').value || '').trim() !== '' && Number.isFinite(fn)) {
+        const hit = fls.find(f => !/부속/.test(f.mainAtch || '') && (fn > 0 ? (!/지하/.test(f.kind || '') && String(f.floor) === String(fn)) : (/지하/.test(f.kind || '') && String(f.floor) === String(Math.abs(fn) || 1))))
+        if (hit && hit.purpose) BLDG.floorUse = String(hit.purpose).trim()
+      } }
     const S0 = j.summary || {}, floors = Array.isArray(j.floors) ? j.floors : [], near = Array.isArray(j.nearby) ? j.nearby : []
     const units = j.unit == null ? [] : Array.isArray(j.unit) ? j.unit : [j.unit]
     const hit = units.length === 1 ? units[0] : null
@@ -1780,6 +1792,7 @@ function paintCreate() {
       + row('주차', S0.parking ? `총 ${S0.parking}대${S0.households ? ` <span class="bnote">세대당 ${(S0.parking / S0.households).toFixed(2)}대</span>` : ''}` : '')
       + row('승강기', S0.elevators && (S0.elevators.ride || S0.elevators.emergency) ? `승용 ${S0.elevators.ride || 0}대${S0.elevators.emergency ? ` · 비상 ${S0.elevators.emergency}대` : ''}` : '')
       + row('높이', height ? `${height}m` : '') + row('연면적', bNum(S0.totArea) ? fmtA(S0.totArea) : '')
+      + (BLDG.floorUse ? `<div class="bnote" style="margin-top:6px;color:#1f7a4d"><b>이 층 용도</b> ${esc(BLDG.floorUse)} → 당근 '건축물 용도'는 주용도(${esc(S0.mainPurpose || '-')}) 대신 이 층 용도로 보냅니다.</div>` : (String($('c_floor_no').value || '').trim() === '' ? `<div class="bnote" style="margin-top:6px">층을 넣으면 그 층의 용도를 당근 '건축물 용도'로 보냅니다 (반지하는 -1).</div>` : ''))
       + `</div>`
     // 해당 호실 면적
     html += `<div class="bsec"><div style="font-weight:800;margin-bottom:4px">${ho ? esc(ho) + '호 면적' : '호실 면적'}</div>`
@@ -1797,6 +1810,7 @@ function paintCreate() {
         const nm = (fl.map(f => f.purpose || '').join(' ').match(/\(?\s*([0-9]{1,3})\s*(가구|세대|호|호실)\s*\)?/) || [])
         const nHouse = nm[1] ? parseInt(nm[1], 10) : 0
         BLDG.floorArea = fa; BLDG.floorHouses = nHouse
+        if (fa > 0 && nHouse > 1 && !$('c_area_exclusive').value.trim()) { const a0 = +(fa / nHouse).toFixed(2); $('c_area_exclusive').value = String(a0); $('c_area_exclusive').classList.add('filled'); $('c_area_exclusive').classList.remove('miss'); fire($('c_area_exclusive')); html += `<div class="bnote" style="margin-top:6px;color:var(--ok)">✅ 전용면적 자동 기재: ${esc(curF)}층 ${fa.toFixed(2)}㎡ ÷ ${nHouse}${esc(nm[2])} = <b>${a0}㎡</b> (대장 추정 — 현장 확인 값으로 고쳐도 됩니다)</div>` }
         if (fa > 0 && nHouse > 1) html += `<div class="bnote" style="margin-top:6px"><b>추천 전용면적</b> — ${esc(curF)}층 ${fa.toFixed(2)}㎡ ÷ ${nHouse}${esc(nm[2])} = <b>${(fa / nHouse).toFixed(2)}㎡</b></div><div class="row-acts" style="margin-top:4px"><button type="button" class="btn b" id="c_bldg_area_div" data-area="${(fa / nHouse).toFixed(2)}">추천 면적 ${(fa / nHouse).toFixed(2)}㎡ 폼에 넣기 (÷${nHouse}${esc(nm[2])})</button></div>`
         else if (fa > 0) html += `<div class="bnote" style="margin-top:6px">${esc(curF)}층 전체 ${fa.toFixed(2)}㎡ — 그 층 가구 수를 알면 나눠 넣을 수 있습니다: <input id="c_bldg_div_n" inputmode="numeric" placeholder="가구" style="width:52px;font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:6px"> <button type="button" class="btn" id="c_bldg_area_div" data-area="" style="padding:4px 10px;font-size:12px">나눠서 폼에 넣기</button></div>`
         html += `<div class="bnote">전용면적은 온하우스 값·현장 확인 값이 우선입니다.</div>`
@@ -1837,8 +1851,20 @@ function paintCreate() {
   S.loadBldg = loadBldg
   let bldgT = null
   ;['c_ho_nm', 'c_dong_nm'].forEach(id => $(id).addEventListener('input', () => { clearTimeout(bldgT); bldgT = setTimeout(() => loadBldg(false), 700) }))
+  $('c_floor_no').addEventListener('input', () => { clearTimeout(bldgT); bldgT = setTimeout(() => loadBldg(true), 700) })
   let missT = null
   $('cform').addEventListener('input', e => { if (e.target && e.target.classList) e.target.classList.remove('miss'); clearTimeout(missT); missT = setTimeout(() => paintMissing(false), 250) })
+  /* 방 수 ↔ 건물 종류 (2026-10-09): 방 1개 = 원룸(오픈형/분리형 필수 선택), 원룸인데 방 2개 이상 = 투룸. 아파트·오피스텔·상가 등은 건드리지 않는다 */
+  const syncRoomType = () => {
+    const rc = Number(String($('c_room_count').value || '').replace(/[^0-9]/g, '')); const pt = $('c_property_type').value
+    if (rc === 1 && ['', '빌라', '주택', '투룸', '기타'].includes(pt)) { $('c_property_type').value = '원룸'; $('c_property_type').classList.add('filled') }
+    else if (rc >= 2 && pt === '원룸') { $('c_property_type').value = '투룸'; $('c_property_type').classList.add('filled') }
+    const one = $('c_property_type').value === '원룸'
+    $('l_room_type').style.display = one ? '' : 'none'; if (!one) $('c_room_type').value = ''
+    if (one && !$('c_room_type').value) $('c_room_type').classList.add('miss')
+  }
+  $('c_room_count').addEventListener('input', syncRoomType); $('c_property_type').addEventListener('change', syncRoomType); $('c_room_type').addEventListener('change', () => { $('c_room_type').classList.remove('miss'); paintMissing(false) })
+  S.syncRoomType = syncRoomType
   $('cform').addEventListener('change', () => paintMissing(false))
   S.paintMissing = paintMissing
 
@@ -1935,7 +1961,7 @@ function paintCreate() {
     const body = {
       road_addr: $('c_road_addr').value, jibun_addr: txt('c_jibun_addr'), bd_nm: txt('c_bd_nm'), dong_nm: txt('c_dong_nm'), ho_nm: txt('c_ho_nm'),
       deal_type: $('c_deal_type').value, sale_price: num('c_sale_price'), deposit: num('c_deposit'), monthly_rent: num('c_monthly_rent'), manage_prc: num('c_manage_prc'),
-      property_type: txt('c_property_type'), floor_no: num('c_floor_no'), total_floors: num('c_total_floors'),
+      property_type: txt('c_property_type'), room_type: txt('c_room_type'), building_use: BLDG.floorUse || undefined, floor_no: num('c_floor_no'), total_floors: num('c_total_floors'),
       area_exclusive: num('c_area_exclusive'), area_supply: num('c_area_supply'), room_count: num('c_room_count'), bathroom_count: num('c_bathroom_count'),
       direction: txt('c_direction'), available_date: txt('c_available_date'), owner_name: txt('c_owner_name'), owner_phone: txt('c_owner_phone'), contact_role: $('c_contact_role').value || 'landlord', parking_total: num('c_parking_total'),
       is_parking: txt('c_is_parking'), is_pet: txt('c_is_pet'), headline: txt('c_headline'), description: txt('c_description'), special_notes: txt('c_special_notes'),
@@ -2153,7 +2179,7 @@ function paintDb() {
   $d('db_q').focus()
 }
 
-const BUILD = '2026-10-09 11:09 당근'
+const BUILD = '2026-10-09 11:47 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()
