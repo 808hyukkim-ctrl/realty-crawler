@@ -565,10 +565,10 @@ listings.get("/admin/listings", async (c) => {
       <span class="small muted" id="psmsg">지번·호수, 임대인 연락처(첫 번호)·그 밖의 번호, 거래·금액, 종류, 이름을 줄마다 알아서 찾아 칸에 넣고, 못 알아본 글은 메모에 남깁니다. 지번이 없는 줄은 건너뜁니다.</span>
     </div>
     <div class="upbox fillbox" id="fillbox">
-      <b>엑셀에 임대인 연락처 채우기</b>
-      <span class="small muted">매일 뽑는 수집 엑셀을 여기에 끌어다 놓거나 고르면, 줄마다 지번(+호수)으로 DB를 찾아 <b>링크 바로 옆에 "임대인 연락처(DB)" 칸</b>을 끼워 넣고 다시 내려받습니다. 나머지 칸은 그대로, 없는 건 빈칸.</span>
+      <b>엑셀DB대조</b>
+      <span class="small muted">매일 뽑는 수집 엑셀을 여기에 끌어다 놓거나 고르면, 줄마다 지번(+호수)으로 DB를 대조해 <b>링크 바로 옆에 하늘색 "임대인 연락처(DB)" 칸</b>을 끼워 넣습니다. 나머지 칸은 그대로, 없는 건 빈칸. 끝나면 [내려받기] 버튼이 생깁니다.</span>
       <input type="file" id="fillfile" accept=".xlsx,.xlsm" multiple>
-      <button type="button" class="btn btn-primary" id="fillgo">연락처 채워서 내려받기</button>
+      <button type="button" class="btn btn-primary" id="fillgo">DB 대조하기</button>
       <textarea id="filltext" rows="2" placeholder="또는 지번을 글로 — 한 줄에 하나 (예: 석촌동 1-1 302호)"></textarea>
       <button type="button" class="btn" id="filltxt">글로 찾기</button>
       <span class="small muted" id="fillmsg"></span>
@@ -689,8 +689,11 @@ const LT_STYLE = `
 .lt td.src a{color:var(--accent-dark)}
 .upbox input[type=text]{width:140px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);margin:0;display:inline-block}
 .upbox input[type=file]{color:var(--muted);font-size:12px;display:inline-block;width:auto;margin:0}
-.fillbox{border:2px dashed var(--accent);background:linear-gradient(135deg,#fff0f6,#fff)}
-.fillbox.drag{background:#ffe3ee}
+.fillbox{border:2px dashed #4fc3f7;background:linear-gradient(135deg,#e3f2fd,#fff)}
+.fillbox b{color:#0277bd}
+.fillbox .btn-primary{background:#29b6f6;border-color:#29b6f6}
+.fillbox.drag{background:#cfe9fb}
+.dlbtn{display:inline-block;padding:8px 14px;border-radius:999px;background:#0288d1;color:#fff;font-weight:700;font-size:13px;border:0;cursor:pointer;margin:4px 6px 0 0}
 .fillbox textarea{flex:1;min-width:220px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);font-size:13px;margin:0}
 #fillout table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:6px}
 #fillout th,#fillout td{padding:6px 9px;border-bottom:1px solid #fbe3ec;font-size:12.5px;text-align:left}
@@ -793,18 +796,25 @@ const LT_JS = `
       var res=await matchItems(items);
       var colVals=[]; for(var n=0;n<rowsV.length;n++) colVals[n]='';
       colVals[hdrN]='임대인 연락처(DB)';
-      rowNos.forEach(function(n,k){ var p=(res[k]||{}).phone||''; colVals[n]=p; total++; if(p) hit++; });
+      rowNos.forEach(function(n,k){ var p=(res[k]||{}).phone||''; colVals[n]=p||' '; total++; if(p) hit++; });
       ws.spliceColumns(insertAt, 0, colVals.slice(1));
-      var col=ws.getColumn(insertAt); col.width=18; ws.getRow(hdrN).getCell(insertAt).font={bold:true};
+      var col=ws.getColumn(insertAt); col.width=20;
+      var SKY={type:'pattern',pattern:'solid',fgColor:{argb:'FFE1F5FE'}}, HEAD={type:'pattern',pattern:'solid',fgColor:{argb:'FF81D4FA'}};
+      for(var rn=1;rn<rowsV.length;rn++){ var cell=ws.getRow(rn).getCell(insertAt); cell.fill=(rn===hdrN)?HEAD:SKY; cell.alignment={horizontal:'left',vertical:'middle'}; cell.border={left:{style:'thin',color:{argb:'FF4FC3F7'}},right:{style:'thin',color:{argb:'FF4FC3F7'}}}; if(rn===hdrN) cell.font={bold:true,color:{argb:'FF01579B'}}; else if(colVals[rn]&&colVals[rn]!==' ') cell.font={bold:true}; }
     }
-    var buf=await wb.xlsx.writeBuffer(); var name=file.name.replace(/\\.xlsx?$/i,'')+'_연락처.xlsx';
-    var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},3000);
-    return {total:total, hit:hit, name:name};
+    var buf=await wb.xlsx.writeBuffer(); var name=file.name.replace(/\\.xlsx?$/i,'')+'_DB대조.xlsx';
+    return {total:total, hit:hit, name:name, blob:new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})};
+  }
+  var FILL_DONE=[];
+  function paintFillOut(){
+    var h=''; FILL_DONE.forEach(function(r,i){ h+='<div style="margin-top:6px"><button type="button" class="dlbtn" data-fdl="'+i+'">⬇ '+esc(r.name)+' 내려받기</button><span class="small muted">'+r.total+'줄 중 연락처 '+r.hit+'건 (하늘색 칸)</span></div>'; });
+    $('fillout').innerHTML=h;
+    document.querySelectorAll('[data-fdl]').forEach(function(b){ b.onclick=function(){ var r=FILL_DONE[+b.dataset.fdl]; var a=document.createElement('a'); a.href=URL.createObjectURL(r.blob); a.download=r.name; document.body.appendChild(a); a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},3000); b.textContent='⬇ '+r.name+' (받음 — 다시 받으려면 클릭)'; }; });
   }
   async function fillFiles(files){
-    if(!files||!files.length) return; var msg=$('fillmsg'); $('fillgo').disabled=true; var lines=[];
-    for(var i=0;i<files.length;i++){ var f=files[i]; msg.textContent='채우는 중… '+f.name; try{ var r=await fillWorkbook(f); lines.push(r.name+': '+r.total+'줄 중 연락처 '+r.hit+'건 채움'); }catch(e){ lines.push(f.name+': 실패 ('+e.message+')'); } }
-    msg.textContent='완료 — '+lines.join(' · ')+' (내려받기 폴더 확인)'; $('fillgo').disabled=false;
+    if(!files||!files.length) return; var msg=$('fillmsg'); $('fillgo').disabled=true; var fails=[];
+    for(var i=0;i<files.length;i++){ var f=files[i]; msg.textContent='대조 중… '+f.name; try{ var r=await fillWorkbook(f); FILL_DONE.unshift(r); paintFillOut(); }catch(e){ fails.push(f.name+': 실패 ('+e.message+')'); } }
+    msg.textContent='대조 완료 — 아래 [내려받기] 버튼을 누르면 바로 받습니다'+(fails.length?' · '+fails.join(' · '):''); $('fillgo').disabled=false;
   }
   $('fillgo').onclick=function(){ fillFiles($('fillfile').files); };
   $('fillfile').onchange=function(){ if($('fillfile').files.length) fillFiles($('fillfile').files); };
@@ -815,7 +825,7 @@ const LT_JS = `
     var res=await matchItems(lines.map(function(l){return {addr:l,ho:''}}));
     var h='<table><tr><th>적은 지번</th><th>찾은 단위</th><th>임대인 연락처(DB)</th></tr>'; var hit=0;
     lines.forEach(function(l,i){ var r=res[i]||{}; if(r.phone) hit++; h+='<tr><td>'+esc(l)+'</td><td>'+esc(r.lot||'')+(r.ho?' '+esc(r.ho)+'호':'')+'</td><td><b>'+esc(r.phone||'')+'</b></td></tr>'; });
-    $('fillout').innerHTML=h+'</table>'; $('fillmsg').textContent=lines.length+'줄 중 '+hit+'건 찾음';
+    $('fillout').innerHTML=h+'</table>'; $('fillmsg').textContent=lines.length+'줄 중 '+hit+'건 찾음'; FILL_DONE=[];
   };
   // 지번 조회: 치는 대로(0.3초 뒤) 찾기, Enter·[찾기]도 됨. 결과 표의 연락처·메모·지번 칸도 클릭 수정.
   var esc=function(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')};

@@ -307,7 +307,7 @@ async function refresh() {
 }
 
 /* ── 껍데기 ───────────────────────────────────────────── */
-const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함', photo:'사진 950', db:'지번 조회', fill:'엑셀 연락처', log:'내 활동' }
+const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함', photo:'사진 950', db:'지번 조회', fill:'엑셀DB대조', log:'내 활동' }
 function renderShell(order) {
   el.innerHTML = `
     <header>
@@ -2183,14 +2183,14 @@ function paintDb() {
   $d('db_q').focus()
 }
 
-/* ── 엑셀 연락처 (기능 db): 수집 엑셀을 끌어다 놓으면 줄마다 지번(+호수)으로 DB 를 찾아 링크 옆에 '임대인 연락처(DB)' 칸을 끼워 다시 내려받는다 (2026-10-09) */
+/* ── 엑셀DB대조 (기능 db): 수집 엑셀을 끌어다 놓으면 줄마다 지번(+호수)으로 DB 를 대조해 링크 옆에 하늘색 '임대인 연락처(DB)' 칸을 끼우고 [내려받기] 버튼으로 받는다 (2026-10-09) */
 function paintFill() {
   S.painted = 'fill'
   if (document.getElementById('fl_box')) return
   document.getElementById('body').innerHTML = `
-    <div class="paste" id="fl_box" style="border:2px dashed #f06292;background:#fff4f8">
-      <div style="font-weight:800">📎 엑셀에 임대인 연락처 채우기 <span style="font-weight:400;color:var(--dim);font-size:12px">매일 뽑는 수집 엑셀(네이버·당근·온하우스)을 여기에 끌어다 놓거나 고르세요. 줄마다 지번(+호수)으로 DB 를 찾아 <b>링크 바로 옆에 "임대인 연락처(DB)" 칸</b>을 끼워 넣고 다시 내려받습니다. 나머지 칸은 그대로, 없으면 빈칸.</span></div>
-      <div class="row-acts" style="align-items:center;margin-top:8px"><input type="file" id="fl_file" accept=".xlsx,.xlsm" multiple style="font:inherit"><button class="btn b" id="fl_go">연락처 채워서 내려받기</button><span class="hint" id="fl_msg" style="margin:0"></span></div>
+    <div class="paste" id="fl_box" style="border:2px dashed #4fc3f7;background:#eef7ff">
+      <div style="font-weight:800;color:#0277bd">📎 엑셀DB대조 <span style="font-weight:400;color:var(--dim);font-size:12px">매일 뽑는 수집 엑셀(네이버·당근·온하우스)을 여기에 끌어다 놓거나 고르세요. 줄마다 지번(+호수)으로 DB 를 대조해 <b>링크 바로 옆에 하늘색 "임대인 연락처(DB)" 칸</b>을 끼워 넣습니다. 나머지 칸은 그대로, 없으면 빈칸. 끝나면 [내려받기] 버튼이 생깁니다.</span></div>
+      <div class="row-acts" style="align-items:center;margin-top:8px"><input type="file" id="fl_file" accept=".xlsx,.xlsm" multiple style="font:inherit"><button class="btn b" id="fl_go" style="background:#29b6f6;border-color:#29b6f6">DB 대조하기</button><span class="hint" id="fl_msg" style="margin:0"></span></div>
       <div class="row-acts" style="align-items:center;margin-top:8px"><textarea id="fl_text" rows="2" placeholder="또는 지번을 글로 — 한 줄에 하나 (예: 석촌동 1-1 302호)" style="flex:1;min-width:220px;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:10px"></textarea><button class="btn" id="fl_txt">글로 찾기</button></div>
       <div id="fl_out" style="margin-top:10px;overflow-x:auto"></div>
     </div>`
@@ -2219,17 +2219,23 @@ function paintFill() {
       const res = await match(items, file.name)
       const colVals = []; for (let n = 0; n < rowsV.length; n++) colVals[n] = ''
       colVals[hdrN] = '임대인 연락처(DB)'
-      rowNos.forEach((n, k) => { const p = (res[k] || {}).phone || ''; colVals[n] = p; total++; if (p) hit++ })
-      ws.spliceColumns(insertAt, 0, colVals.slice(1)); ws.getColumn(insertAt).width = 18; ws.getRow(hdrN).getCell(insertAt).font = { bold: true }
+      rowNos.forEach((n, k) => { const p = (res[k] || {}).phone || ''; colVals[n] = p || ' '; total++; if (p) hit++ })
+      ws.spliceColumns(insertAt, 0, colVals.slice(1)); ws.getColumn(insertAt).width = 20
+      const SKY = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE1F5FE' } }, HEAD = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF81D4FA' } }
+      for (let rn = 1; rn < rowsV.length; rn++) { const cell = ws.getRow(rn).getCell(insertAt); cell.fill = rn === hdrN ? HEAD : SKY; cell.alignment = { horizontal: 'left', vertical: 'middle' }; cell.border = { left: { style: 'thin', color: { argb: 'FF4FC3F7' } }, right: { style: 'thin', color: { argb: 'FF4FC3F7' } } }; if (rn === hdrN) cell.font = { bold: true, color: { argb: 'FF01579B' } }; else if (colVals[rn] && colVals[rn] !== ' ') cell.font = { bold: true } }
     }
-    const buf = await wb.xlsx.writeBuffer(); const name = file.name.replace(/\.xlsx?$/i, '') + '_연락처.xlsx'
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove() }, 3000)
-    return { total, hit, name }
+    const buf = await wb.xlsx.writeBuffer(); const name = file.name.replace(/\.xlsx?$/i, '') + '_DB대조.xlsx'
+    return { total, hit, name, blob: new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }) }
+  }
+  const DONE = []
+  const paintOut = () => {
+    $d('fl_out').innerHTML = DONE.map((r, i) => `<div style="margin-top:6px"><button class="btn b" data-fdl="${i}" style="background:#0288d1;border-color:#0288d1">⬇ ${esc(r.name)} 내려받기</button> <span class="hint" style="margin:0">${r.total}줄 중 연락처 ${r.hit}건 (하늘색 칸)</span></div>`).join('')
+    document.querySelectorAll('[data-fdl]').forEach(b => { b.onclick = () => { const r = DONE[+b.dataset.fdl]; const a = document.createElement('a'); a.href = URL.createObjectURL(r.blob); a.download = r.name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove() }, 3000); b.textContent = '⬇ ' + r.name + ' (받음 — 다시 받으려면 클릭)' } })
   }
   const fillFiles = async files => {
-    if (!files || !files.length) return; const msg = $d('fl_msg'); $d('fl_go').disabled = true; const lines = []
-    for (const f of files) { msg.textContent = '채우는 중… ' + f.name; try { const r = await fillWorkbook(f); lines.push(`${r.name}: ${r.total}줄 중 연락처 ${r.hit}건 채움`) } catch (e) { if (e.message === '401') return; lines.push(`${f.name}: 실패 (${e.message})`) } }
-    msg.textContent = '완료 — ' + lines.join(' · ') + ' (내려받기 폴더 확인)'; $d('fl_go').disabled = false
+    if (!files || !files.length) return; const msg = $d('fl_msg'); $d('fl_go').disabled = true; const fails = []
+    for (const f of files) { msg.textContent = '대조 중… ' + f.name; try { const r = await fillWorkbook(f); DONE.unshift(r); paintOut() } catch (e) { if (e.message === '401') return; fails.push(`${f.name}: 실패 (${e.message})`) } }
+    msg.textContent = '대조 완료 — 아래 [내려받기] 버튼을 누르면 바로 받습니다' + (fails.length ? ' · ' + fails.join(' · ') : ''); $d('fl_go').disabled = false
   }
   $d('fl_go').onclick = () => fillFiles($d('fl_file').files)
   $d('fl_file').onchange = () => { if ($d('fl_file').files.length) fillFiles($d('fl_file').files) }
@@ -2237,6 +2243,7 @@ function paintFill() {
   ['dragenter', 'dragover'].forEach(ev => box.addEventListener(ev, e => { e.preventDefault(); box.style.background = '#ffe3ee' }));
   ['dragleave', 'drop'].forEach(ev => box.addEventListener(ev, e => { e.preventDefault(); box.style.background = '#fff4f8' }))
   box.addEventListener('drop', e => { const fs = [].filter.call(e.dataTransfer.files, f => /\.xlsx?$|\.xlsm$/i.test(f.name)); if (fs.length) fillFiles(fs); else $d('fl_msg').textContent = 'xlsx 파일만 됩니다' })
+  box.addEventListener('dragover', () => { box.style.background = '#cfe9fb' }); box.addEventListener('dragleave', () => { box.style.background = '#eef7ff' }); box.addEventListener('drop', () => { box.style.background = '#eef7ff' })
   $d('fl_txt').onclick = async () => {
     const lines = $d('fl_text').value.split(/\n/).map(x => x.trim()).filter(Boolean); if (!lines.length) { $d('fl_msg').textContent = '지번을 적어주세요'; return }
     try {
@@ -2247,7 +2254,7 @@ function paintFill() {
   }
 }
 
-const BUILD = '2026-10-09 12:04 당근'
+const BUILD = '2026-10-09 12:17 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()
