@@ -216,14 +216,14 @@ function PAGE() {
 <div class="na-stack">
   <section class="panel green">
     <h2>⚡ 링크 자동 정리</h2>
-    <textarea id="na_links" rows="4" placeholder="네이버 매물 링크를 여러 개 넣어도 됩니다 (줄바꿈·쉼표·공백 구분) — 당근·온하우스 링크도 됩니다&#10;https://new.land.naver.com/houses?articleNo=2653867465"></textarea>
+    <textarea id="na_links" rows="4" placeholder="아무 링크나 넣어주세요. 정리해드릴게요!  여러 개면 줄바꿈·쉼표·공백으로 구분&#10;https://new.land.naver.com/houses?articleNo=2653867465"></textarea>
     <div class="na-bar"><button class="btn btn-primary" id="na_go">자동 정리</button><button class="btn" id="na_clip">📋 클립보드에서</button><span class="small muted" id="na_msg"></span></div>
-    <div class="na-bar" id="na_tools" style="display:none"><button class="btn btn-primary" id="na_save">체크한 줄 DB에 저장</button><button class="btn" id="na_xl">엑셀 다운로드</button><button class="btn" id="na_copyall">전체 광고문구 복사</button><label class="small"><input type="checkbox" id="na_all" checked> 전체 선택</label></div>
+    <div class="na-bar" id="na_tools" style="display:none"><button class="btn btn-primary" id="na_save">체크한 줄 DB에 저장</button><button class="btn" id="na_clear" title="정리한 목록을 비웁니다 (DB 에 저장한 것은 그대로)">목록 지우기</button><button class="btn" id="na_xl">엑셀 다운로드</button><button class="btn" id="na_copyall">전체 광고문구 복사</button><label class="small"><input type="checkbox" id="na_all" checked> 전체 선택</label></div>
     <div id="na_out" class="na-out"></div>
   </section>
   <section class="panel pink">
     <h2><span class="nlogo">N</span>🔍 지번으로 매물 찾기</h2>
-    <div class="na-bar"><input type="text" id="na_q" placeholder="예: 양재동 17-27 (구 이름을 붙이면 더 정확: 서초구 양재동 17-27)" style="flex:1;min-width:240px"><button class="btn btn-primary" id="na_find">찾기</button></div>
+    <div class="na-bar"><input type="text" id="na_q" placeholder="예: 양재동 17-27 (구 이름을 붙이면 더 정확: 서초구 양재동 17-27)" style="flex:1;min-width:240px"><button class="btn btn-primary" id="na_find">찾기</button><label class="small" style="display:flex;align-items:center;gap:5px;margin:0;white-space:nowrap" title="같은 매물(종류·거래·금액·층·면적이 같은 것)을 여러 부동산이 올렸으면 한 줄로 묶어 'N곳' 으로 보여줍니다"><input type="checkbox" id="na_group" checked style="width:16px;height:16px;margin:0"> 중복매물 묶기</label></div>
     <div class="small muted" id="na_fmsg">우리 DB 에 쌓인 줄은 바로, 네이버는 그 지번 자리(60m 안)의 매물을 모아 지번을 확인합니다 (5~15초). 줄을 누르면 오른쪽에 바로 정리됩니다.</div>
     <div class="na-split">
       <div id="na_fout" class="na-out"></div>
@@ -324,6 +324,7 @@ const NA_JS = `
   }
   $('na_go').onclick=run;
   $('na_clip').onclick=async function(){ try{ var t=await navigator.clipboard.readText(); if(t){ $('na_links').value=t; run(); } }catch(e){ $('na_msg').textContent='클립보드를 읽지 못했습니다 — 붙여넣기 해주세요'; } };
+  $('na_clear').onclick=function(){ if(ITEMS.length&&!confirm('정리한 목록 '+ITEMS.length+'건을 지울까요? (DB 에 저장한 것은 그대로)')) return; ITEMS=[]; $('na_links').value=''; paint(); $('na_msg').textContent='목록을 비웠습니다'; };
   $('na_all').onchange=function(){ ITEMS.forEach(function(x){ x.sel=$('na_all').checked; }); paint(); };
   $('na_save').onclick=async function(){
     var rows=ITEMS.filter(function(x){return x.ok&&x.sel!==false}).map(function(x){return x.row}); if(!rows.length){ $('na_msg').textContent='체크한 줄이 없습니다'; return; }
@@ -394,18 +395,33 @@ const NA_JS = `
     h+='<div class="bsec"><h4>주변 정보</h4>'+(nz.length?nz.map(function(x){ return '<div class="brow"><span>'+esc(x.label||x.category||'')+'</span><b>'+esc(x.name)+' <span class="bnote" style="font-weight:400">'+esc(x.distanceText||'')+(x.walkMin?' · 도보 '+x.walkMin+'분':'')+'</span></b></div>'; }).join(''):'<div class="bnote">주변 정보가 없습니다 (엔진에 카카오·버스 키가 없으면 비어 있습니다).</div>')+'</div>';
     box.innerHTML=h;
   }
+  var LAST=null;
+  function groupRows(arr){
+    if(!$('na_group').checked) return arr;
+    var m={}, out=[];
+    arr.forEach(function(x){ var k=[x.type,x.trade,x.price,x.rent,x.floor,x.area1,x.area2,x.jibun||''].join('|'); if(m[k]){ m[k].dups.push(x); if(x.realtor&&m[k].brokers.indexOf(x.realtor)<0) m[k].brokers.push(x.realtor); } else { var g=Object.assign({},x,{dups:[],brokers:x.realtor?[x.realtor]:[]}); m[k]=g; out.push(g); } });
+    return out;
+  }
   function naRow(x, kind){
     var tag = kind==='exact' ? (x.likely?'<span class="tag ok" title="주소 비공개지만 바로 그 자리(15m 안)에 찍힌 매물">위치 일치</span>':'<span class="tag ok">지번 일치</span>') : '<span class="tag q">근처 '+(x.dist==null?'?':x.dist)+'m'+(x.jibun?'':' · 지번 비공개')+'</span>';
-    return '<tr class="pick" data-url="'+esc(x.url)+'" title="누르면 이 매물을 바로 정리합니다"><td>'+tag+'</td><td>'+esc(x.no)+'</td><td>'+esc(x.name)+(x.feature?'<div class="small muted" style="white-space:normal;max-width:220px">'+esc(x.feature)+'</div>':'')+'</td><td>'+esc(x.type)+' '+esc(x.trade)+'</td><td>'+esc(x.price)+(x.rent?' / '+esc(x.rent):'')+'</td><td>'+esc(x.floor)+'</td><td>'+esc(x.area1)+'/'+esc(x.area2)+'</td><td>'+esc(x.jibun||'')+'</td><td>'+esc(x.realtor)+'</td><td>'+esc(x.confirm)+'</td></tr>';
+    var dupN=(x.dups||[]).length, brokers=x.brokers||[];
+    var realtorCell = dupN ? '<b>'+(brokers.length||1)+'곳</b> <span class="small muted" title="'+esc(brokers.join(', '))+'">'+esc(brokers.slice(0,2).join(', '))+(brokers.length>2?' 외 '+(brokers.length-2):'')+'</span>' : esc(x.realtor);
+    return '<tr class="pick" data-url="'+esc(x.url)+'" title="누르면 이 매물을 바로 정리합니다'+(dupN?' (같은 매물 '+(dupN+1)+'건 묶음)':'')+'"><td>'+tag+(dupN?'<div class="small muted">×'+(dupN+1)+'</div>':'')+'</td><td>'+esc(x.no)+'</td><td>'+esc(x.name)+(x.feature?'<div class="small muted" style="white-space:normal;max-width:220px">'+esc(x.feature)+'</div>':'')+'</td><td>'+esc(x.type)+' '+esc(x.trade)+'</td><td>'+esc(x.price)+(x.rent?' / '+esc(x.rent):'')+'</td><td>'+esc(x.floor)+'</td><td>'+esc(x.area1)+'/'+esc(x.area2)+'</td><td>'+esc(x.jibun||'')+'</td><td>'+realtorCell+'</td><td>'+esc(x.confirm)+'</td></tr>';
   }
   async function find(){
     var q=$('na_q').value.trim(); if(q.length<2) return; $('na_find').disabled=true; $('na_fmsg').textContent='찾는 중… (우리 DB → 네이버 그 자리 매물 → 지번 확인, 5~15초)'; $('na_fout').innerHTML='';
     try{
       var r=await fetch('/admin/naverad/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:q})}).then(function(x){return x.json()});
       if(r.error){ $('na_fmsg').textContent=r.error; $('na_find').disabled=false; return; }
-      var n=r.naver||{}, ex=n.exact||[], nr=n.near||[];
+      LAST={r:r,q:q}; renderFind(); 
+    }catch(e){ $('na_fmsg').textContent='오류: '+e.message; }
+    $('na_find').disabled=false;
+  }
+  function renderFind(){
+    var r=LAST.r, q=LAST.q;
+      var n=r.naver||{}, ex0=n.exact||[], nr0=n.near||[], ex=groupRows(ex0), nr=groupRows(nr0);
       var h='';
-      if(!n.error){ h+='<div class="cnt"><span>네이버에 <b>'+ex.length+'</b>건 올라와 있음</span><span class="b2">부동산 <b>'+(n.broker_count||0)+'</b>곳</span><span class="small muted">근처 다른 지번 '+nr.length+'건 · '+esc(n.cortar||'')+' · 목록 '+(n.pages||0)+'쪽 '+(n.scanned||0)+'건 중 확인 '+(n.checked||0)+'건물'+(n.blocked?' · '+esc(n.blocked):'')+(n.ambiguous?' · 같은 이름의 동이 여럿: '+esc(n.ambiguous.join(', '))+' → 구 이름을 붙여주세요':'')+'</span></div>'; }
+      if(!n.error){ h+='<div class="cnt"><span>네이버에 <b>'+ex0.length+'</b>건 올라와 있음'+(ex.length!==ex0.length?' <span class="small muted">(묶으면 '+ex.length+'건)</span>':'')+'</span><span class="b2">부동산 <b>'+(n.broker_count||0)+'</b>곳</span><span class="small muted">근처 다른 지번 '+nr.length+'건 · '+esc(n.cortar||'')+' · 목록 '+(n.pages||0)+'쪽 '+(n.scanned||0)+'건 중 확인 '+(n.checked||0)+'건물'+(n.blocked?' · '+esc(n.blocked):'')+(n.ambiguous?' · 같은 이름의 동이 여럿: '+esc(n.ambiguous.join(', '))+' → 구 이름을 붙여주세요':'')+'</span></div>'; }
       h+='<h3 style="font-size:14px;margin:8px 0 4px">우리 DB <span class="tag db">'+(r.db||[]).length+'건</span></h3>';
       if((r.db||[]).length){ h+='<table class="na-table"><tr><th>지번·호수</th><th>임대인 연락처</th><th>임차인·관리 등</th><th>종류</th><th>거래</th><th>금액</th><th>이름</th><th>출처</th><th>올린 날</th></tr>'; r.db.forEach(function(x){ h+='<tr><td>'+esc(x.addr)+'</td><td>'+esc(x.phone)+'</td><td>'+esc(x.contacts)+'</td><td>'+esc(x.kind)+'</td><td>'+esc(x.deal)+'</td><td>'+esc(x.price)+'</td><td>'+esc(x.title)+'</td><td class="small muted">'+esc(x.site)+' · '+esc(x.file||'')+'</td><td>'+esc(x.last_at)+'</td></tr>'; }); h+='</table>'; }
       h+='<h3 style="font-size:14px;margin:14px 0 4px">네이버 <span class="tag ok">지번 일치 '+ex.length+'건</span> <span class="tag q">근처 '+nr.length+'건</span></h3>';
@@ -415,12 +431,11 @@ const NA_JS = `
         if(all.length) h+='<table class="na-table"><tr><th></th><th>매물번호</th><th>매물명</th><th>종류·거래</th><th>금액</th><th>층</th><th>공급/전용</th><th>지번(확인)</th><th>중개사</th><th>확인일</th></tr>'+all.join('')+'</table>';
         else h+='<div class="small muted">지금 네이버에는 이 지번 자리의 매물이 없습니다.</div>';
       }
-      $('na_fout').innerHTML=h; $('na_fmsg').textContent='완료 — 네이버 '+ex.length+'건 (부동산 '+(n.broker_count||0)+'곳)'+(nr.length?' · 근처 '+nr.length+'건':'');
-      if(n.cortar){ var lot=(q.match(/(산\s*)?(\d{1,4}(?:-\d{1,4})?)\s*$/)||[])[0]||''; BL.key=''; loadBldg((n.cortar+' '+lot).replace(/^서울시/,'서울특별시').trim(), ''); }
+      $('na_fout').innerHTML=h; $('na_fmsg').textContent='완료 — 네이버 '+ex0.length+'건 (부동산 '+(n.broker_count||0)+'곳)'+(nr0.length?' · 근처 '+nr0.length+'건':'');
+      if(n.cortar){ var lot=(q.match(/(산\s*)?(\d{1,4}(?:-\d{1,4})?)\s*$/)||[])[0]||''; loadBldg((n.cortar+' '+lot).replace(/^서울시/,'서울특별시').trim(), ''); }
       document.querySelectorAll('#na_fout tr.pick').forEach(function(tr){ tr.onclick=function(){ pick(tr.dataset.url, tr); }; });
-    }catch(e){ $('na_fmsg').textContent='오류: '+e.message; }
-    $('na_find').disabled=false;
   }
+  $('na_group').onchange=function(){ if(LAST) renderFind(); };
   $('na_find').onclick=find; $('na_q').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); find(); } });
 })();
 `;
