@@ -18,7 +18,7 @@ type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string; EN
 export const naverad = new Hono<{ Bindings: Bindings }>();
 
 const PARSE_API = "https://bridge-parse.808hyukkim.workers.dev/parse";
-const NAVER_HEADERS: Record<string, string> = {
+export const NAVER_HEADERS: Record<string, string> = {
   'Accept': '*/*',
   'Accept-Language': 'ko-KR,ko;q=0.8,en-US;q=0.5,en;q=0.3',
   'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IlJFQUxFU1RBVEUiLCJpYXQiOjE3NTU4NjE2MDIsImV4cCI6MTc1NTg3MjQwMn0.oUESmR0PhLfqPu50Dp0Ksd8hH6CbN69Kgy1AtKAJBkA',
@@ -33,7 +33,7 @@ const num = (v: any) => { const n = Number(String(v ?? "").replace(/,/g, "")); r
 const ymd = (v: any) => s(v).replace(/^(\d{4})\.?(\d{2})\.?(\d{2}).*$/, "$1-$2-$3");
 
 // ---------------------------------------------------------------- 공통
-function naverNo(input: string): string {
+export function naverNo(input: string): string {
   const t = s(input);
   const m = t.match(/articleNo=(\d{6,})/) || t.match(/land\.naver\.com\/(?:articles|houses|rooms|offices|complexes)\/(\d{6,})/) || t.match(/fin\.land\.naver\.com\/articles\/(\d{6,})/);
   if (m) return m[1];
@@ -49,7 +49,7 @@ async function engineJson(c: any, path: string): Promise<any> {
   try { return await r.json(); } catch { return null; }
 }
 /** fin.land 상세 페이지(RSC 데이터)에서 지번·법정동코드·도로명·사용승인일·총주차대수 */
-async function finLand(no: string): Promise<Record<string, string>> {
+export async function finLand(no: string): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   try {
     const r = await fetch(`https://fin.land.naver.com/articles/${no}`, { headers: { "User-Agent": PAGE_UA, Accept: "text/html,*/*", "Accept-Language": "ko-KR,ko;q=0.9" }, cf: { cacheTtl: 600 } } as any);

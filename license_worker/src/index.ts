@@ -6,6 +6,7 @@ import { telegram } from "./telegram";
 import { listings } from "./listings";
 import { staffdb } from "./staffdb";
 import { naverad } from "./naverad";
+import { hosu } from "./hosu";
 import { daangn } from "./daangn";   // 당근 광고자동화 (2026-10-08)
 import { layout } from "./layout";
 
@@ -130,6 +131,7 @@ app.route("/", telegram);   // 텔레그램 봇·예약 대기열 (src/telegram.
 app.route("/", listings);   // 매물 DB (src/listings.ts)
 app.route("/", staffdb);    // 직원용 DB 조회 /db (src/staffdb.ts)
 app.route("/", naverad);    // 네이버 광고정리 /admin/naverad (src/naverad.ts)
+app.route("/", hosu);       // 호수 추정 /admin/hosu (src/hosu.ts)
 app.route("/", daangn);     // 당근 광고자동화 /daangn (src/daangn.ts)
 
 // ---------------------------------------------------------------- dashboard
