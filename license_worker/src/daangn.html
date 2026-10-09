@@ -1777,7 +1777,9 @@ function paintCreate() {
     BLDG.floorUse = ''
     { const fn = Number(String($('c_floor_no').value || '').trim()); const fls = Array.isArray(j.floors) ? j.floors : []
       if (String($('c_floor_no').value || '').trim() !== '' && Number.isFinite(fn)) {
-        const hit = fls.find(f => !/부속/.test(f.mainAtch || '') && (fn > 0 ? (!/지하/.test(f.kind || '') && String(f.floor) === String(fn)) : (/지하/.test(f.kind || '') && String(f.floor) === String(Math.abs(fn) || 1))))
+        const UTIL = /주차|계단|창고|기계|보일러|승강|엘리베이터|부대|옥탑|물탱크|전기실/
+        const cands = fls.filter(f => !/부속/.test(f.mainAtch || '') && (fn > 0 ? (!/지하/.test(f.kind || '') && String(f.floor) === String(fn)) : (/지하/.test(f.kind || '') && String(f.floor) === String(Math.abs(fn) || 1))))
+        const hit = cands.sort((a, b) => (UTIL.test(a.purpose || '') ? 1 : 0) - (UTIL.test(b.purpose || '') ? 1 : 0) || (bNum(b.area) - bNum(a.area)))[0]
         if (hit && hit.purpose) BLDG.floorUse = String(hit.purpose).trim()
       } }
     const S0 = j.summary || {}, floors = Array.isArray(j.floors) ? j.floors : [], near = Array.isArray(j.nearby) ? j.nearby : []
@@ -1800,7 +1802,8 @@ function paintCreate() {
     else if (!units.length) {
       // 전유부가 없는 건물(다가구·단독·일반건축물)이거나 호수가 대장과 다른 경우 → 그 층의 층별 면적을 대신 보여준다
       const curF = String($('c_floor_no').value || '').trim() || String(parseInt(ho, 10) >= 100 ? Math.floor(parseInt(ho, 10) / 100) : '')
-      const fl = floors.filter(f => !/부속/.test(f.mainAtch || '') && !/지하/.test(f.kind || '') && String(f.floor) === curF)
+      const fn0 = Number(curF)
+      const fl = floors.filter(f => !/부속/.test(f.mainAtch || '') && !/주차|계단|창고|기계|보일러|승강|엘리베이터|부대|물탱크|전기실/.test(f.purpose || '') && (fn0 > 0 ? (!/지하/.test(f.kind || '') && String(f.floor) === curF) : (/지하/.test(f.kind || '') && String(f.floor) === String(Math.abs(fn0) || 1))))   // 주차장·계단실 같은 부대 행은 면적·가구수 계산에서 뺀다, 지하(-1)도 됨
       const isCollective = /집합/.test(S0.kind || '')
       html += `<div class="bnote" style="color:var(--warn)">대장에 ${esc(ho)}호 전유부가 없습니다${isCollective ? ' — 호수(동)를 확인하세요.' : ` — ${esc(S0.kind || '일반건축물')}(다가구·단독 등)은 호별 면적이 대장에 없고 층 면적만 있습니다.`}</div>`
       if (fl.length) {
@@ -2179,7 +2182,7 @@ function paintDb() {
   $d('db_q').focus()
 }
 
-const BUILD = '2026-10-09 11:47 당근'
+const BUILD = '2026-10-09 11:51 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()
