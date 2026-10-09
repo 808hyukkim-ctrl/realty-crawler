@@ -87,7 +87,10 @@ daangn.post("/daangn/api/login", async (c) => {
   const username = str(body.username), password = String(body.password ?? "");
   if (!username || !password) return json(c, { error: "아이디와 비밀번호를 입력하세요." }, 400);
   const row: any = await c.env.DB.prepare("SELECT * FROM users WHERE username = ?").bind(username).first();
-  if (!row || !(await verifyPassword(password, row.password_hash))) return json(c, { error: "아이디 또는 비밀번호가 올바르지 않습니다." }, 401);
+  if (!row || !(await verifyPassword(password, row.password_hash))) {   // 실패도 활동 기록에 남겨 원인(없는 아이디/비번 틀림)을 어드민에서 볼 수 있게 (2026-10-09)
+    await addLog(c.env.DB, username.slice(0, 40), "daangn", "로그인 실패", row ? "비밀번호 틀림 (웹 포털)" : "없는 아이디 (웹 포털)", null);
+    return json(c, { error: row ? "비밀번호가 올바르지 않습니다. 수집기 프로그램에 쓰는 비밀번호와 같습니다." : "없는 아이디입니다. 띄어쓰기·대소문자를 확인하세요 (어드민 사용자 관리의 아이디 그대로)." }, 401);
+  }
   if (!row.is_active) return json(c, { error: "비활성화된 계정입니다. 관리자에게 문의하세요." }, 403);
   if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) return json(c, { error: "이용권이 만료되었습니다." }, 403);
   const features = featsOf(row.features);   // 기능이 없어도 로그인은 되고, 화면에서 가진 기능 탭만 보인다 (2026-10-09)
