@@ -63,14 +63,26 @@ export async function finLand(no: string): Promise<Record<string, string>> {
   return out;
 }
 /** 법정동코드 → "시 구 동" (cortar.json 역방향) */
-const CODE2NAME: Record<string, string> = {};
-const NAME2CODES: Record<string, { code: string; full: string }[]> = {};
+export const CODE2NAME: Record<string, string> = {};
+export const NAME2CODES: Record<string, { code: string; full: string }[]> = {};
 for (const [si, gus] of Object.entries(CORTAR as Record<string, Record<string, Record<string, string>>>)) {
   for (const [gu, dongs] of Object.entries(gus)) {
     for (const [dong, code] of Object.entries(dongs)) { CODE2NAME[code] = `${si} ${gu} ${dong}`; (NAME2CODES[dong] ||= []).push({ code, full: `${si} ${gu} ${dong}` }); }
   }
 }
 
+
+/** "서울특별시 송파구 잠실동 19 잠실엘스" → {legal:"1171010100", lot:"19", dongName:"잠실동", full:"서울시 송파구 잠실동"} (구 이름으로 같은 동 이름 구분) */
+export function legalOf(addr: string): { legal: string; lot: string; dongName: string; full: string; ambiguous: string[] } | null {
+  const a = String(addr || "").replace(/번지/g, "");
+  const m = a.match(/([가-힣]+(?:동|리|가))\s*(산)?\s*(\d{1,4}(?:-\d{1,4})?)(?![\d-])/);
+  if (!m) return null;
+  let cands = NAME2CODES[m[1]] || [];
+  const gu = (a.match(/([가-힣]+(?:구|군|시))\s/) || [])[1];
+  if (gu && cands.length > 1) { const f = cands.filter((x) => x.full.includes(gu)); if (f.length) cands = f; }
+  if (!cands.length) return null;
+  return { legal: cands[0].code, lot: (m[2] ? "산" : "") + m[3], dongName: m[1], full: cands[0].full, ambiguous: cands.length > 1 ? cands.map((x) => x.full) : [] };
+}
 // ---------------------------------------------------------------- 링크 정리
 function moneyText(deal: string, price: any, deposit: any, rent: any) {
   const f = (v: any) => (v == null || v === "" ? "" : Number(v).toLocaleString("ko-KR"));

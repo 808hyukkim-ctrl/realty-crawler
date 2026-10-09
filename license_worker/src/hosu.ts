@@ -7,7 +7,7 @@
 import { Hono } from "hono";
 import { html, raw } from "hono/html";
 import { layout } from "./layout";
-import { NAVER_HEADERS, finLand, naverNo } from "./naverad";
+import { NAVER_HEADERS, finLand, naverNo, legalOf } from "./naverad";
 
 type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string; BUILDING_API_KEY?: string; PARSE?: Fetcher };
 export const hosu = new Hono<{ Bindings: Bindings }>();
@@ -36,7 +36,7 @@ const bandWord = (txt: string) => { const f = s(txt).split("/")[0].trim(); retur
 
 // ---------------------------------------------------------------- 건축HUB 전유부
 type Unit = { dong: string; ho: string; floor: number; area: number; purpose: string };
-async function hubUnits(key: string, legal: string, lot: string, dong: string): Promise<{ units: Unit[]; total: number; pages: number; error?: string }> {
+async function hubUnits(key: string, legal: string, lot: string, dong: string): Promise<{ units: Unit[]; total: number; pages: number; error?: string; truncated?: boolean }> {
   if (!key) return { units: [], total: 0, pages: 0, error: "건축물대장 API 키(BUILDING_API_KEY)가 없습니다." };
   if (!/^\d{10}$/.test(legal)) return { units: [], total: 0, pages: 0, error: "법정동코드를 읽지 못했습니다." };
   const san = /^산/.test(lot); const m = lot.replace(/^산/, "").match(/^(\d{1,4})(?:-(\d{1,4}))?$/);
@@ -63,23 +63,27 @@ async function hubUnits(key: string, legal: string, lot: string, dong: string): 
   if (!first) return { units, total, pages, error: "건축물대장 API 응답 없음(503/시간초과) — 잠시 뒤 다시" };
   const addRows = (items: any[]) => { for (const u of items) { if (s(u.exposPubuseGbCd) !== "1") continue; const fl = num(u.flrNo); if (fl == null) continue; units.push({ dong: s(u.dongNm), ho: s(u.hoNm), floor: fl, area: Math.round((num(u.area) || 0) * 100) / 100, purpose: s(u.mainPurpsCdNm) || s(u.etcPurps) }); } };
   addRows(first); pages = 1;
-  const lastPage = Math.min(60, Math.ceil(total / 100));                       // 6000행(≈600호)까지 — 동 필터가 있으면 보통 10쪽 안
+  const lastPage = Math.min(35, Math.ceil(total / 100));                       // 워커 1회 하위요청 한도(50) 안에서 — 동 필터가 있으면 보통 10쪽 안, 대단지는 동 번호 필수
   for (let p = 2; p <= lastPage; p += 4) {
     const batch = [p, p + 1, p + 2, p + 3].filter((x) => x <= lastPage);
     const rs = await Promise.all(batch.map(fetchPage));
     for (const r of rs) { if (r) { addRows(r); pages++; } }
   }
-  return { units, total, pages };
+  return { units, total, pages, truncated: lastPage * 100 < total };
 }
 const normDong = (d: string) => s(d).replace(/\s+/g, "").replace(/동$/, "");
 const hoInt = (h: string) => { const d = (h.match(/\d+/) || [""])[0]; return d ? parseInt(d, 10) : 1e9; };
 /** 후보 표시: 1개 그대로 / 12개 이하 쉼표 / 그 이상은 "3~5층 03/04호 (30개)" 요약 (수집기 _format_hosu_candidates 와 같은 취지) */
 function formatCands(cs: Unit[]): string {
+  const multiDong = new Set(cs.map((c) => c.dong)).size > 1;                    // 동이 여럿이면 "112동 804호" 로
+  const label = (c: Unit) => (multiDong && c.dong ? c.dong + " " : "") + (/호$/.test(c.ho) ? c.ho : c.ho + "호");
+  const seen = new Set<string>(); const labels = cs.filter((c) => { const k = label(c); if (seen.has(k)) return false; seen.add(k); return true; }).map(label);
+  if (labels.length <= 12) return labels.join(", ");
   const hos = Array.from(new Set(cs.map((c) => c.ho))).sort((a, b) => hoInt(a) - hoInt(b));
-  if (hos.length <= 12) return hos.map((h) => (/호$/.test(h) ? h : h + "호")).join(", ");
   const floors = cs.map((c) => c.floor); const lo = Math.min(...floors), hi = Math.max(...floors);
   const lines = Array.from(new Set(hos.map((h) => h.replace(/\D/g, "").slice(-2)))).sort().join("/");
-  return `${lo}~${hi}층 ${lines}호 (${hos.length}개)`;
+  const dongs = multiDong ? Array.from(new Set(cs.map((c) => c.dong))).filter(Boolean) : [];
+  return `${dongs.length ? dongs.length + "개 동 · " : ""}${lo}~${hi}층 ${lines}호 (${labels.length}개)`;
 }
 
 // ---------------------------------------------------------------- 한 링크
@@ -100,68 +104,92 @@ async function naverDetail(no: string, complexNo = ""): Promise<any> {
 async function sameGroup(no: string): Promise<any[]> {
   try { const r = await fetch(`https://new.land.naver.com/api/articles?representativeArticleNo=${no}`, { headers: NAVER_HEADERS }); if (!r.ok) return []; const j: any = await r.json().catch(() => null); return Array.isArray(j) ? j : []; } catch { return []; }
 }
-async function hosuOne(c: any, url: string) {
-  const no = naverNo(url); if (!no) throw new Error("네이버 매물 링크가 아닙니다");
-  const complexNo = (s(url).match(/complexes\/(\d+)/) || (s(url).match(/complexNo=(\d+)/)) || [])[1] || "";
-  const d = await naverDetail(no, complexNo);
-  const ad = d.articleDetail || {}, ft = d.articleFloor || {}, sp = d.articleSpace || {}, add = d.articleAddition || {};
-  const name = s(ad.aptName || ad.articleName || add.articleName);
-  const dong = s(ad.buildingName || add.buildingName);                                      // "422동" / "1동" / ""
-  const floorInfo = s(add.floorInfo || ad.floorInfo);                                      // "25/26" / "중/15"
-  let floor = num(ft.correspondingFloorCount) ?? floorOf(floorInfo);
-  const total = num(ft.totalFloorCount) ?? (() => { const t = floorInfo.split("/")[1]; return /^\d+$/.test(s(t)) ? parseInt(t, 10) : null; })();
-  const area = num(sp.exclusiveSpace) ?? num(ad.exclusiveSpace);
-  const band = floor == null ? bandWord(floorInfo) : "";
-  // 같은 집 다른 중개사 매물에서 층 숫자 찾기
-  let evidence = "";
-  const group = await sameGroup(no);
-  if (floor == null && group.length) {
-    const hit = group.find((g: any) => s(g.articleNo) !== no && floorOf(s(g.floorInfo)) != null && (!dong || normDong(g.buildingName) === normDong(dong)));
-    if (hit) { floor = floorOf(s(hit.floorInfo)); evidence = `같은 집을 ${s(hit.realtorName)}(매물 ${s(hit.articleNo)})가 ${s(hit.floorInfo)}층으로 올려 ${floor}층으로 봄`; }
+async function hosuOne(c: any, url: string, dongGiven = "") {
+  const no = naverNo(url);
+  let base: any, lot = "", legal = "", dong = "", floor: number | null = null, total: number | null = null, area: number | null = null, floorInfo = "", band = "", evidence = "";
+  if (no) {
+    // ── 네이버: 상세 API + fin.land 지번 + 같은 집 묶음
+    const complexNo = (s(url).match(/complexes\/(\d+)/) || (s(url).match(/complexNo=(\d+)/)) || [])[1] || "";
+    const d = await naverDetail(no, complexNo);
+    const ad = d.articleDetail || {}, ft = d.articleFloor || {}, sp = d.articleSpace || {}, add = d.articleAddition || {};
+    const name = s(ad.aptName || ad.articleName || add.articleName);
+    dong = s(ad.buildingName || add.buildingName);
+    floorInfo = s(add.floorInfo || ad.floorInfo);
+    floor = num(ft.correspondingFloorCount) ?? floorOf(floorInfo);
+    total = num(ft.totalFloorCount) ?? (() => { const tt = floorInfo.split("/")[1]; return /^\d+$/.test(s(tt)) ? parseInt(tt, 10) : null; })();
+    area = num(sp.exclusiveSpace) ?? num(ad.exclusiveSpace);
+    band = floor == null ? bandWord(floorInfo) : "";
+    const group = await sameGroup(no);
+    if (floor == null && group.length) {
+      const hit = group.find((g: any) => s(g.articleNo) !== no && floorOf(s(g.floorInfo)) != null && (!dong || normDong(g.buildingName) === normDong(dong)));
+      if (hit) { floor = floorOf(s(hit.floorInfo)); evidence = `같은 집을 ${s(hit.realtorName)}(매물 ${s(hit.articleNo)})가 ${s(hit.floorInfo)}층으로 올려 ${floor}층으로 봄`; }
+    }
+    const fl = await finLand(no);
+    lot = s(fl.jibun); legal = s(fl.legal);
+    const addrDong = s(ad.exposureAddress || ad.cortarAddress);
+    base = { source: "naver", no, url: `https://new.land.naver.com/houses?articleNo=${no}`, name, dong, floorInfo, floor, total, band, area, jibun: lot ? `${addrDong} ${lot}`.trim() : addrDong, road: s(fl.road), group: group.length, evidence };
+    if (!lot || !legal) return { ...base, status: "확인불가", hosu: "확인불가", note: "네이버 상세에 지번이 공개되지 않은 매물입니다 (주소 비공개)", cands: [] };
+  } else {
+    // ── 당근·온하우스·그 밖: 정리 서버(bridge-parse) 가 준 지번·층·전용면적
+    const target = `https://bridge-parse.808hyukkim.workers.dev/parse?url=${encodeURIComponent(url)}`;
+    const r = c.env.PARSE ? await c.env.PARSE.fetch(target) : await fetch(target);
+    const txt = await r.text(); let j: any; try { j = JSON.parse(txt); } catch { throw new Error("정리 서버 응답이 JSON 이 아닙니다: " + txt.slice(0, 40)); }
+    if (j.error) throw new Error(j.error);
+    const addr = s(j.jibun || j.address_q || j.address);
+    const lg = legalOf(addr);
+    const text = [s(j.building), s(j.memo), s(j.unit)].join(" ");
+    const dm = text.match(/(?:^|[^\d])(\d{1,4})동(?![\d가-힣])/);                       // 글에 '112동' 같은 동 번호가 있으면
+    dong = dm ? dm[1] + "동" : "";
+    floor = num(j.floor); total = num(j.total_floor); area = num(j.area_m2) ?? num(j.supply_m2);
+    floorInfo = floor != null ? `${floor}/${total ?? ""}` : "";
+    const srcName = s(j._source) === "daangn" ? "당근" : s(j._source) === "onhouse" ? "온하우스" : s(j._source) || "링크";
+    base = { source: srcName, no: s(j.article_no || url), url: s(j.source_url || url), name: s(j.building) || addr.split(" ").slice(-1)[0], dong, floorInfo, floor, total, band: "", area, jibun: addr, road: "", group: 0, evidence: "" };
+    if (!lg) return { ...base, status: "확인불가", hosu: "확인불가", note: "지번(동 이름+번지)을 읽지 못했습니다: " + addr, cands: [] };
+    lot = lg.lot; legal = lg.legal;
+    if (lg.ambiguous.length) base.note0 = "같은 이름의 동이 여럿이라 " + lg.full + " 로 봄";
+    if (s(j.unit)) { const u = s(j.unit).replace(/호$/, ""); if (/^\d{2,4}$/.test(u)) base.unitGiven = u + "호"; }
   }
-  const fl = await finLand(no);
-  const lot = s(fl.jibun), legal = s(fl.legal);
-  const addrDong = s(ad.exposureAddress || ad.cortarAddress);
-  const jibunFull = lot ? `${addrDong} ${lot}`.trim() : addrDong;
-  const base = { no, url: `https://new.land.naver.com/houses?articleNo=${no}`, name, dong, floorInfo, floor, total, band, area, jibun: jibunFull, road: s(fl.road), group: group.length, evidence };
-  if (!lot || !legal) return { ...base, status: "확인불가", hosu: "확인불가", note: "네이버 상세에 지번이 공개되지 않은 매물입니다 (주소 비공개)", cands: [] };
+  if (dongGiven) { dong = /동$/.test(dongGiven) ? dongGiven : dongGiven + "동"; base.dong = dong; base.evidence = [base.evidence, `동 번호는 입력한 '${dong}' 사용`].filter(Boolean).join(" · "); }
   if (area == null) return { ...base, status: "확인불가", hosu: "확인불가", note: "전용면적이 없어 대조할 수 없습니다", cands: [] };
-  // 건축물대장 전유부 (동 필터 → 없으면 지번 전체)
+  // ── 건축물대장 전유부 (동 필터 → 없으면 지번 전체)
   let hub = await hubUnits(c.env.BUILDING_API_KEY || "", legal, lot, dong);
-  let dongNote = "";
-  if (!hub.error && !hub.units.length && dong) { hub = await hubUnits(c.env.BUILDING_API_KEY || "", legal, lot, ""); dongNote = `대장에 '${dong}' 이름이 없어 지번 전체에서 찾음`; }
+  let dongNote = base.note0 || "";
+  if (!hub.error && !hub.units.length && dong) { hub = await hubUnits(c.env.BUILDING_API_KEY || "", legal, lot, ""); dongNote = [dongNote, `대장에 '${dong}' 이름이 없어 지번 전체에서 찾음`].filter(Boolean).join(" · "); }
   if (hub.error) return { ...base, status: "확인불가", hosu: "확인불가", note: hub.error, cands: [] };
   let pool = hub.units;
   if (dong && dongNote) { const dn = normDong(dong); const same = pool.filter((u) => normDong(u.dong) === dn || normDong(u.dong).endsWith(dn)); if (same.length) pool = same; }
+  if (!dong && base.source !== "naver" && new Set(pool.map((u) => u.dong)).size > 1) dongNote = [dongNote, "당근·온하우스 글에 동 번호가 없어 단지 전체에서 찾음"].filter(Boolean).join(" · ");
+  if (hub.truncated) dongNote = [dongNote, `대장 행이 ${hub.total}개라 앞 3,500행만 대조했습니다 — 링크 뒤에 동 번호(예: 112동)를 붙이면 그 동만 정확히 봅니다`].filter(Boolean).join(" · ");
   if (!pool.length) return { ...base, status: "확인불가", hosu: "확인불가", note: "건축물대장에 전유부(호별 면적)가 없는 건물입니다 (단독·다가구 등)", cands: [], hubTotal: hub.total };
+  // 글에 호수가 적혀 있으면(온하우스 '5층 502') 그 호가 대장에 있는지만 확인
+  if (base.unitGiven) { const hoN = base.unitGiven.replace(/호$/, ""); const hit = pool.filter((u) => u.ho.replace(/\D/g, "") === hoN); if (hit.length) return { ...base, cands: hit.map((u) => ({ dong: u.dong, ho: u.ho, floor: u.floor, area: u.area, purpose: u.purpose })), status: "확정", hosu: base.unitGiven, stage: "글에 적힌 호수가 대장에 있음", note: dongNote, pool: pool.length, hubTotal: hub.total }; }
   const tol = Math.max(3, 0.08 * area);
   const range = floor == null ? bandRange(floorInfo, total) : null;
   const floorOk = (f: number) => floor != null ? f === floor : range ? f >= range[0] && f <= range[1] : true;
-  const gap = (u: Unit) => Math.abs(u.area - area);
+  const gap = (u: Unit) => Math.abs(u.area - area!);
   let stage = "";
   let cands = pool.filter((u) => floorOk(u.floor) && gap(u) <= tol);
   if (cands.length) stage = floor != null ? "같은 층 · 같은 면적" : `저/중/고 구간(${range ? range[0] + "~" + range[1] + "층" : "전체"}) · 같은 면적`;
   if (!cands.length && (floor != null || range)) { const inFloor = pool.filter((u) => floorOk(u.floor)); if (inFloor.length) { const best = Math.min(...inFloor.map(gap)); if (best <= tol * 2) { cands = inFloor.filter((u) => gap(u) === best); stage = "같은 층 · 면적 최근접(허용치 2배 안)"; } } }
   if (!cands.length) { const best = Math.min(...pool.map(gap)); if (best <= tol) { cands = pool.filter((u) => gap(u) === best); stage = "층 무관 · 면적 최근접"; } }
-  // 면적이 똑같은 호가 여러 층에 있으면 정확 일치만 남긴다
   // 면적이 더 정확히 맞는 호가 있으면 그것만 (13.99 vs 14.29 는 다른 라인) — 0.05㎡ → 0.5㎡ 순으로 좁힌다
   for (const tier of [0.05, 0.5]) { if (cands.length > 1) { const tight = cands.filter((u) => gap(u) <= tier); if (tight.length && tight.length < cands.length) { cands = tight; break; } } }
   cands.sort((a, b) => a.floor - b.floor || hoInt(a.ho) - hoInt(b.ho));
   const out = { ...base, cands: cands.slice(0, 60).map((u) => ({ dong: u.dong, ho: u.ho, floor: u.floor, area: u.area, purpose: u.purpose })), hubTotal: hub.total, pool: pool.length, stage, note: dongNote };
   if (!cands.length) return { ...out, status: "확인불가", hosu: "확인불가", note: [dongNote, `면적 허용치(±${tol.toFixed(1)}㎡) 안에 맞는 호가 없습니다`].filter(Boolean).join(" · ") };
-  const uniqHo = new Set(cands.map((u) => u.ho));
+  const uniqHo = new Set(cands.map((u) => (u.dong ? u.dong + " " : "") + u.ho));
   const relaxed = /최근접/.test(stage);                                            // 완화 단계(면적이 딱 맞지 않음)는 '추정' 으로 표시
-  if (uniqHo.size === 1) return { ...out, status: relaxed ? "추정" : "확정", hosu: /호$/.test(cands[0].ho) ? cands[0].ho : cands[0].ho + "호", floorFound: cands[0].floor };
+  if (uniqHo.size === 1) return { ...out, status: relaxed ? "추정" : "확정", hosu: (cands[0].dong && !dong ? cands[0].dong + " " : "") + (/호$/.test(cands[0].ho) ? cands[0].ho : cands[0].ho + "호"), floorFound: cands[0].floor };
   return { ...out, status: `후보 ${uniqHo.size}개`, hosu: formatCands(cands), floorRange: [cands[0].floor, cands[cands.length - 1].floor] };
 }
 
 hosu.post("/admin/hosu/run", async (c) => {
   const body: any = await c.req.json().catch(() => ({}));
-  const urls: string[] = Array.isArray(body.urls) ? body.urls.map((u: any) => s(u)).filter(Boolean).slice(0, 20) : [];
+  const urls: { url: string; dong: string }[] = (Array.isArray(body.urls) ? body.urls : []).map((u: any) => (typeof u === "string" ? { url: s(u), dong: "" } : { url: s(u?.url), dong: s(u?.dong) })).filter((u: any) => u.url).slice(0, 3);
   const items: any[] = [];
-  for (const url of urls) {
-    try { items.push({ ok: true, url, ...(await hosuOne(c, url)) }); }
-    catch (e: any) { items.push({ ok: false, url, error: e?.message || String(e) }); }
+  for (const { url, dong } of urls) {
+    try { items.push({ ok: true, url, ...(await hosuOne(c, url, dong)) }); }
+    catch (e: any) { items.push({ ok: false, url, error: /Too many subrequests/.test(e?.message || "") ? "대장 행이 너무 많아 한도에 걸렸습니다 — 링크 뒤에 동 번호(예: 112동)를 붙여 다시 해주세요" : (e?.message || String(e)) }); }
   }
   return c.json({ items });
 });
@@ -170,9 +198,9 @@ hosu.post("/admin/hosu/run", async (c) => {
 hosu.get("/admin/hosu", (c) => c.html(layout("호수 추정", PAGE())));
 function PAGE() {
   return html`
-<div class="page-head"><h1>호수 추정</h1><span class="small muted">네이버 링크를 넣으면 건축물대장 호별 면적과 대조해 호수를 찾습니다. 저/중/고는 같은 집을 올린 다른 중개사가 층을 숫자로 적었으면 그 층으로, 없으면 구간 후보로.</span></div>
+<div class="page-head"><h1>호수 추정</h1><span class="small muted">네이버·당근·온하우스 링크를 넣으면 건축물대장 호별 면적과 대조해 호수를 찾습니다. 당근·온하우스는 글에 동 번호가 없으면 단지 전체에서 찾습니다. 저/중/고는 같은 집을 올린 다른 중개사가 층을 숫자로 적었으면 그 층으로, 없으면 구간 후보로.</span></div>
 <section class="panel">
-  <textarea id="hs_links" rows="4" placeholder="네이버 매물 링크 — 여러 개면 줄바꿈·쉼표·공백으로 구분&#10;https://new.land.naver.com/houses?articleNo=2654182933"></textarea>
+  <textarea id="hs_links" rows="4" placeholder="네이버·당근·온하우스 매물 링크 — 한 줄에 하나. 동을 알면 링크 뒤에 적으세요 (대단지 당근 매물)&#10;https://new.land.naver.com/houses?articleNo=2654182933&#10;https://realty.daangn.com/articles/4624139 112동"></textarea>
   <div class="na-bar"><button class="btn btn-primary" id="hs_go">호수 찾기</button><button class="btn" id="hs_clip">📋 클립보드에서</button><button class="btn" id="hs_xl" style="display:none">엑셀 다운로드</button><span class="small muted" id="hs_msg">링크 1개당 3~10초 (대장 조회). 한 번에 20개까지.</span></div>
   <div id="hs_out"></div>
 </section>
@@ -201,7 +229,7 @@ const HS_JS = `
   var $=function(i){return document.getElementById(i)};
   var esc=function(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')};
   var ITEMS=[];
-  function links(){ var out=[],seen={}; $('hs_links').value.split(/\\s+|[,;]+(?=https?:)/).forEach(function(t){ t=t.trim(); if(/^(https?:\\/\\/|\\d{7,12}$)/.test(t)&&!seen[t]){seen[t]=1;out.push(t);} }); return out; }
+  function links(){ var out=[],seen={}; $('hs_links').value.split(/\\n/).forEach(function(line){ var toks=line.trim().split(/\\s+|[,;]+(?=https?:)/); var cur=null; toks.forEach(function(t){ t=t.trim(); if(/^(https?:\\/\\/|\\d{7,12}$)/.test(t)){ if(!seen[t]){ seen[t]=1; cur={url:t,dong:''}; out.push(cur);} else cur=null; } else if(cur&&/^\\d{1,4}동?$/.test(t)){ cur.dong=t.replace(/동$/,'')+'동'; } }); }); return out; }
   function tag(st){ return st==='확정'?'<span class="tag ok">확정</span>':st==='추정'?'<span class="tag q">추정 (면적 근사)</span>':/^후보/.test(st)?'<span class="tag q">'+esc(st)+'</span>':'<span class="tag no">'+esc(st||'확인불가')+'</span>'; }
   function paint(){
     var h='<table class="hs-table"><tr><th>#</th><th>매물</th><th>동 · 층/총층 · 전용</th><th>결과</th><th>호수</th><th>근거</th></tr>';
@@ -210,14 +238,14 @@ const HS_JS = `
       var fl=(it.floor!=null?it.floor+'층':(it.band?it.band+'층':'?'))+(it.total?' / '+it.total+'층':'');
       var cands=(it.cands||[]).slice(0,12).map(function(c){return (c.dong?c.dong+' ':'')+c.ho+'호 '+c.floor+'층 '+c.area+'㎡'}).join(' · ')+((it.cands||[]).length>12?' …':'');
       var ev=[]; if(it.evidence) ev.push('<span class="ev">'+esc(it.evidence)+'</span>'); if(it.stage) ev.push(esc(it.stage)); if(it.note) ev.push(esc(it.note)); if(it.group>1) ev.push('같은 집 매물 '+it.group+'건'); if(it.pool) ev.push('대장 전유부 '+it.pool+'호 대조');
-      h+='<tr><td>'+(i+1)+'</td><td><b>'+esc(it.name||'')+'</b><br><span class="small">'+esc(it.jibun||'')+(it.road?' · '+esc(it.road):'')+'</span><br><a class="small" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(it.no)+' ↗</a></td><td>'+esc(it.dong||'-')+' · '+esc(fl)+' · '+esc(it.area!=null?it.area+'㎡':'-')+'</td><td>'+tag(it.status)+'</td><td class="hosu">'+esc(it.hosu||'')+(cands?'<div class="cand">'+esc(cands)+'</div>':'')+'</td><td class="cand">'+ev.join('<br>')+'</td></tr>';
+      h+='<tr><td>'+(i+1)+'</td><td><span class="tag q" style="background:rgba(96,110,240,.12);color:#4f5fd6">'+esc(it.source||'')+'</span> <b>'+esc(it.name||'')+'</b><br><span class="small">'+esc(it.jibun||'')+(it.road?' · '+esc(it.road):'')+'</span><br><a class="small" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(it.no)+' ↗</a></td><td>'+esc(it.dong||'-')+' · '+esc(fl)+' · '+esc(it.area!=null?it.area+'㎡':'-')+'</td><td>'+tag(it.status)+'</td><td class="hosu">'+esc(it.hosu||'')+(cands?'<div class="cand">'+esc(cands)+'</div>':'')+'</td><td class="cand">'+ev.join('<br>')+'</td></tr>';
     });
     $('hs_out').innerHTML=h+'</table>'; $('hs_xl').style.display=ITEMS.some(function(x){return x.ok})?'':'none';
   }
   async function run(){
     var urls=links(); if(!urls.length){ $('hs_msg').textContent='링크를 넣어주세요'; return; }
     $('hs_go').disabled=true; ITEMS=[]; $('hs_msg').textContent='찾는 중… 0/'+urls.length;
-    try{ for(var i=0;i<urls.length;i+=3){ var r=await fetch('/admin/hosu/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({urls:urls.slice(i,i+3)})}).then(function(x){return x.json()}); ITEMS=ITEMS.concat(r.items||[]); paint(); $('hs_msg').textContent='찾는 중… '+Math.min(i+3,urls.length)+'/'+urls.length; }
+    try{ for(var i=0;i<urls.length;i+=1){ var r=await fetch('/admin/hosu/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({urls:urls.slice(i,i+1)})}).then(function(x){return x.json()}); ITEMS=ITEMS.concat(r.items||[]); paint(); $('hs_msg').textContent='찾는 중… '+(i+1)+'/'+urls.length; }
       var ok=ITEMS.filter(function(x){return x.ok&&x.status==='확정'}).length, est=ITEMS.filter(function(x){return x.ok&&x.status==='추정'}).length, cand=ITEMS.filter(function(x){return x.ok&&/^후보/.test(x.status)}).length;
       $('hs_msg').textContent='완료 — 확정 '+ok+'건 · 추정 '+est+'건 · 후보 '+cand+'건 · 확인불가/실패 '+(ITEMS.length-ok-est-cand)+'건';
     }catch(e){ $('hs_msg').textContent='오류: '+e.message; }
