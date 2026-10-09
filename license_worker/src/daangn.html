@@ -157,7 +157,7 @@
   table.bulk .btn{padding:3px 8px; font-size:11px}
   table.bulk tr.done td{background:#f7fdf9; color:#4b5563}
 </style>
-<style>#csubmit,#cdaangn,#bregister,label:has(#blgall),label:has(input[data-lg]){display:none!important}.tab[data-t=photo] .n,.tab[data-t=db] .n,.tab[data-t=log] .n{display:none}</style>
+<style>#csubmit,#cdaangn,#bregister,label:has(#blgall),label:has(input[data-lg]){display:none!important}.tab[data-t=photo] .n,.tab[data-t=db] .n,.tab[data-t=fill] .n,.tab[data-t=log] .n{display:none}</style>
 </head>
 <body>
 
@@ -291,7 +291,7 @@ async function boot() {
   if (!token()) return renderGate()
   el.innerHTML = `<div class="wrap"><div class="empty" style="margin-top:20vh">불러오는 중…</div></div>`
   try { S.me = await api('summary') } catch (e) { if (e.message !== '401') renderGate(e.message); return }
-  const fts = S.me.features || []; const order = [].concat(fts.includes('daangn') ? ['create', 'uploads'] : [], fts.includes('photo') ? ['photo'] : [], fts.includes('db') ? ['db'] : [], ['log'])
+  const fts = S.me.features || []; const order = [].concat(fts.includes('daangn') ? ['create', 'uploads'] : [], fts.includes('photo') ? ['photo'] : [], fts.includes('db') ? ['db', 'fill'] : [], ['log'])
   if (!fts.includes('daangn') && !fts.includes('photo')) setTimeout(() => toast('이 계정에는 아직 당근 광고·사진950 권한이 없습니다. 관리자에게 요청하세요.'), 400)
   if (!order.length) return renderGate('이 토큰에는 열람 권한이 없습니다.')
   if (!order.includes(S.tab)) S.tab = order[0]
@@ -307,7 +307,7 @@ async function refresh() {
 }
 
 /* ── 껍데기 ───────────────────────────────────────────── */
-const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함', photo:'사진 950', db:'지번 조회', log:'내 활동' }
+const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함', photo:'사진 950', db:'지번 조회', fill:'엑셀 연락처', log:'내 활동' }
 function renderShell(order) {
   el.innerHTML = `
     <header>
@@ -368,7 +368,8 @@ async function load(tab, quiet) {
     if (!(S.data.create && restoreCreate())) paintCreate()
     S.painted = 'create'; return
   }
-  const paint = { supply: paintSupply, review: paintReview, cs: paintCS, uploads: paintUploads, photo: paintPhoto, db: paintDb, log: paintLog }[tab]
+  const paint = { supply: paintSupply, review: paintReview, cs: paintCS, uploads: paintUploads, photo: paintPhoto, db: paintDb, fill: paintFill, log: paintLog }[tab]
+  if (tab === 'fill') { paintFill(); S.painted = 'fill'; return }
   if (tab === 'photo') { paintPhoto(); S.painted = 'photo'; return }
   if (tab === 'db') { paintDb(); S.painted = 'db'; return }
   if (S.data[tab]) { paint(); S.painted = tab }   // 캐시로 먼저 그리고 뒤에서 갱신 (늦게 보이던 문제)
@@ -2182,7 +2183,71 @@ function paintDb() {
   $d('db_q').focus()
 }
 
-const BUILD = '2026-10-09 11:51 당근'
+/* ── 엑셀 연락처 (기능 db): 수집 엑셀을 끌어다 놓으면 줄마다 지번(+호수)으로 DB 를 찾아 링크 옆에 '임대인 연락처(DB)' 칸을 끼워 다시 내려받는다 (2026-10-09) */
+function paintFill() {
+  S.painted = 'fill'
+  if (document.getElementById('fl_box')) return
+  document.getElementById('body').innerHTML = `
+    <div class="paste" id="fl_box" style="border:2px dashed #f06292;background:#fff4f8">
+      <div style="font-weight:800">📎 엑셀에 임대인 연락처 채우기 <span style="font-weight:400;color:var(--dim);font-size:12px">매일 뽑는 수집 엑셀(네이버·당근·온하우스)을 여기에 끌어다 놓거나 고르세요. 줄마다 지번(+호수)으로 DB 를 찾아 <b>링크 바로 옆에 "임대인 연락처(DB)" 칸</b>을 끼워 넣고 다시 내려받습니다. 나머지 칸은 그대로, 없으면 빈칸.</span></div>
+      <div class="row-acts" style="align-items:center;margin-top:8px"><input type="file" id="fl_file" accept=".xlsx,.xlsm" multiple style="font:inherit"><button class="btn b" id="fl_go">연락처 채워서 내려받기</button><span class="hint" id="fl_msg" style="margin:0"></span></div>
+      <div class="row-acts" style="align-items:center;margin-top:8px"><textarea id="fl_text" rows="2" placeholder="또는 지번을 글로 — 한 줄에 하나 (예: 석촌동 1-1 302호)" style="flex:1;min-width:220px;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:10px"></textarea><button class="btn" id="fl_txt">글로 찾기</button></div>
+      <div id="fl_out" style="margin-top:10px;overflow-x:auto"></div>
+    </div>`
+  const $d = id => document.getElementById(id)
+  const HW = ['매물','주소','연락처','임대인','번호','거래','월세','전세','매매','종류','이름','URL','등록','확인','지번','호수','면적','금액','메모','비고','성명','전화','건물','층','옵션','제목']
+  const isHeader = row => { const cells = (row || []).map(v => String(v == null ? '' : v).trim()).filter(Boolean); if (cells.length < 3) return false; const txt = cells.filter(v => v.length <= 20 && !/\d/.test(v)).length; if (txt < cells.length * 0.9) return false; let hits = 0; HW.forEach(w => { if (cells.some(v => v.indexOf(w) >= 0)) hits++ }); return hits >= 2 }
+  const ADDR_COLS = ['세부주소','지번주소','전체주소','주소_호실','지번·호수','지번','주소','소재지'], HO_COLS = ['호수','호실','호'], LINK_COLS = ['매물번호','매물_URL','URL','링크','url']
+  const hdrIdx = (hdr, names) => { for (const n of names) { const j = hdr.findIndex(h => String(h || '').trim() === n); if (j >= 0) return j } return -1 }
+  const loadExcelJS = () => new Promise((ok, bad) => { if (typeof ExcelJS !== 'undefined') return ok(); const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js'; sc.onload = ok; sc.onerror = () => bad(new Error('엑셀 라이브러리를 못 불러왔습니다')); document.head.appendChild(sc) })
+  const match = async (items, file) => { let out = []; for (let i = 0; i < items.length; i += 500) { const r = await api('fill-match', { items: items.slice(i, i + 500), file }); out = out.concat(r.items || []) } return out }
+  const cellText = v => v && typeof v === 'object' ? (v.text || v.result || v.hyperlink || (v.richText ? v.richText.map(x => x.text).join('') : '')) : v
+  const fillWorkbook = async file => {
+    await loadExcelJS()
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await file.arrayBuffer())
+    let total = 0, hit = 0
+    for (const ws of wb.worksheets) {
+      const rowsV = []; ws.eachRow({ includeEmpty: true }, (row, n) => { rowsV[n] = row.values.slice(1).map(cellText) })
+      let hdrN = -1; for (let n = 1; n < rowsV.length && n <= 15; n++) { if (isHeader(rowsV[n] || [])) { hdrN = n; break } }
+      if (hdrN < 0) continue
+      const hdr = (rowsV[hdrN] || []).map(h => String(h == null ? '' : h).trim())
+      let li = hdrIdx(hdr, LINK_COLS); if (li < 0) li = hdr.findIndex((h, j) => rowsV.slice(hdrN + 1, hdrN + 6).some(r => /^https?:\/\//.test(String((r || [])[j] || ''))))
+      const ai = hdrIdx(hdr, ADDR_COLS), hi = hdrIdx(hdr, HO_COLS); if (ai < 0) continue
+      const insertAt = (li >= 0 ? li : ai) + 2
+      const items = [], rowNos = []
+      for (let n = hdrN + 1; n < rowsV.length; n++) { const r = rowsV[n] || []; if (isHeader(r)) continue; const addr = String(r[ai] == null ? '' : r[ai]).trim(); items.push({ addr, ho: hi >= 0 ? String(r[hi] == null ? '' : r[hi]).trim() : '' }); rowNos.push(n) }
+      const res = await match(items, file.name)
+      const colVals = []; for (let n = 0; n < rowsV.length; n++) colVals[n] = ''
+      colVals[hdrN] = '임대인 연락처(DB)'
+      rowNos.forEach((n, k) => { const p = (res[k] || {}).phone || ''; colVals[n] = p; total++; if (p) hit++ })
+      ws.spliceColumns(insertAt, 0, colVals.slice(1)); ws.getColumn(insertAt).width = 18; ws.getRow(hdrN).getCell(insertAt).font = { bold: true }
+    }
+    const buf = await wb.xlsx.writeBuffer(); const name = file.name.replace(/\.xlsx?$/i, '') + '_연락처.xlsx'
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove() }, 3000)
+    return { total, hit, name }
+  }
+  const fillFiles = async files => {
+    if (!files || !files.length) return; const msg = $d('fl_msg'); $d('fl_go').disabled = true; const lines = []
+    for (const f of files) { msg.textContent = '채우는 중… ' + f.name; try { const r = await fillWorkbook(f); lines.push(`${r.name}: ${r.total}줄 중 연락처 ${r.hit}건 채움`) } catch (e) { if (e.message === '401') return; lines.push(`${f.name}: 실패 (${e.message})`) } }
+    msg.textContent = '완료 — ' + lines.join(' · ') + ' (내려받기 폴더 확인)'; $d('fl_go').disabled = false
+  }
+  $d('fl_go').onclick = () => fillFiles($d('fl_file').files)
+  $d('fl_file').onchange = () => { if ($d('fl_file').files.length) fillFiles($d('fl_file').files) }
+  const box = $d('fl_box');
+  ['dragenter', 'dragover'].forEach(ev => box.addEventListener(ev, e => { e.preventDefault(); box.style.background = '#ffe3ee' }));
+  ['dragleave', 'drop'].forEach(ev => box.addEventListener(ev, e => { e.preventDefault(); box.style.background = '#fff4f8' }))
+  box.addEventListener('drop', e => { const fs = [].filter.call(e.dataTransfer.files, f => /\.xlsx?$|\.xlsm$/i.test(f.name)); if (fs.length) fillFiles(fs); else $d('fl_msg').textContent = 'xlsx 파일만 됩니다' })
+  $d('fl_txt').onclick = async () => {
+    const lines = $d('fl_text').value.split(/\n/).map(x => x.trim()).filter(Boolean); if (!lines.length) { $d('fl_msg').textContent = '지번을 적어주세요'; return }
+    try {
+      const res = await match(lines.map(l => ({ addr: l, ho: '' })), '글')
+      let hit = 0; const h = lines.map((l, i) => { const r = res[i] || {}; if (r.phone) hit++; return `<tr><td>${esc(l)}</td><td>${esc(r.lot || '')}${r.ho ? ' ' + esc(r.ho) + '호' : ''}</td><td><b>${esc(r.phone || '')}</b></td></tr>` }).join('')
+      $d('fl_out').innerHTML = `<div class="card scroll"><table><thead><tr><th>적은 지번</th><th>찾은 단위</th><th>임대인 연락처(DB)</th></tr></thead><tbody>${h}</tbody></table></div>`; $d('fl_msg').textContent = `${lines.length}줄 중 ${hit}건 찾음`
+    } catch (e) { if (e.message !== '401') $d('fl_msg').textContent = '오류: ' + e.message }
+  }
+}
+
+const BUILD = '2026-10-09 12:04 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()

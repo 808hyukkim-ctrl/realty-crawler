@@ -139,6 +139,16 @@ export function dealsOf(deal: string | null | undefined, price: string | null | 
   const found = (["매매", "전세", "월세"] as const).filter((k) => new RegExp("(^|[ ·/])" + k + "\\s").test(p));
   return found.length > 1 ? found.join("·") : String(deal ?? "");
 }
+/** 주소에서 "동 번지" 와 호수를 뽑는다 — 중복 판정·엑셀 연락처 채우기에 쓴다. "서울 강남구 논현동 124-12, 3층 302호" → {lot:"논현동 124-12", ho:"302"} */
+export function unitKey(addr: string, hoExtra = ""): { lot: string; ho: string } {
+  const a = String(addr || "").replace(/번지/g, "");
+  const m = a.match(/([가-힣]+(?:동|리|가))\s*(산)?\s*(\d{1,4}(?:-\d{1,4})?)(?![\d-])/);
+  const lot = m ? `${m[1]} ${m[2] ? "산" : ""}${m[3]}` : "";
+  const rest = m ? a.slice(m.index! + m[0].length) : a;
+  let ho = String(hoExtra || "").trim().replace(/호$/, "");
+  if (!ho) { const h = rest.match(/(?:^|[\s,])(?:\d+층\s*)?([A-Za-z]?\d{1,4}[A-Za-z]?)\s*호/) || rest.match(/\d+층\s*([A-Za-z]?\d{2,4}[A-Za-z]?)(?![\d-])/); ho = h ? h[1] : ""; }
+  return { lot, ho: ho.toUpperCase() };
+}
 /** 주소 뒤에 호수 열이 따로 있으면 붙인다 ("논현동 124-12" + "302" → "논현동 124-12 302호") */
 function withHo(addr: string, row: Record<string, any>): string {
   const ho = first(row, "호수", "호실", "호");
@@ -269,6 +279,7 @@ listings.post("/admin/listings/manual", async (c) => {
   const row: Record<string, string> = { "지번·호수": addr, "임대인 연락처": g("phone"), "기타 연락처": g("contacts"), "종류": g("kind"), "거래": g("deal"), "금액": g("price"), "이름": g("title"), "메모": g("memo") };
   for (const k of Object.keys(row)) if (!row[k]) delete row[k];
   const r = await ingest(c.env.DB, c.env.ADMIN_USER || "admin", g("site") || "임대인", "수기 입력", [row]);
+  if (r.dup) return c.redirect("/admin/listings?err=" + encodeURIComponent(`중복: 같은 지번·호수에 같은 연락처가 이미 2건 있어 추가하지 않았습니다 (${r.dupList[0] || ""})`));
   return c.redirect("/admin/listings?added=" + (r.inserted ? 1 : 0) + "&site=" + encodeURIComponent(r.site));
 });
 
@@ -283,6 +294,16 @@ export async function ingest(db: D1Database, username: string, siteHint: string,
 
   const stmts: D1PreparedStatement[] = [];
   const keys = new Set<string>();
+  // 같은 지번·호수에 같은 연락처가 이미 2건 있으면 더 쌓지 않는다 (2026-10-09, 사용자: "석촌동 1-1 이 010-2222-2222 로 4개 중복 — 2개까지만")
+  const DUP_MAX = 2;
+  const dupList: string[] = []; let dup = 0;
+  const seenCache = new Map<string, { addr: string; site: string; listing_no: string; deal: string }[]>();
+  const sameUnitRows = async (digits: string) => {
+    if (seenCache.has(digits)) return seenCache.get(digits)!;
+    const { results } = await db.prepare("SELECT addr, site, listing_no, deal FROM listings WHERE REPLACE(REPLACE(phone, '-', ''), ' ', '') LIKE ? LIMIT 200").bind(`%${digits}%`).all();
+    const rows = (results ?? []) as any[]; seenCache.set(digits, rows); return rows;
+  };
+  const batchUnits = new Map<string, number>();                      // 이번 묶음 안에서 같은 단위·연락처 몇 건 넣었는지
   for (const raw0 of rowsIn) {
     if (!raw0 || typeof raw0 !== "object") continue;
     const row: Record<string, string> = {};
@@ -293,6 +314,17 @@ export async function ingest(db: D1Database, username: string, siteHint: string,
     const no = sum.no || "h:" + (await sha256Hex(json)).slice(0, 24);
     if (keys.has(no + "|" + sum.deal)) continue;                      // 같은 파일 안의 중복 (한 statement 묶음 안에서 두 번 upsert 방지)
     keys.add(no + "|" + sum.deal);
+    const digits = phoneDigits(sum.phone);
+    if (digits.length >= 9) {
+      const u = unitKey(sum.addr);
+      if (u.lot) {
+        const same = (await sameUnitRows(digits)).filter((r) => { const k = unitKey(r.addr); return k.lot === u.lot && k.ho === u.ho; });
+        const isUpdate = same.some((r) => r.site === site && r.listing_no === no && r.deal === sum.deal);   // 같은 매물번호면 갱신이지 중복이 아님
+        const bkey = `${u.lot}|${u.ho}|${digits}`; const inBatch = batchUnits.get(bkey) || 0;
+        if (!isUpdate && same.length + inBatch >= DUP_MAX) { dup++; if (dupList.length < 20) dupList.push(`${u.lot}${u.ho ? " " + u.ho + "호" : ""} · ${sum.phone}`); continue; }
+        if (!isUpdate) batchUnits.set(bkey, inBatch + 1);
+      }
+    }
     stmts.push(db.prepare(
       `INSERT INTO listings (site, listing_no, url, username, file, addr, kind, deal, price, title, phone, memo, contacts, data, first_at, last_at, seen)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
@@ -313,7 +345,34 @@ export async function ingest(db: D1Database, username: string, siteHint: string,
     const ids = (results ?? []).map((r: any) => r.id);
     await db.prepare("INSERT INTO listings_ops (at, kind, label, count, batch, ids) VALUES (?, 'ingest', ?, ?, ?, ?)").bind(at, `${file} (${site})`, stmts.length, "i" + Date.now().toString(36), JSON.stringify(ids)).run();
   } catch { /* 기록 실패는 무시 */ }
-  return { site, inserted, updated: stmts.length - inserted, total: after };
+  return { site, inserted, updated: stmts.length - inserted, total: after, dup, dupList };
+}
+
+// 엑셀에 연락처 채우기: [{addr, ho}] → 같은 지번(+호수)의 임대인 연락처 (호수가 맞는 줄 우선, 없으면 그 지번의 아무 줄). 서로 다른 번호는 2개까지 ' / ' 로
+listings.post("/admin/listings/match", async (c) => {
+  const body: any = await c.req.json().catch(() => ({}));
+  return c.json({ items: await matchUnits(c.env.DB, Array.isArray(body.items) ? body.items : []) });
+});
+/** [{addr, ho}] → [{lot, ho, phone, n}] — 어드민 매물 DB 탭과 직원 포털 '엑셀 연락처' 탭이 같이 쓴다 */
+export async function matchUnits(db: D1Database, itemsIn: any[]) {
+  await ensure(db);
+  const items: any[] = itemsIn.slice(0, 2000);
+  const byLot = new Map<string, any[]>();
+  const out: any[] = items.map((it) => { const u = unitKey(s(it.addr), s(it.ho)); return { lot: u.lot, ho: u.ho, phone: "", n: 0 }; });
+  for (const o of out) if (o.lot) { if (!byLot.has(o.lot)) byLot.set(o.lot, []); }
+  for (const lot of byLot.keys()) {
+    const { results } = await db.prepare("SELECT addr, phone FROM listings WHERE phone <> '' AND (addr GLOB ? OR addr GLOB ?) LIMIT 100").bind(`*[동리가읍면] ${lot.split(" ").slice(1).join(" ")}[^0-9호]*`, `*[동리가읍면] ${lot.split(" ").slice(1).join(" ")}`).all();
+    byLot.set(lot, ((results ?? []) as any[]).filter((r) => unitKey(r.addr).lot === lot));
+  }
+  for (const o of out) {
+    if (!o.lot) continue;
+    const rows = byLot.get(o.lot) || [];
+    const pick = o.ho ? rows.filter((r) => unitKey(r.addr).ho === o.ho) : rows;
+    const use = pick.length ? pick : (o.ho ? [] : rows);              // 호수를 적었는데 그 호수 줄이 없으면 비워 둔다 (다른 호수 연락처를 섞지 않음)
+    const phones: string[] = []; for (const r of use) { const p = s(r.phone); if (p && !phones.some((x) => phoneDigits(x) === phoneDigits(p))) phones.push(p); }
+    o.phone = phones.slice(0, 2).join(" / "); o.n = use.length;
+  }
+  return out;
 }
 
 // 연락처·메모 수정 (표에서 칸을 클릭해 고친다)
@@ -505,6 +564,16 @@ listings.get("/admin/listings", async (c) => {
       <button type="button" class="btn btn-primary" id="psgo">넣기</button>
       <span class="small muted" id="psmsg">지번·호수, 임대인 연락처(첫 번호)·그 밖의 번호, 거래·금액, 종류, 이름을 줄마다 알아서 찾아 칸에 넣고, 못 알아본 글은 메모에 남깁니다. 지번이 없는 줄은 건너뜁니다.</span>
     </div>
+    <div class="upbox fillbox" id="fillbox">
+      <b>엑셀에 임대인 연락처 채우기</b>
+      <span class="small muted">매일 뽑는 수집 엑셀을 여기에 끌어다 놓거나 고르면, 줄마다 지번(+호수)으로 DB를 찾아 <b>링크 바로 옆에 "임대인 연락처(DB)" 칸</b>을 끼워 넣고 다시 내려받습니다. 나머지 칸은 그대로, 없는 건 빈칸.</span>
+      <input type="file" id="fillfile" accept=".xlsx,.xlsm" multiple>
+      <button type="button" class="btn btn-primary" id="fillgo">연락처 채워서 내려받기</button>
+      <textarea id="filltext" rows="2" placeholder="또는 지번을 글로 — 한 줄에 하나 (예: 석촌동 1-1 302호)"></textarea>
+      <button type="button" class="btn" id="filltxt">글로 찾기</button>
+      <span class="small muted" id="fillmsg"></span>
+      <div id="fillout" style="width:100%"></div>
+    </div>
     <form class="search-form lf" method="get" id="lf">
       <select name="site"><option value="">전체 구분</option>${siteOpts}</select>
       <select name="user"><option value="">전체 계정</option>${userOpts}</select>
@@ -530,6 +599,7 @@ listings.get("/admin/listings", async (c) => {
     </form>
     <style>${raw(LT_STYLE)}</style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
     <script>var LT_QS=${raw(JSON.stringify(qs(f)))}, LT_TOTAL=${total}, LT_SITE=${raw(JSON.stringify(f.site ? siteLabel(f.site) : "전체"))};${raw(LT_JS)}</script>`;
   return c.html(layout("매물·임대인 DB", body));
 });
@@ -619,6 +689,12 @@ const LT_STYLE = `
 .lt td.src a{color:var(--accent-dark)}
 .upbox input[type=text]{width:140px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);margin:0;display:inline-block}
 .upbox input[type=file]{color:var(--muted);font-size:12px;display:inline-block;width:auto;margin:0}
+.fillbox{border:2px dashed var(--accent);background:linear-gradient(135deg,#fff0f6,#fff)}
+.fillbox.drag{background:#ffe3ee}
+.fillbox textarea{flex:1;min-width:220px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);font-size:13px;margin:0}
+#fillout table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:6px}
+#fillout th,#fillout td{padding:6px 9px;border-bottom:1px solid #fbe3ec;font-size:12.5px;text-align:left}
+#fillout th{background:var(--soft);color:var(--accent-dark)}
 .status-pink{background:rgba(255,92,154,.15);color:var(--accent-dark)}
 .lookup{background:linear-gradient(135deg,#fff0f6,#ffffff);border:2px solid var(--accent);border-radius:14px;padding:14px 16px;margin-bottom:14px;box-shadow:0 8px 28px rgba(255,92,154,.12)}
 .lkrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:13px}
@@ -669,7 +745,7 @@ const LT_JS = `
   $('upgo').onclick=async function(){
     var files=$('upfile').files; var site=$('upsite').value.trim(); var msg=$('upmsg');
     if(!files.length){ msg.textContent='엑셀 파일을 고르세요.'; return; }
-    $('upgo').disabled=true; var totalIns=0,totalUpd=0,fail=[];
+    $('upgo').disabled=true; var totalIns=0,totalUpd=0,totalDup=0,dupList=[],fail=[];
     for(var fi=0;fi<files.length;fi++){
       var f=files[fi];
       try{
@@ -687,13 +763,59 @@ const LT_JS = `
           msg.textContent='올리는 중… '+f.name+' '+Math.min(k+500,rows.length)+'/'+rows.length+'행';
           var r=await fetch('/admin/listings/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({site:site,file:f.name,rows:rows.slice(k,k+500)})}).then(function(x){return x.json()});
           if(!r.success){ fail.push(f.name+' ('+(r.message||'오류')+')'); break; }
-          totalIns+=r.inserted; totalUpd+=r.updated;
+          totalIns+=r.inserted; totalUpd+=r.updated; totalDup+=(r.dup||0); (r.dupList||[]).forEach(function(d){ if(dupList.length<20) dupList.push(d); });
         }
       }catch(e){ fail.push(f.name+' ('+e.message+')'); }
     }
-    msg.textContent='완료: 추가 '+totalIns+'건 · 갱신 '+totalUpd+'건'+(fail.length?' · 실패: '+fail.join(', '):'')+' — 잠시 후 목록을 새로 불러옵니다.';
+    msg.textContent='완료: 추가 '+totalIns+'건 · 갱신 '+totalUpd+'건'+(totalDup?' · 중복으로 건너뜀 '+totalDup+'건':'')+(fail.length?' · 실패: '+fail.join(', '):'')+' — 잠시 후 목록을 새로 불러옵니다.';
     $('upgo').disabled=false;
+    if(totalDup){ alert('중복 '+totalDup+'건은 넣지 않았습니다 — 같은 지번·호수에 같은 연락처가 이미 2건 있는 줄입니다.'+String.fromCharCode(10)+dupList.join(String.fromCharCode(10))); }
     if(totalIns||totalUpd) setTimeout(function(){ location.href='/admin/listings'; },1500);
+  };
+  // ── 엑셀에 임대인 연락처 채우기: ExcelJS 로 서식·링크 그대로 두고 링크 열 옆에 열 하나만 끼운다
+  var ADDR_COLS=['세부주소','지번주소','전체주소','주소_호실','지번·호수','지번','주소','소재지'], HO_COLS=['호수','호실','호'], LINK_COLS=['매물번호','매물_URL','URL','링크','url'];
+  function hdrIdx(hdr, names){ for(var i=0;i<names.length;i++){ var j=hdr.findIndex(function(h){return String(h||'').trim()===names[i]}); if(j>=0) return j; } return -1; }
+  async function matchItems(items){ var out=[]; for(var i=0;i<items.length;i+=500){ var r=await fetch('/admin/listings/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:items.slice(i,i+500)})}).then(function(x){return x.json()}); out=out.concat(r.items||[]); } return out; }
+  async function fillWorkbook(file){
+    var wb=new ExcelJS.Workbook(); await wb.xlsx.load(await file.arrayBuffer());
+    var total=0, hit=0;
+    for(var si=0; si<wb.worksheets.length; si++){
+      var ws=wb.worksheets[si]; var rowsV=[]; ws.eachRow({includeEmpty:true},function(row,n){ rowsV[n]=row.values.slice(1).map(function(v){ return v&&typeof v==='object'?(v.text||v.result||v.hyperlink||(v.richText?v.richText.map(function(x){return x.text}).join(''):'')):v; }); });
+      var hdrN=-1; for(var n=1;n<rowsV.length&&n<=15;n++){ if(isHeader(rowsV[n]||[])){ hdrN=n; break; } }
+      if(hdrN<0) continue;
+      var hdr=(rowsV[hdrN]||[]).map(function(h){return String(h==null?'':h).trim()});
+      var li=hdrIdx(hdr,LINK_COLS); if(li<0){ li=hdr.findIndex(function(h,j){ return rowsV.slice(hdrN+1,hdrN+6).some(function(r){ return /^https?:\\/\\//.test(String((r||[])[j]||'')); }); }); }
+      var ai=hdrIdx(hdr,ADDR_COLS), hi=hdrIdx(hdr,HO_COLS);
+      if(ai<0){ continue; }
+      var insertAt=(li>=0?li:ai)+2;   // ExcelJS 는 1부터, '옆 칸' 이므로 +2
+      var items=[], rowNos=[];
+      for(var n=hdrN+1;n<rowsV.length;n++){ var r=rowsV[n]||[]; if(isHeader(r)){ continue; } var addr=String(r[ai]==null?'':r[ai]).trim(); if(!addr) { items.push({addr:'',ho:''}); rowNos.push(n); continue; } items.push({addr:addr, ho:hi>=0?String(r[hi]==null?'':r[hi]).trim():''}); rowNos.push(n); }
+      var res=await matchItems(items);
+      var colVals=[]; for(var n=0;n<rowsV.length;n++) colVals[n]='';
+      colVals[hdrN]='임대인 연락처(DB)';
+      rowNos.forEach(function(n,k){ var p=(res[k]||{}).phone||''; colVals[n]=p; total++; if(p) hit++; });
+      ws.spliceColumns(insertAt, 0, colVals.slice(1));
+      var col=ws.getColumn(insertAt); col.width=18; ws.getRow(hdrN).getCell(insertAt).font={bold:true};
+    }
+    var buf=await wb.xlsx.writeBuffer(); var name=file.name.replace(/\\.xlsx?$/i,'')+'_연락처.xlsx';
+    var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},3000);
+    return {total:total, hit:hit, name:name};
+  }
+  async function fillFiles(files){
+    if(!files||!files.length) return; var msg=$('fillmsg'); $('fillgo').disabled=true; var lines=[];
+    for(var i=0;i<files.length;i++){ var f=files[i]; msg.textContent='채우는 중… '+f.name; try{ var r=await fillWorkbook(f); lines.push(r.name+': '+r.total+'줄 중 연락처 '+r.hit+'건 채움'); }catch(e){ lines.push(f.name+': 실패 ('+e.message+')'); } }
+    msg.textContent='완료 — '+lines.join(' · ')+' (내려받기 폴더 확인)'; $('fillgo').disabled=false;
+  }
+  $('fillgo').onclick=function(){ fillFiles($('fillfile').files); };
+  $('fillfile').onchange=function(){ if($('fillfile').files.length) fillFiles($('fillfile').files); };
+  var fb=$('fillbox'); ['dragenter','dragover'].forEach(function(ev){ fb.addEventListener(ev,function(e){ e.preventDefault(); fb.classList.add('drag'); }); }); ['dragleave','drop'].forEach(function(ev){ fb.addEventListener(ev,function(e){ e.preventDefault(); fb.classList.remove('drag'); }); });
+  fb.addEventListener('drop',function(e){ var fs=[].filter.call(e.dataTransfer.files,function(f){return /\\.xlsx?$|\\.xlsm$/i.test(f.name)}); if(fs.length) fillFiles(fs); else $('fillmsg').textContent='xlsx 파일만 됩니다'; });
+  $('filltxt').onclick=async function(){
+    var lines=$('filltext').value.split(/\\n/).map(function(x){return x.trim()}).filter(Boolean); if(!lines.length){ $('fillmsg').textContent='지번을 적어주세요'; return; }
+    var res=await matchItems(lines.map(function(l){return {addr:l,ho:''}}));
+    var h='<table><tr><th>적은 지번</th><th>찾은 단위</th><th>임대인 연락처(DB)</th></tr>'; var hit=0;
+    lines.forEach(function(l,i){ var r=res[i]||{}; if(r.phone) hit++; h+='<tr><td>'+esc(l)+'</td><td>'+esc(r.lot||'')+(r.ho?' '+esc(r.ho)+'호':'')+'</td><td><b>'+esc(r.phone||'')+'</b></td></tr>'; });
+    $('fillout').innerHTML=h+'</table>'; $('fillmsg').textContent=lines.length+'줄 중 '+hit+'건 찾음';
   };
   // 지번 조회: 치는 대로(0.3초 뒤) 찾기, Enter·[찾기]도 됨. 결과 표의 연락처·메모·지번 칸도 클릭 수정.
   var esc=function(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')};

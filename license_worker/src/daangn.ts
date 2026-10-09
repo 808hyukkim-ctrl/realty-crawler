@@ -12,6 +12,7 @@ import DAANGN_HTML from "./daangn.html";
 import { layout } from "./layout";
 import { verifyPassword } from "./auth";
 import { collectPhotos, proxyImage } from "./photos";
+import { matchUnits } from "./listings";
 import { staffLookup } from "./staffdb";
 
 type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string; ENGINE_URL: string; ENGINE_SECRET: string };
@@ -135,6 +136,15 @@ async function apiHandler(c: any) {
     return json(c, { items });
   }
 
+  // ---- 엑셀 연락처 채우기 (기능 db): [{addr, ho}] → 같은 지번·호수의 임대인 연락처
+  if (action === "fill-match") {
+    if (!me.features.includes("db")) return json(c, { error: "이 계정에는 'DB 조회' 권한이 없습니다. 관리자에게 요청하세요." }, 403);
+    const body = await c.req.json().catch(() => ({}));
+    const items = await matchUnits(db, Array.isArray(body.items) ? body.items : []);
+    const hit = items.filter((x: any) => x.phone).length;
+    await addLog(db, me.username, "db", "연락처 채우기", `${str(body.file || "글")} · ${items.length}줄 중 ${hit}건`, hit);
+    return json(c, { items });
+  }
   // ---- 지번 조회 (기능 db) — /db 와 같은 규칙
   if (action === "db-lookup") {
     if (!me.features.includes("db")) return json(c, { error: "이 계정에는 'DB 조회' 권한이 없습니다. 관리자에게 요청하세요." }, 403);
