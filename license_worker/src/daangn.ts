@@ -234,7 +234,10 @@ async function apiHandler(c: any) {
 daangn.get("/admin/daangn", async (c) => {
   await ensure(c.env.DB);
   const { results: users } = await c.env.DB.prepare("SELECT u.username, u.features, u.is_active, u.expires_at, s.phone, s.name, s.broker, s.connected_at, (SELECT COUNT(*) FROM daangn_uploads d WHERE d.username = u.username AND d.status = 'ok') ok_n, (SELECT COUNT(*) FROM daangn_uploads d WHERE d.username = u.username AND d.status != 'ok') fail_n, (SELECT MAX(created_at) FROM daangn_uploads d WHERE d.username = u.username) last_at FROM users u LEFT JOIN daangn_sessions s ON s.username = u.username ORDER BY u.username").all();
-  const { results: recent } = await c.env.DB.prepare("SELECT username, created_at, addr, ho, deal, price, status, article_no, url, reason, closed FROM daangn_uploads ORDER BY id DESC LIMIT 100").all();
+  const pickUser = String(c.req.query("user") ?? "").trim();
+  const { results: recent } = pickUser
+    ? await c.env.DB.prepare("SELECT username, created_at, addr, ho, deal, price, phone, source, status, article_no, url, reason, closed, closed_at FROM daangn_uploads WHERE username = ? ORDER BY id DESC LIMIT 300").bind(pickUser).all()
+    : await c.env.DB.prepare("SELECT username, created_at, addr, ho, deal, price, phone, source, status, article_no, url, reason, closed, closed_at FROM daangn_uploads ORDER BY id DESC LIMIT 100").all();
   const dt = (s: unknown) => (s ? new Date(String(s)).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }) : "");
   let engineOk = "확인 안 됨";
   try { const r = await engine(c, "/health", { method: "GET" }); const j: any = await r.json(); engineOk = r.ok ? `정상 (QR 세션 ${j.sessions ?? 0}개, 키 vworld:${j.keys?.vworld ? "O" : "X"} juso:${j.keys?.juso ? "O" : "X"} hub:${j.keys?.hub ? "O" : "X"})` : `응답 ${r.status}`; } catch (e) { engineOk = "연결 실패: " + (e instanceof Error ? e.message : String(e)); }
@@ -250,11 +253,12 @@ daangn.get("/admin/daangn", async (c) => {
       <td class="small">${[u.name, u.phone, u.broker].filter(Boolean).join(" · ")}</td>
       <td>${u.ok_n}</td><td>${u.fail_n}</td><td class="small muted">${dt(u.last_at)}</td></tr>`)}
     </tbody></table>
-    <h2>최근 등록 100건</h2>
-    <table><thead><tr><th>일시</th><th>아이디</th><th>주소 · 호수</th><th>거래</th><th>금액</th><th>결과</th><th>당근 매물번호</th></tr></thead><tbody>
+    <h2>${pickUser ? html`<b>${pickUser}</b> 의 업로드 내역 (최근 300건)` : "최근 등록 100건 (전체)"}</h2>
+    <form method="get" action="/admin/daangn" class="search-form" style="margin:0 0 10px"><select name="user" onchange="this.form.submit()"><option value="">전체 직원</option>${(users ?? []).map((u: any) => html`<option value="${u.username}" ${u.username === pickUser ? "selected" : ""}>${u.username}${u.ok_n ? ` (${u.ok_n}건)` : ""}</option>`)}</select> <span class="small muted">직원을 고르면 그 사람이 어디에(당근 매물번호·링크) 무엇을 올렸는지만 보입니다. 직원 본인은 포털 '업로드 기록' 탭에서 자기 것만 봅니다.</span></form>
+    <table><thead><tr><th>일시</th><th>아이디</th><th>주소 · 호수</th><th>거래</th><th>금액</th><th>임대인 연락처</th><th>원본 링크</th><th>결과</th><th>당근 매물번호</th><th>나감</th></tr></thead><tbody>
     ${(recent ?? []).map((r: any) => html`<tr style="${r.closed ? "opacity:.5" : ""}">
-      <td class="small">${dt(r.created_at)}</td><td>${r.username}</td><td>${r.addr} ${r.ho ?? ""}</td><td>${r.deal ?? ""}</td><td>${r.price ?? ""}</td>
+      <td class="small">${dt(r.created_at)}</td><td><a href="/admin/daangn?user=${r.username}">${r.username}</a></td><td>${r.addr} ${r.ho ?? ""}</td><td>${r.deal ?? ""}</td><td>${r.price ?? ""}</td><td class="small">${r.phone ?? ""}</td><td class="small">${r.source ? html`<a href="${r.source}" target="_blank" rel="noopener">원본</a>` : ""}</td>
       <td>${r.status === "ok" ? "성공" : r.status === "dup" ? html`<span class="muted" title="${r.reason ?? ""}">중복</span>` : html`<span style="color:#b42318" title="${r.reason ?? ""}">실패</span>`}</td>
-      <td>${r.article_no ? html`<a href="${r.url}" target="_blank" rel="noopener">${r.article_no}</a>` : ""}</td></tr>`)}
+      <td>${r.article_no ? html`<a href="${r.url}" target="_blank" rel="noopener">${r.article_no}</a>` : ""}</td><td class="small muted">${r.closed ? dt(r.closed_at) : ""}</td></tr>`)}
     </tbody></table>`));
 });

@@ -133,6 +133,15 @@ function parseJibunQuery(q: string) {
   const guM = t.match(/([가-힣]+구|[가-힣]+군|[가-힣]+시)\s/);
   return { dong, lot, gu: guM ? guM[1] : "", text: t };
 }
+// 건축물대장(+주변 정보): 한국 엔진 /building 을 그대로 중계 — 라운지 서버와 무관 (2026-10-09)
+naverad.get("/admin/naverad/building", async (c) => {
+  const address = s(c.req.query("address")); if (!address) return c.json({ error: "address 필요" }, 400);
+  const p = new URLSearchParams({ address, nearby: "1" }); for (const k of ["dong", "ho"]) if (s(c.req.query(k))) p.set(k, s(c.req.query(k)));
+  const r = await engineFetch(c, "/building?" + p.toString());
+  if (!r) return c.json({ error: "엔진(ENGINE_URL) 연결이 안 됩니다." }, 503);
+  const j: any = await r.json().catch(() => ({ error: "엔진 응답이 JSON 이 아닙니다" }));
+  return c.json(j, r.status as any);
+});
 naverad.post("/admin/naverad/search", async (c) => {
   await ensureListings(c.env.DB);
   const body: any = await c.req.json().catch(() => ({}));
@@ -218,7 +227,7 @@ function PAGE() {
     <div class="small muted" id="na_fmsg">우리 DB 에 쌓인 줄은 바로, 네이버는 그 지번 자리(60m 안)의 매물을 모아 지번을 확인합니다 (5~15초). 줄을 누르면 오른쪽에 바로 정리됩니다.</div>
     <div class="na-split">
       <div id="na_fout" class="na-out"></div>
-      <div id="na_pick" class="na-pick"><div class="small muted" style="padding:14px">← 결과 줄을 누르면 그 매물의 광고 정보가 여기에 정리됩니다 (위 정리 목록에도 추가)</div></div>
+      <div class="na-pick"><div id="na_pick"><div class="small muted" style="padding:14px">← 결과 줄을 누르면 그 매물의 광고 정보가 여기에 정리됩니다 (위 링크 자동 정리와는 별개)</div></div><div id="na_bldg" class="na-bldg"></div></div>
     </div>
   </section>
 </div>
@@ -235,7 +244,19 @@ const NA_STYLE = `
 .panel.pink h2{color:#c2366f}
 .nlogo{display:inline-block;background:#03c75a;color:#fff;font-weight:900;border-radius:5px;padding:0 6px;margin-right:4px;font-size:14px;line-height:22px;vertical-align:middle}
 .na-split{display:grid;grid-template-columns:minmax(0,3fr) minmax(300px,2fr);gap:14px;align-items:start}
-.na-pick{position:sticky;top:12px}
+.na-pick{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+.na-bldg{margin-top:12px}
+.bsec{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+.bsec h4{margin:0 0 6px;font-size:13.5px;color:var(--accent-dark)}
+.brow{display:flex;gap:10px;font-size:12.5px;padding:3px 0;border-bottom:1px dashed #f3dbe5}
+.brow span{color:var(--muted);min-width:84px}
+.brow b{font-weight:600}
+.bsec table{width:100%;border-collapse:collapse;font-size:12px}
+.bsec th,.bsec td{padding:4px 6px;border-bottom:1px solid #f6e6ec;text-align:left}
+.bsec th{color:var(--muted);font-weight:600}
+.bsec td.r,.bsec th.r{text-align:right}
+.bsec tr.hit td{background:#fff0f6;font-weight:700}
+.bnote{font-size:11.5px;color:var(--muted)}
 .na-table tr.pick{cursor:pointer}
 .na-table tr.pick:hover td{background:#fff0f6}
 .na-table tr.pick.on td{background:#ffe3ee}
@@ -331,10 +352,47 @@ const NA_JS = `
     try{
       var r=await fetch('/admin/naverad/parse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({urls:[url]})}).then(function(x){return x.json()});
       var it=(r.items||[])[0]; if(!it){ $('na_pick').innerHTML='<div class="na-card err">응답이 비었습니다</div>'; return; }
-      $('na_pick').innerHTML=cardHtml(it,'선택한 매물');
-      var b=$('na_pick').querySelector('[data-pcopy]'); if(b) b.onclick=function(){ navigator.clipboard.writeText(adText(it)).then(function(){ $('na_fmsg').textContent='광고문구를 복사했습니다'; }); };
-      if(it.ok && !ITEMS.some(function(x){return x.ok&&x.no===it.no})){ ITEMS.push(it); paint(); $('na_msg').textContent='지번 찾기에서 '+(it.row['세부주소']||it.no)+' 추가 — 위 목록에서 DB 저장·엑셀·광고문구 가능'; }
+      $('na_pick').innerHTML=cardHtml(it,'선택한 매물')+(it.ok?'<div class="na-bar" style="margin:6px 0 0"><button class="btn btn-primary" data-psave="1">이 매물 DB에 저장</button><button class="btn" data-pup="1">위 정리 목록에도 넣기</button><span class="small muted" id="na_pmsg"></span></div>':'');
+      var b=$('na_pick').querySelector('[data-pcopy]'); if(b) b.onclick=function(){ navigator.clipboard.writeText(adText(it)).then(function(){ $('na_pmsg').textContent='광고문구를 복사했습니다'; }); };
+      var sv=$('na_pick').querySelector('[data-psave]'); if(sv) sv.onclick=async function(){ sv.disabled=true; try{ var rr=await fetch('/admin/naverad/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows:[it.row]})}).then(function(x){return x.json()}); $('na_pmsg').textContent=rr.success?('DB 저장: 추가 '+rr.inserted+'건 · 갱신 '+rr.updated+'건'):('저장 실패: '+(rr.message||'')); }catch(e){ $('na_pmsg').textContent='저장 실패: '+e.message; } sv.disabled=false; };
+      var up=$('na_pick').querySelector('[data-pup]'); if(up) up.onclick=function(){ if(!ITEMS.some(function(x){return x.ok&&x.no===it.no})){ ITEMS.push(it); paint(); } $('na_pmsg').textContent='위 링크 자동 정리 목록에 넣었습니다'; };
+      var hoM=String(it.ok&&it.row['세부주소']||'').match(/(\d{1,4}[A-Za-z]?)호\s*$/); if(hoM&&BL.addr) loadBldg(BL.addr, hoM[1]);
     }catch(e){ $('na_pick').innerHTML='<div class="na-card err">'+esc(e.message)+'</div>'; }
+  }
+  // ── 건축물대장 패널 (엔진 /building: 요약 · 호실 · 층별 현황 · 주변 정보)
+  var BL={addr:'',key:''};
+  var bNum=function(v){ var x=Number(v); return isFinite(x)&&x>0?x:0 };
+  var fmtA=function(a){ return bNum(a)?bNum(a).toFixed(2)+'㎡ <span class="bnote">'+(bNum(a)/3.3058).toFixed(1)+'평</span>':'-' };
+  async function loadBldg(addr, ho){
+    var box=$('na_bldg'); if(!box||!addr) return; var key=addr+'|'+(ho||''); if(key===BL.key) return; BL.key=key; BL.addr=addr;
+    box.innerHTML='<div class="bsec"><h4>🏢 건축물대장</h4><div class="bnote">⏳ '+esc(addr)+(ho?' '+esc(ho)+'호':'')+' 대장·주변 정보를 읽는 중…</div></div>';
+    var j; try{ j=await fetch('/admin/naverad/building?address='+encodeURIComponent(addr)+(ho?'&ho='+encodeURIComponent(ho):'')).then(function(x){return x.json()}); }catch(e){ box.innerHTML='<div class="bsec"><h4>🏢 건축물대장</h4><div class="bnote" style="color:var(--danger)">못 읽었습니다: '+esc(e.message)+'</div></div>'; return; }
+    if(key!==BL.key) return;
+    if(j.error){ box.innerHTML='<div class="bsec"><h4>🏢 건축물대장</h4><div class="bnote" style="color:var(--danger)">'+esc(j.error)+'</div></div>'; return; }
+    var S0=j.summary||{}, floors=j.floors||[], near=j.nearby||[], units=j.unit==null?[]:(Array.isArray(j.unit)?j.unit:[j.unit]), list=j.units||[];
+    var height=0; (S0.dongs||[]).forEach(function(d){ height=Math.max(height,bNum(d.height)); });
+    var row=function(k,v){ return v?'<div class="brow"><span>'+k+'</span><b>'+v+'</b></div>':'' };
+    var h='<div class="bsec"><h4>🏢 건축물대장 요약 <span class="bnote" style="font-weight:400">'+esc((j.address&&j.address.bdNm)||S0.bldNm||'')+(S0.kind?' · '+esc(S0.kind):'')+'</span></h4>'
+      +row('건축물용도',esc(S0.mainPurpose||''))+row('구조',esc(S0.structure||''))+row('사용승인일',esc(String(S0.useAprDay||'').replace(/^(\d{4})(\d{2})(\d{2})$/,'$1-$2-$3')))
+      +row('총 층수',(S0.grndFloors?'지상 '+S0.grndFloors+'층':'')+(S0.ugrndFloors?' / 지하 '+S0.ugrndFloors+'층':''))
+      +row('총 세대수',(S0.households?S0.households+'세대':'')+(S0.families?' · '+S0.families+'가구':''))
+      +row('주차',S0.parking?'총 '+S0.parking+'대'+(S0.households?' <span class="bnote">세대당 '+(S0.parking/S0.households).toFixed(2)+'대</span>':''):'')
+      +row('승강기',S0.elevators&&(S0.elevators.ride||S0.elevators.emergency)?'승용 '+(S0.elevators.ride||0)+'대'+(S0.elevators.emergency?' · 비상 '+S0.elevators.emergency+'대':''):'')
+      +row('높이',height?height+'m':'')+row('연면적',bNum(S0.totArea)?fmtA(S0.totArea):'')+'</div>';
+    h+='<div class="bsec"><h4>'+(ho?esc(ho)+'호 면적':'호실 면적')+'</h4>';
+    if(ho&&units.length){ h+='<table><tr><th>동</th><th>호</th><th>층</th><th>용도</th><th class="r">전용</th><th class="r">공급</th></tr>'+units.slice(0,8).map(function(u){ return '<tr class="hit"><td>'+esc(u.dongNm||'-')+'</td><td>'+esc(u.hoNm||'')+'</td><td>'+(u.floor||'')+'</td><td>'+esc(u.purpose||'')+'</td><td class="r">'+fmtA(u.exclusive)+'</td><td class="r">'+fmtA(u.supply)+'</td></tr>'; }).join('')+'</table>'; }
+    else if(ho) h+='<div class="bnote" style="color:var(--warn)">대장에 '+esc(ho)+'호 전유부가 없습니다 — '+esc(S0.kind||'일반건축물')+'(다가구·단독 등)은 호별 면적이 없고 층 면적만 있습니다.</div>';
+    else if(list.length) h+='<div class="bnote">전유 호실 '+list.length+'개'+(list.length>=60?' (60개까지만)':'')+'</div><table><tr><th>동</th><th>호</th><th>층</th><th>용도</th><th class="r">전용</th></tr>'+list.slice(0,30).map(function(u){ return '<tr><td>'+esc(u.dongNm||'-')+'</td><td>'+esc(u.hoNm||'')+'</td><td>'+(u.floor||'')+'</td><td>'+esc(u.purpose||'')+'</td><td class="r">'+fmtA(u.exclusive)+'</td></tr>'; }).join('')+'</table>';
+    else h+='<div class="bnote">전유부(호별 면적)가 없는 건물입니다. 매물을 누르면 호수가 있을 때 그 호실을 찾습니다.</div>';
+    h+='</div>';
+    h+='<div class="bsec"><h4>층별 현황</h4>';
+    var fl=floors.filter(function(f){ return !/부속/.test(f.mainAtch||'') });
+    if(!fl.length) h+='<div class="bnote">층별 현황이 없습니다.</div>';
+    else h+='<table><tr><th>구분</th><th>층</th><th>주용도</th><th class="r">면적</th></tr>'+fl.slice(0,40).map(function(f){ return '<tr><td>'+esc(f.kind||'')+'</td><td>'+esc(f.floorName||(f.floor+'층'))+'</td><td>'+esc(f.purpose||'')+'</td><td class="r">'+fmtA(f.area)+'</td></tr>'; }).join('')+'</table>'+(fl.length>40?'<div class="bnote">'+fl.length+'층 중 40개까지만</div>':'');
+    h+='</div>';
+    var nz=near.filter(function(x){ return x&&x.name });
+    h+='<div class="bsec"><h4>주변 정보</h4>'+(nz.length?nz.map(function(x){ return '<div class="brow"><span>'+esc(x.label||x.category||'')+'</span><b>'+esc(x.name)+' <span class="bnote" style="font-weight:400">'+esc(x.distanceText||'')+(x.walkMin?' · 도보 '+x.walkMin+'분':'')+'</span></b></div>'; }).join(''):'<div class="bnote">주변 정보가 없습니다 (엔진에 카카오·버스 키가 없으면 비어 있습니다).</div>')+'</div>';
+    box.innerHTML=h;
   }
   function naRow(x, kind){
     var tag = kind==='exact' ? (x.likely?'<span class="tag ok" title="주소 비공개지만 바로 그 자리(15m 안)에 찍힌 매물">위치 일치</span>':'<span class="tag ok">지번 일치</span>') : '<span class="tag q">근처 '+(x.dist==null?'?':x.dist)+'m'+(x.jibun?'':' · 지번 비공개')+'</span>';
@@ -358,6 +416,7 @@ const NA_JS = `
         else h+='<div class="small muted">지금 네이버에는 이 지번 자리의 매물이 없습니다.</div>';
       }
       $('na_fout').innerHTML=h; $('na_fmsg').textContent='완료 — 네이버 '+ex.length+'건 (부동산 '+(n.broker_count||0)+'곳)'+(nr.length?' · 근처 '+nr.length+'건':'');
+      if(n.cortar){ var lot=(q.match(/(산\s*)?(\d{1,4}(?:-\d{1,4})?)\s*$/)||[])[0]||''; BL.key=''; loadBldg((n.cortar+' '+lot).replace(/^서울시/,'서울특별시').trim(), ''); }
       document.querySelectorAll('#na_fout tr.pick').forEach(function(tr){ tr.onclick=function(){ pick(tr.dataset.url, tr); }; });
     }catch(e){ $('na_fmsg').textContent='오류: '+e.message; }
     $('na_find').disabled=false;

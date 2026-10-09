@@ -38,6 +38,11 @@ async function ensure(db: D1Database) {
   await db.prepare("CREATE INDEX IF NOT EXISTS listings_last ON listings(last_at DESC)").run();
   await db.prepare("CREATE INDEX IF NOT EXISTS listings_site_last ON listings(site, last_at DESC)").run();
   await db.prepare("CREATE INDEX IF NOT EXISTS listings_file ON listings(file)").run();
+  // 되돌리기 (2026-10-09): 지운 줄은 휴지통에 30일 보관, 작업(삭제·붙여넣기·엑셀) 기록
+  await db.prepare("CREATE TABLE IF NOT EXISTS listings_trash (id INTEGER PRIMARY KEY AUTOINCREMENT, batch TEXT NOT NULL, deleted_at TEXT NOT NULL, orig_id INTEGER, row TEXT NOT NULL)").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS listings_trash_batch ON listings_trash(batch)").run();
+  await db.prepare("CREATE TABLE IF NOT EXISTS listings_ops (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, kind TEXT NOT NULL, label TEXT, count INTEGER NOT NULL DEFAULT 0, batch TEXT, ids TEXT, undone INTEGER NOT NULL DEFAULT 0)").run();
+  try { await db.prepare("DELETE FROM listings_trash WHERE deleted_at < ?").bind(new Date(Date.now() - 30 * 86400e3).toISOString()).run(); } catch { /* */ }
   ready = true;
 }
 const nowIso = () => new Date().toISOString();
@@ -303,6 +308,11 @@ export async function ingest(db: D1Database, username: string, siteHint: string,
   for (let i = 0; i < stmts.length; i += 40) await db.batch(stmts.slice(i, i + 40));
   const after = (await db.prepare("SELECT COUNT(*) n FROM listings WHERE site = ?").bind(site).first<{ n: number }>())?.n ?? 0;
   const inserted = after - before;
+  try {   // 되돌리기용: 이번에 새로 생긴 줄(first_at 이 이번 시각)
+    const { results } = await db.prepare("SELECT id FROM listings WHERE file = ? AND first_at = ?").bind(file, at).all();
+    const ids = (results ?? []).map((r: any) => r.id);
+    await db.prepare("INSERT INTO listings_ops (at, kind, label, count, batch, ids) VALUES (?, 'ingest', ?, ?, ?, ?)").bind(at, `${file} (${site})`, stmts.length, "i" + Date.now().toString(36), JSON.stringify(ids)).run();
+  } catch { /* 기록 실패는 무시 */ }
   return { site, inserted, updated: stmts.length - inserted, total: after };
 }
 
@@ -320,9 +330,64 @@ listings.post("/admin/listings/:id/edit", async (c) => {
   await c.env.DB.prepare(`UPDATE listings SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, id).run();
   return c.json({ success: true });
 });
+/** where 조건에 맞는 줄을 휴지통에 복사한 뒤 지우고, 작업 기록을 남긴다 → batch */
+async function trashDelete(db: D1Database, where: string, binds: any[], label: string): Promise<{ batch: string; n: number }> {
+  const batch = "d" + Date.now().toString(36);
+  const at = nowIso();
+  const { results } = await db.prepare("SELECT * FROM listings" + where).bind(...binds).all();
+  const rows = (results ?? []) as any[];
+  for (let i = 0; i < rows.length; i += 40) {
+    await db.batch(rows.slice(i, i + 40).map((r) => db.prepare("INSERT INTO listings_trash (batch, deleted_at, orig_id, row) VALUES (?, ?, ?, ?)").bind(batch, at, r.id, JSON.stringify(r))));
+  }
+  if (rows.length) await db.prepare("DELETE FROM listings" + where).bind(...binds).run();
+  await db.prepare("INSERT INTO listings_ops (at, kind, label, count, batch) VALUES (?, 'delete', ?, ?, ?)").bind(at, label.slice(0, 120), rows.length, batch).run();
+  return { batch, n: rows.length };
+}
+const LCOLS = ["site", "listing_no", "url", "username", "file", "addr", "kind", "deal", "price", "title", "data", "first_at", "last_at", "seen", "phone", "memo", "contacts"];
+/** 휴지통 batch 복원 — 같은 (구분, 번호, 거래) 줄이 그새 다시 생겼으면 그 줄은 건너뛴다 */
+async function restoreBatch(db: D1Database, batch: string): Promise<number> {
+  const { results } = await db.prepare("SELECT orig_id, row FROM listings_trash WHERE batch = ?").bind(batch).all();
+  let n = 0;
+  for (const t of (results ?? []) as any[]) {
+    let r: any; try { r = JSON.parse(t.row); } catch { continue; }
+    const cols = ["id", ...LCOLS];
+    const res = await db.prepare(`INSERT OR IGNORE INTO listings (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`).bind(t.orig_id, ...LCOLS.map((k) => r[k] ?? (k === "seen" ? 1 : k === "phone" || k === "memo" || k === "contacts" ? "" : null))).run();
+    if (res.meta?.changes) n++;
+  }
+  await db.prepare("DELETE FROM listings_trash WHERE batch = ?").bind(batch).run();
+  await db.prepare("UPDATE listings_ops SET undone = 1 WHERE batch = ?").bind(batch).run();
+  await db.prepare("INSERT INTO listings_ops (at, kind, label, count, batch) VALUES (?, 'restore', ?, ?, ?)").bind(nowIso(), "삭제 되돌림", n, batch).run();
+  return n;
+}
+// 체크한 줄 삭제 {ids}
+listings.post("/admin/listings/delete-ids", async (c) => {
+  await ensure(c.env.DB);
+  const body: any = await c.req.json().catch(() => ({}));
+  const ids: number[] = Array.isArray(body.ids) ? body.ids.map((x: any) => parseInt(x, 10)).filter((x: number) => x > 0).slice(0, 500) : [];
+  if (!ids.length) return c.json({ success: false, message: "선택한 줄이 없습니다." }, 400);
+  const r = await trashDelete(c.env.DB, ` WHERE id IN (${ids.map(() => "?").join(",")})`, ids, `선택 삭제 ${ids.length}줄`);
+  return c.json({ success: true, deleted: r.n, batch: r.batch });
+});
+// 되돌리기 {batch} — 삭제는 복원, 붙여넣기·엑셀은 그때 새로 들어온 줄을 지움(갱신된 줄은 그대로)
+listings.post("/admin/listings/undo", async (c) => {
+  await ensure(c.env.DB);
+  const body: any = await c.req.json().catch(() => ({}));
+  const op: any = await c.env.DB.prepare("SELECT * FROM listings_ops WHERE batch = ? AND undone = 0 AND kind IN ('delete','ingest') ORDER BY id DESC LIMIT 1").bind(s(body.batch)).first();
+  if (!op) return c.json({ success: false, message: "되돌릴 작업이 없거나 이미 되돌렸습니다." }, 404);
+  if (op.kind === "delete") { const n = await restoreBatch(c.env.DB, op.batch); return c.json({ success: true, kind: "delete", restored: n }); }
+  if (op.kind === "ingest") {
+    let ids: number[] = []; try { ids = JSON.parse(op.ids || "[]"); } catch { /* */ }
+    if (!ids.length) return c.json({ success: false, message: "그 작업으로 새로 들어온 줄이 없어 지울 게 없습니다 (갱신만 된 줄은 되돌리지 않습니다)." });
+    const r = await trashDelete(c.env.DB, ` WHERE id IN (${ids.map(() => "?").join(",")})`, ids, `되돌림: ${op.label}`);
+    await c.env.DB.prepare("UPDATE listings_ops SET undone = 1 WHERE id = ?").bind(op.id).run();
+    return c.json({ success: true, kind: "ingest", deleted: r.n, batch: r.batch });
+  }
+  return c.json({ success: false, message: "되돌릴 수 없는 종류입니다." });
+});
+
 listings.post("/admin/listings/:id/delete", async (c) => {
   await ensure(c.env.DB);
-  await c.env.DB.prepare("DELETE FROM listings WHERE id = ?").bind(parseInt(c.req.param("id"), 10)).run();
+  await trashDelete(c.env.DB, " WHERE id = ?", [parseInt(c.req.param("id"), 10)], "한 줄 삭제");
   const back = c.req.header("referer") || "/admin/listings";
   return c.redirect(back.includes("/admin/listings") ? back : "/admin/listings");
 });
@@ -370,14 +435,16 @@ listings.get("/admin/listings", async (c) => {
   const bySite = (await c.env.DB.prepare("SELECT site, COUNT(*) n FROM listings GROUP BY site ORDER BY n DESC").all()).results ?? [];
   const recent = (await c.env.DB.prepare("SELECT file, site, username, COUNT(*) n, MAX(last_at) t FROM listings GROUP BY file, site, username ORDER BY t DESC LIMIT 8").all()).results ?? [];
   const users = (await c.env.DB.prepare("SELECT DISTINCT username FROM listings ORDER BY username").all()).results ?? [];
+  const ops = (await c.env.DB.prepare("SELECT at, kind, label, count, batch, undone FROM listings_ops WHERE kind IN ('delete','ingest','restore') ORDER BY id DESC LIMIT 6").all()).results ?? [];
   const siteKeys = Array.from(new Set([...bySite.map((r: any) => String(r.site)), ...(f.site ? [f.site] : [])]));
   const pages = Math.max(1, Math.ceil(total / PER));
-  const notice = c.req.query("deleted") != null ? `삭제했습니다: ${c.req.query("deleted")}건` : c.req.query("added") != null ? (c.req.query("added") === "1" ? "한 줄 추가했습니다." : "이미 있는 줄이라 갱신했습니다.") : c.req.query("err") || "";
+  const notice = c.req.query("restored") != null ? `되돌렸습니다: 복원 ${c.req.query("restored")}건${Number(c.req.query("undeleted")) ? ` · 지움 ${c.req.query("undeleted")}건` : ""}` : c.req.query("deleted") != null ? `삭제했습니다: ${c.req.query("deleted")}건 (위 "최근 작업"에서 되돌릴 수 있습니다)` : c.req.query("added") != null ? (c.req.query("added") === "1" ? "한 줄 추가했습니다." : "이미 있는 줄이라 갱신했습니다.") : c.req.query("err") || "";
 
   const rows = (results ?? []).map((r: any) => {
     let data: Record<string, string> = {}; try { data = JSON.parse(r.data); } catch {}
     const detail = Object.entries(data).filter(([, v]) => s(v)).map(([k, v]) => html`<div class="kv"><b>${k}</b><span>${v}</span></div>`);
     return html`<tr data-id="${r.id}">
+      <td class="ck"><input type="checkbox" class="rowck" value="${r.id}"></td>
       <td class="addr ed" data-f="addr" title="클릭해서 고치기">${r.addr ?? ""}</td>
       <td class="phone ed" data-f="phone" title="클릭해서 고치기">${r.phone ?? ""}</td>
       <td class="small contacts ed" data-f="contacts" title="임차인·세입자·관리·중개 등 (클릭해서 고치기)">${r.contacts ?? ""}</td>
@@ -387,7 +454,7 @@ listings.get("/admin/listings", async (c) => {
       <td class="small ttl">${r.title ?? ""}</td>
       <td class="small memo ed" data-f="memo" title="클릭해서 고치기">${r.memo ?? ""}</td>
       <td class="mono small" title="처음 ${kst(r.first_at)} · ${r.seen}회 · ${siteLabel(r.site)} · ${r.username} · ${r.file ?? ""}">${kst(r.last_at)}${r.seen > 1 ? html` <span class="seen">×${r.seen}</span>` : ""}</td>
-      <td class="small muted src" title="${r.username} 계정이 올림"><a href="/admin/listings?${raw(qs({ site: "", q: "", from: "", to: "", user: "", file: r.file ?? "" }))}" title="이 파일에서 온 줄만 보기">${r.file ?? ""}</a><div>${siteLabel(r.site)}</div></td>
+      <td class="small muted src"><a href="/admin/listings?${raw(qs({ site: "", q: "", from: "", to: "", user: "", file: r.file ?? "" }))}" title="${r.file ?? ""} · ${siteLabel(r.site)} · ${r.username} — 이 파일에서 온 줄만 보기">${(r.file ?? "").length > 18 ? (r.file ?? "").slice(0, 17) + "…" : (r.file ?? "")}</a></td>
       <td class="nowrap"><details class="det"><summary>상세</summary><div class="detbox">${r.url ? html`<div class="kv"><b>링크</b><span><a href="${r.url}" target="_blank" rel="noopener">${r.url}</a></span></div>` : ""}${detail}</div></details>
         <form method="post" action="/admin/listings/${r.id}/delete" class="inline-form" onsubmit="return confirm('이 줄을 삭제할까요?')"><button type="submit" class="x" title="삭제">✕</button></form></td>
     </tr>`;
@@ -402,6 +469,7 @@ listings.get("/admin/listings", async (c) => {
       <span class="small muted">전체 ${bySite.reduce((a: number, r: any) => a + r.n, 0)}건 (${bySite.map((r: any) => `${siteLabel(r.site)} ${r.n}`).join(" · ") || "없음"})</span>
     </div>
     ${notice ? html`<div class="notice">${notice}</div>` : ""}
+    ${ops.length ? html`<div class="opsbar"><b>최근 작업</b> ${ops.map((o: any) => html`<span class="chip ${o.undone ? "done" : ""}">${o.kind === "delete" ? "삭제" : o.kind === "ingest" ? "넣기" : "복원"} ${o.count}건 · ${o.label ?? ""} <em>${kst(o.at)}</em>${o.undone ? html` <i>되돌림</i>` : (o.kind === "delete" || o.kind === "ingest") ? html` <button type="button" class="undo" data-batch="${o.batch}" title="${o.kind === "delete" ? "지운 줄을 다시 살립니다" : "그때 새로 들어온 줄을 지웁니다 (갱신된 줄은 그대로)"}">${o.kind === "delete" ? "되돌리기" : "넣은 줄 지우기"}</button>` : ""}</span>`)}</div>` : ""}
     <div class="lookup">
       <div class="lkrow"><b>지번 조회</b>
         <input type="text" id="lkq" placeholder="지번만 치세요 — 예: 논현동 124-12 (호수·전화번호도 됨)" value="${c.req.query("jibun") ?? ""}" autofocus autocomplete="off">
@@ -447,13 +515,14 @@ listings.get("/admin/listings", async (c) => {
       <button type="submit" class="btn">검색</button>
       <a class="btn" href="/admin/listings">초기화</a>
       <button type="button" class="btn btn-primary" id="xl" ${total ? "" : "disabled"}>엑셀 다운로드 (${total}건)</button>
+      <button type="button" class="btn btn-danger" id="delsel" disabled>선택 삭제 (0)</button>
       <button type="button" class="btn btn-danger" id="del" ${total ? "" : "disabled"}>조건 삭제</button>
     </form>
     <div id="xlmsg" class="small muted" style="margin:-8px 0 12px"></div>
     ${recent.length ? html`<div class="recent"><b>최근 올린 파일</b> ${recent.map((r: any) => html`<a class="chip" href="/admin/listings?${raw(qs({ site: "", q: "", from: "", to: "", user: "", file: r.file }))}" title="${r.username} · ${kst(r.t)}">${siteLabel(r.site)} · ${r.file} <em>${r.n}</em></a>`)}</div>` : ""}
     <table class="user-table lt">
-      <thead><tr><th>지번·호수</th><th>임대인 연락처</th><th>임차인·관리 등</th><th>종류</th><th>거래</th><th>금액</th><th>이름·제목</th><th>메모</th><th>올린 날</th><th>출처 파일</th><th></th></tr></thead>
-      <tbody>${rows.length ? rows : html`<tr><td colspan="11" class="empty">${total ? "이 페이지에는 없습니다." : "아직 비어 있습니다. 위에서 수기로 넣거나 엑셀을 올리면 쌓입니다."}</td></tr>`}</tbody>
+      <thead><tr><th class="ck"><input type="checkbox" id="ckall" title="이 페이지 전부 선택"></th><th>지번·호수</th><th>임대인 연락처</th><th>임차인·관리 등</th><th>종류</th><th>거래</th><th>금액</th><th>이름·제목</th><th>메모</th><th>올린 날</th><th>출처 파일</th><th></th></tr></thead>
+      <tbody>${rows.length ? rows : html`<tr><td colspan="12" class="empty">${total ? "이 페이지에는 없습니다." : "아직 비어 있습니다. 위에서 수기로 넣거나 엑셀을 올리면 쌓입니다."}</td></tr>`}</tbody>
     </table>
     <div class="pager">${page > 1 ? pageLink(page - 1, "‹ 이전") : ""}<span class="small">${page} / ${pages} 페이지 · ${total}건</span>${page < pages ? pageLink(page + 1, "다음 ›") : ""}</div>
     <form method="post" action="/admin/listings/delete" id="delf" style="display:none">
@@ -504,8 +573,8 @@ listings.post("/admin/listings/delete", async (c) => {
   const g = (k: string) => String(form.get(k) ?? "").trim();
   const f: Filter = { site: g("site"), q: g("q"), from: g("from"), to: g("to"), user: g("user"), file: g("file") };
   const [where, binds] = whereOf(f);
-  const r = await c.env.DB.prepare("DELETE FROM listings" + where).bind(...binds).run();
-  return c.redirect("/admin/listings?" + qs({ site: f.site, q: "", from: "", to: "", user: "", file: "" }) + "&deleted=" + (r.meta?.changes ?? 0));
+  const r = await trashDelete(c.env.DB, where, binds, "조건 삭제" + (f.file ? " (파일 " + f.file + ")" : f.q ? " (검색 " + f.q + ")" : f.site ? " (구분 " + f.site + ")" : ""));
+  return c.redirect("/admin/listings?" + qs({ site: f.site, q: "", from: "", to: "", user: "", file: "" }) + "&deleted=" + r.n);
 });
 
 const LT_STYLE = `
@@ -540,7 +609,13 @@ const LT_STYLE = `
 .upbox{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:13px}
 .upbox b{color:var(--accent-dark)}
 .pastebox textarea{flex:1;min-width:280px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);font-size:12.5px;font-family:inherit;margin:0}
-.lt td.src{max-width:160px;white-space:normal;word-break:break-all;font-size:11.5px;line-height:1.3}
+.lt td.src{max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11.5px}
+.lt td.ck,.lt th.ck{width:30px;text-align:center;padding:4px}
+.lt .rowck,#ckall{width:20px;height:20px;cursor:pointer;accent-color:var(--accent);margin:0}
+.opsbar{margin:0 0 12px;font-size:12.5px;color:var(--muted);line-height:2}
+.opsbar .chip.done{opacity:.55}
+.opsbar .undo{border:1px solid var(--accent);background:#fff;color:var(--accent-dark);border-radius:999px;padding:1px 9px;font-size:11.5px;cursor:pointer;margin-left:4px}
+.opsbar i{font-style:normal;color:var(--ok);font-size:11.5px}
 .lt td.src a{color:var(--accent-dark)}
 .upbox input[type=text]{width:140px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);margin:0;display:inline-block}
 .upbox input[type=file]{color:var(--muted);font-size:12px;display:inline-block;width:auto;margin:0}
@@ -655,7 +730,18 @@ const LT_JS = `
       inp.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); save(); } if(e.key==='Escape'){ done=true; td.textContent=old; } });
       inp.addEventListener('blur',save);
   });
-  $('del').onclick=function(){ if(confirm('현재 검색 조건의 '+LT_TOTAL+'건을 삭제할까요? 되돌릴 수 없습니다.')) $('delf').submit(); };
+  $('del').onclick=function(){ if(confirm('현재 검색 조건의 '+LT_TOTAL+'건을 삭제할까요? (위 "최근 작업"에서 되돌릴 수 있습니다)')) $('delf').submit(); };
+  // 체크박스 선택 삭제
+  function selIds(){ return Array.prototype.slice.call(document.querySelectorAll('.rowck:checked')).map(function(c){return c.value}); }
+  function paintSel(){ var n=selIds().length; var b=$('delsel'); b.textContent='선택 삭제 ('+n+')'; b.disabled=!n; }
+  document.addEventListener('change',function(e){ if(e.target&&e.target.classList&&e.target.classList.contains('rowck')) paintSel(); });
+  var ca=$('ckall'); if(ca) ca.onchange=function(){ document.querySelectorAll('.rowck').forEach(function(c){ c.checked=ca.checked; }); paintSel(); };
+  $('delsel').onclick=async function(){
+    var ids=selIds(); if(!ids.length) return; if(!confirm('체크한 '+ids.length+'줄을 삭제할까요? (최근 작업에서 되돌릴 수 있습니다)')) return;
+    var r=await fetch('/admin/listings/delete-ids',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:ids})}).then(function(x){return x.json()});
+    if(r.success) location.href='/admin/listings?'+LT_QS+'&deleted='+r.deleted; else alert(r.message||'삭제 실패');
+  };
+  document.querySelectorAll('.undo').forEach(function(b){ b.onclick=async function(){ b.disabled=true; var r=await fetch('/admin/listings/undo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batch:b.dataset.batch})}).then(function(x){return x.json()}); if(r.success) location.href='/admin/listings?restored='+(r.restored!=null?r.restored:0)+'&undeleted='+(r.deleted!=null?r.deleted:0); else { alert(r.message||'되돌리기 실패'); b.disabled=false; } }; });
   $('xl').onclick=async function(){
     var btn=$('xl'); btn.disabled=true; var msg=$('xlmsg'); var all=[]; var after=0;
     try{
