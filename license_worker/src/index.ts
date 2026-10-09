@@ -8,6 +8,7 @@ import { staffdb } from "./staffdb";
 import { naverad } from "./naverad";
 import { hosu } from "./hosu";
 import { daangn } from "./daangn";   // 당근 광고자동화 (2026-10-08)
+import { brief } from "./brief";     // 손님 브리핑 /b/<id> (2026-10-09)
 import { layout } from "./layout";
 
 type Bindings = {
@@ -36,6 +37,7 @@ let featuresReady = false;
 async function ensureFeatures(db: D1Database) {
   if (featuresReady) return;
   try { await db.prepare("ALTER TABLE users ADD COLUMN features TEXT NOT NULL DEFAULT 'crawl'").run(); } catch (e) { /* 이미 있음 */ }
+  try { await db.prepare("ALTER TABLE users ADD COLUMN no_lock INTEGER NOT NULL DEFAULT 0").run(); } catch (e) { /* 이미 있음 */ }   // 1 이면 기기(MAC) 잠금 없이 어느 PC 에서나 (2026-10-09, 진식2·admin)
   featuresReady = true;
 }
 // 활동 기록: 누가(아이디) 어느 프로그램(app)으로 무엇을(action) 했는지 (2026-10-02)
@@ -58,7 +60,7 @@ async function hmacHex(secret: string, msg: string): Promise<string> {
   return toHex(new Uint8Array(sig));
 }
 const logToken = (secret: string, username: string) => hmacHex(secret, "log:" + username);
-const APP_LABEL: Record<string, string> = { crawl: "매물 수집기", photo: "사진950", db: "DB 조회", daangn: "당근 광고" };
+const APP_LABEL: Record<string, string> = { crawl: "매물 수집기", photo: "사진950", db: "DB 조회", daangn: "당근 광고", brief: "손님 브리핑" };
 
 const featureList = (s: any) => String(s ?? "crawl").split(",").map((x) => x.trim()).filter(Boolean);
 const featureLabel = (key: string) => (FEATURES.find(([k]) => k === key) || [key, key])[1];
@@ -133,6 +135,7 @@ app.route("/", staffdb);    // 직원용 DB 조회 /db (src/staffdb.ts)
 app.route("/", naverad);    // 네이버 광고정리 /admin/naverad (src/naverad.ts)
 app.route("/", hosu);       // 호수 추정 /admin/hosu (src/hosu.ts)
 app.route("/", daangn);     // 당근 광고자동화 /daangn (src/daangn.ts)
+app.route("/", brief);      // 손님 브리핑 공개 페이지 /b/<id> (src/brief.ts)
 
 // ---------------------------------------------------------------- dashboard
 
@@ -165,7 +168,7 @@ app.get("/admin/dashboard", async (c) => {
       <td><span class="badge ${cls}">${label}</span></td>
       <td><form method="post" action="/admin/users/${u.id}/features" class="feat-form">${featureBoxes}</form></td>
       <td class="mono">${u.expires_at ?? "무제한"}</td>
-      <td class="mono small">${u.mac_address ?? "-"}</td>
+      <td class="mono small">${u.no_lock ? html`<span class="badge status-unlimited" title="어느 기기에서나 로그인 가능">기기잠금 해제</span>` : (u.mac_address ?? "-")}</td>
       <td>${u.memo ?? ""}</td>
       <td class="mono small">${(u.created_at ?? "").slice(0, 10)}</td>
       <td>
@@ -180,6 +183,9 @@ app.get("/admin/dashboard", async (c) => {
         </form>
         <form method="post" action="/admin/users/${u.id}/reset_mac" class="inline-form">
           <button type="submit" class="btn btn-sm">기기초기화</button>
+        </form>
+        <form method="post" action="/admin/users/${u.id}/nolock" class="inline-form">
+          <button type="submit" class="btn btn-sm" title="${u.no_lock ? "다시 한 기기로만 묶기" : "어느 PC 에서나 쓰게 (MAC 잠금 해제)"}">${u.no_lock ? "기기잠금 켜기" : "기기잠금 해제"}</button>
         </form>
         <form method="post" action="/admin/users/${u.id}/password" class="inline-form">
           <input type="password" name="password" placeholder="새 비밀번호" class="pw-input">
@@ -305,6 +311,14 @@ app.post("/admin/users/:id/toggle", async (c) => {
   return c.redirect("/admin/dashboard");
 });
 
+app.post("/admin/users/:id/nolock", async (c) => {
+  await ensureFeatures(c.env.DB);
+  const id = c.req.param("id");
+  const row: any = await c.env.DB.prepare("SELECT no_lock FROM users WHERE id = ?").bind(id).first();
+  if (row) await c.env.DB.prepare("UPDATE users SET no_lock = ?, mac_address = CASE WHEN ? = 1 THEN NULL ELSE mac_address END, updated_at = ? WHERE id = ?").bind(row.no_lock ? 0 : 1, row.no_lock ? 0 : 1, nowIso(), id).run();
+  return c.redirect("/admin/dashboard");
+});
+
 app.post("/admin/users/:id/reset_mac", async (c) => {
   const id = c.req.param("id");
   await c.env.DB.prepare("UPDATE users SET mac_address = NULL, updated_at = ? WHERE id = ?")
@@ -359,7 +373,7 @@ app.post("/api/v1/verify", async (c) => {
   if (!featureList(row.features).includes(appKey)) {
     return c.json({ success: false, message: `이 계정은 '${featureLabel(appKey)}' 이용권이 없습니다. 관리자에게 문의하세요.` });
   }
-  if (macAddress) {
+  if (macAddress && !row.no_lock) {                                   // 기기잠금 해제 계정은 MAC 을 묶지도, 비교하지도 않는다
     if (!row.mac_address) {
       await c.env.DB.prepare("UPDATE users SET mac_address = ?, updated_at = ? WHERE id = ?")
         .bind(macAddress, nowIso(), row.id)

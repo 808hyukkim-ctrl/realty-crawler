@@ -42,17 +42,17 @@ const str = (v: unknown) => (v === null || v === undefined ? "" : String(v).trim
 const json = (c: any, body: unknown, status = 200) => c.json(body, status);
 const normKey = (road: unknown, dong: unknown, ho: unknown) => [road, dong, ho].map((v) => str(v).replace(/\s+/g, "").replace(/호$/, "").replace(/동$/, "").toLowerCase()).join("|");
 const featsOf = (s: unknown) => String(s ?? "").split(",").map((x) => x.trim()).filter(Boolean);
-async function addLog(db: D1Database, username: string, app: string, action: string, detail: string, count: number | null) {
+export async function addLog(db: D1Database, username: string, app: string, action: string, detail: string, count: number | null) {
   try { await db.prepare("INSERT INTO activity_log (at, username, app, action, detail, count, mac) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(nowIso(), username, app, action, detail.slice(0, 500), count, "web").run(); } catch { /* 기록 실패는 기능을 막지 않는다 */ }
 }
 
-async function engine(c: any, path: string, init: RequestInit = {}): Promise<Response> {
+export async function engine(c: any, path: string, init: RequestInit = {}): Promise<Response> {
   const base = String(c.env.ENGINE_URL || "").replace(/\/$/, "");
   if (!base || !c.env.ENGINE_SECRET) throw new Error("엔진 주소(ENGINE_URL)·비밀키가 설정되지 않았습니다.");
   const headers: Record<string, string> = { Authorization: `Bearer ${c.env.ENGINE_SECRET}`, ...(init.headers as Record<string, string> || {}) };
   return fetch(base + path, { ...init, headers });
 }
-async function engineJson(c: any, path: string, body?: unknown, method = "POST"): Promise<{ status: number; data: any }> {
+export async function engineJson(c: any, path: string, body?: unknown, method = "POST"): Promise<{ status: number; data: any }> {
   const r = await engine(c, path, { method, headers: body !== undefined ? { "content-type": "application/json" } : {}, body: body !== undefined ? JSON.stringify(body) : undefined });
   let data: any = {}; try { data = await r.json(); } catch { /* */ }
   return { status: r.status, data };
@@ -140,9 +140,16 @@ async function apiHandler(c: any) {
   if (action === "fill-match") {
     if (!me.features.includes("db")) return json(c, { error: "이 계정에는 'DB 조회' 권한이 없습니다. 관리자에게 요청하세요." }, 403);
     const body = await c.req.json().catch(() => ({}));
-    const items = await matchUnits(db, Array.isArray(body.items) ? body.items : []);
+    const want: any[] = Array.isArray(body.items) ? body.items : [];
+    // 하루 상한: 계정당 500줄 (활동 기록의 count = 보낸 줄 수) — 매일 뽑는 엑셀 대조는 되고, 지번을 대량으로 넣어 긁어가는 건 막는다
+    const DAILY = 500;
+    const since = new Date(Date.now() - 24 * 3600e3).toISOString();
+    const used: any = await db.prepare("SELECT COALESCE(SUM(count), 0) n FROM activity_log WHERE username = ? AND app = 'db' AND action = '연락처 채우기' AND at > ?").bind(me.username, since).first();
+    const usedN = Number(used?.n) || 0;
+    if (usedN + want.length > DAILY) return json(c, { error: `하루 대조 한도(${DAILY}줄)를 넘습니다 — 오늘 ${usedN}줄 사용, 이번 ${want.length}줄. 내일 다시 하거나 대표에게 문의하세요.` }, 429);
+    const items = await matchUnits(db, want);
     const hit = items.filter((x: any) => x.phone).length;
-    await addLog(db, me.username, "db", "연락처 채우기", `${str(body.file || "글")} · ${items.length}줄 중 ${hit}건`, hit);
+    await addLog(db, me.username, "db", "연락처 채우기", `${str(body.file || "글")} · ${items.length}줄 중 ${hit}건 찾음`, items.length);
     return json(c, { items });
   }
   // ---- 지번 조회 (기능 db) — /db 와 같은 규칙
@@ -158,7 +165,7 @@ async function apiHandler(c: any) {
     const r = await engineJson(c, "/address?q=" + encodeURIComponent(q("q")), undefined, "GET"); return json(c, r.data, r.status);
   }
   if (action === "building") {
-    const p = new URLSearchParams(); for (const k of ["address", "dong", "ho"]) if (q(k)) p.set(k, q(k));
+    const p = new URLSearchParams(); for (const k of ["address", "dong", "ho", "nearby"]) if (q(k)) p.set(k, q(k));   // nearby=1 → 주변 정보(지하철·버스 도보)
     const r = await engineJson(c, "/building?" + p.toString(), undefined, "GET"); return json(c, r.data, r.status);
   }
   if (action === "img") {

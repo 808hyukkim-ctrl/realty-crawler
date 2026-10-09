@@ -13,7 +13,9 @@ import { Hono } from "hono";
 import { html, raw } from "hono/html";
 import { layout } from "./layout";
 
-type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string };
+type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string; OWNER_KEY?: string };
+// 대표 키: 엑셀 내려받기(rows.json)·엑셀DB대조(match) 같은 '통째로 가져가는' 요청은 어드민 비밀번호 외에 이 키가 또 있어야 한다 (직원이 어드민에 들어와도 긁어가지 못하게, 2026-10-09)
+const ownerOk = (c: any) => !c.env.OWNER_KEY || String(c.req.header("x-owner-key") || "") === String(c.env.OWNER_KEY);
 export const listings = new Hono<{ Bindings: Bindings }>();
 
 export const SITE_LABEL: Record<string, string> = { naver: "네이버", daangn: "당근", onhouse: "온하우스", peterpan: "피터팬" };
@@ -350,6 +352,7 @@ export async function ingest(db: D1Database, username: string, siteHint: string,
 
 // 엑셀에 연락처 채우기: [{addr, ho}] → 같은 지번(+호수)의 임대인 연락처 (호수가 맞는 줄 우선, 없으면 그 지번의 아무 줄). 서로 다른 번호는 2개까지 ' / ' 로
 listings.post("/admin/listings/match", async (c) => {
+  if (!ownerOk(c)) return c.json({ error: "owner_key", message: "대표 키가 필요합니다" }, 403);
   const body: any = await c.req.json().catch(() => ({}));
   return c.json({ items: await matchUnits(c.env.DB, Array.isArray(body.items) ? body.items : []) });
 });
@@ -628,6 +631,7 @@ listings.get("/admin/listings/lookup.json", async (c) => {
 
 // 필터 결과를 id 오름차순으로 (after 커서) — 엑셀 만들 때 브라우저가 끝까지 긁어 간다
 listings.get("/admin/listings/rows.json", async (c) => {
+  if (!ownerOk(c)) return c.json({ error: "owner_key", message: "대표 키가 필요합니다" }, 403);
   await ensure(c.env.DB);
   const f = readFilter(c);
   const after = parseInt(c.req.query("after") ?? "0", 10) || 0;
@@ -723,6 +727,9 @@ const LT_STYLE = `
 const LT_JS = `
 (function(){
   var $=function(i){return document.getElementById(i)};
+  // 대표 키: 엑셀 내려받기·엑셀DB대조 때 한 번 물어보고 이 탭(세션)에만 기억. 틀리면 다시 묻는다.
+  function ownerKey(force){ var k=''; try{ k=sessionStorage.getItem('owner_key')||''; }catch(_){} if(!k||force){ k=prompt('대표 키를 입력하세요 (DB 내려받기·대조 보호 — README 에 있음)')||''; k=k.trim(); try{ if(k) sessionStorage.setItem('owner_key',k); }catch(_){} } return k; }
+  async function ownerFetch(url, opt){ opt=opt||{}; var h=Object.assign({}, opt.headers||{}); h['x-owner-key']=ownerKey(false); var r=await fetch(url, Object.assign({}, opt, {headers:h})); if(r.status===403){ try{ sessionStorage.removeItem('owner_key'); }catch(_){} h['x-owner-key']=ownerKey(true); r=await fetch(url, Object.assign({}, opt, {headers:h})); if(r.status===403){ try{ sessionStorage.removeItem('owner_key'); }catch(_){} throw new Error('대표 키가 맞지 않습니다'); } } return r; }
   // 열 이름 줄: 비어있지 않은 칸이 3개 이상이고 그 90% 가 '숫자 없는 20자 이하 글자' 이며 열 이름 낱말이 2개 이상 → 헤더.
   //   팀에서 여러 번 내려받아 이어붙인 파일은 중간에 헤더 줄이 또 나오므로(열 구성이 달라짐) 그때마다 열 이름을 바꿔 읽는다.
   var HW=['매물','주소','연락처','임대인','번호','거래','월세','전세','매매','종류','이름','URL','등록','확인','지번','호수','면적','금액','메모','비고','성명','전화','건물','층','옵션','제목'];
@@ -781,7 +788,7 @@ const LT_JS = `
   // ── 엑셀에 임대인 연락처 채우기: ExcelJS 로 서식·링크 그대로 두고 링크 열 옆에 열 하나만 끼운다
   var ADDR_COLS=['세부주소','지번주소','전체주소','주소_호실','지번·호수','지번','주소','소재지'], HO_COLS=['호수','호실','호'], LINK_COLS=['매물번호','매물_URL','URL','링크','url'];
   function hdrIdx(hdr, names){ for(var i=0;i<names.length;i++){ var j=hdr.findIndex(function(h){return String(h||'').trim()===names[i]}); if(j>=0) return j; } return -1; }
-  async function matchItems(items){ var out=[]; for(var i=0;i<items.length;i+=500){ var r=await fetch('/admin/listings/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:items.slice(i,i+500)})}).then(function(x){return x.json()}); out=out.concat(r.items||[]); } return out; }
+  async function matchItems(items){ var out=[]; for(var i=0;i<items.length;i+=500){ var r=await ownerFetch('/admin/listings/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:items.slice(i,i+500)})}).then(function(x){return x.json()}); out=out.concat(r.items||[]); } return out; }
   async function fillWorkbook(file){
     var wb=new ExcelJS.Workbook(); await wb.xlsx.load(await file.arrayBuffer());
     var total=0, hit=0;
@@ -882,7 +889,7 @@ const LT_JS = `
     try{
       while(true){
         msg.textContent='내려받는 중… '+all.length+' / '+LT_TOTAL+'건';
-        var r=await fetch('/admin/listings/rows.json?'+LT_QS+'&after='+after+'&limit=1000').then(function(x){return x.json()});
+        var r=await ownerFetch('/admin/listings/rows.json?'+LT_QS+'&after='+after+'&limit=1000').then(function(x){return x.json()});
         all=all.concat(r.rows); if(!r.next) break; after=r.next;
       }
       if(!all.length){ msg.textContent='내려받을 행이 없습니다.'; btn.disabled=false; return; }

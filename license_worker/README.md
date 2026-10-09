@@ -99,3 +99,10 @@ Cloudflare Workers 무료 티어: 하루 10만 요청, D1 무료 티어: 하루 
 - 당근 로그인·등록은 라운지 서버 기계의 별도 컨테이너 `daangn-engine`(:8092, `Desktop/당근광고자동화/engine`) 이 하고, 이 워커는 시크릿 `ENGINE_URL`(`https://www.loungeplus.kr/daangn-engine`)·`ENGINE_SECRET` 으로 부릅니다. 엔진 배포 `bash engine/deploy_engine.sh`, 외부 경로(443 nginx) `bash engine/nginx_route.sh`.
 - 로컬 테스트: `python -X utf8 -I Desktop/당근광고자동화/test_worker_local.py` (가짜 엔진 + `wrangler dev --local`, 기존 verify/admin 포함 39개 검사).
 - 직원 포털(같은 `/daangn`): 어드민에서 체크한 기능만 탭으로 — **당근 광고**(당근 올리기·업로드 기록) / **사진950**(사진 950 탭, `photos.ts` 의 수집·중계 함수 재사용) / 항상 '내 활동'. 둘 다 없으면 로그인 거부. 로그인·당근 연결·등록·사진950 이 활동 기록(`activity_log`, 프로그램 '당근 광고'/'사진950')에 남습니다.
+
+## 대표 키 (DB 내려받기 보호)
+
+- 매물·임대인 DB 탭의 **엑셀 다운로드(전체/조건)** 와 **엑셀DB대조** 는 어드민 비밀번호 외에 아래 대표 키를 한 번 더 물어봅니다 (브라우저 탭마다 한 번).
+- 직원이 어드민 주소를 알아도 이 키가 없으면 DB 를 통째로 받아갈 수 없습니다. 직원 포털의 지번 조회는 5건·지번만, 엑셀DB대조는 하루 500줄까지입니다.
+- 대표 키: `owner-0bobuwgowi`
+- 바꾸려면: `npx wrangler secret put OWNER_KEY`
