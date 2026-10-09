@@ -115,21 +115,25 @@ staffdb.post("/db/login", async (c) => {
 });
 staffdb.post("/db/logout", (c) => { c.header("Set-Cookie", `${COOKIE}=; Path=/db; Max-Age=0; HttpOnly; Secure; SameSite=Lax`); return c.redirect("/db"); });
 
+/** 직원용 지번 조회 본체 — /db 화면과 직원 포털(/daangn 지번 조회 탭)이 같이 쓴다: 지번만, 5건, 조회 기록 */
+export async function staffLookup(db: D1Database, username: string, qRaw: string) {
+  await ensureListings(db);
+  const q = String(qRaw ?? "").trim();
+  if (q.length < 2) return { q, rows: [], count: 0 };
+  const bad = jibunCheck(q);
+  if (bad) { await log(db, username, q + " (거부)", 0); return { q, rows: [], count: 0, error: bad }; }
+  const lotOnly = /^\s*(산\s*)?\d{1,4}(\s*-\s*\d{1,4})?\s*(번지)?\s*$/.test(q);
+  const [where, binds] = lotOnly ? lotWhere(q) : lookupWhere(q, false);
+  const { results } = await db.prepare("SELECT addr, phone, contacts, memo, kind, deal, price, title, last_at FROM listings" + where + " ORDER BY addr, id LIMIT ?").bind(...binds, MAX_ROWS + 1).all();
+  const all = (results ?? []).map((r: any) => ({ addr: r.addr, phone: r.phone, contacts: r.contacts, memo: r.memo, kind: r.kind, deal: r.deal, price: r.price, title: r.title, last_at: kst(r.last_at) }));
+  const rows = all.slice(0, MAX_ROWS);
+  await log(db, username, q, rows.length);
+  return { q, count: rows.length, more: all.length > MAX_ROWS, rows };
+}
 staffdb.get("/db/lookup.json", async (c) => {
   const u = await session(c);
   if (!u) return c.json({ error: "login" }, 401);
-  await ensureListings(c.env.DB);
-  const q = (c.req.query("q") ?? "").toString().trim();
-  if (q.length < 2) return c.json({ q, rows: [], count: 0 });
-  const bad = jibunCheck(q);
-  if (bad) { await log(c.env.DB, u, q + " (거부)", 0); return c.json({ q, rows: [], count: 0, error: bad }); }
-  const lotOnly = /^\s*(산\s*)?\d{1,4}(\s*-\s*\d{1,4})?\s*(번지)?\s*$/.test(q);
-  const [where, binds] = lotOnly ? lotWhere(q) : lookupWhere(q, false);
-  const { results } = await c.env.DB.prepare("SELECT addr, phone, contacts, memo, kind, deal, price, title, last_at FROM listings" + where + " ORDER BY addr, id LIMIT ?").bind(...binds, MAX_ROWS + 1).all();
-  const all = (results ?? []).map((r: any) => ({ addr: r.addr, phone: r.phone, contacts: r.contacts, memo: r.memo, kind: r.kind, deal: r.deal, price: r.price, title: r.title, last_at: kst(r.last_at) }));
-  const rows = all.slice(0, MAX_ROWS);
-  await log(c.env.DB, u, q, rows.length);
-  return c.json({ q, count: rows.length, more: all.length > MAX_ROWS, rows });
+  return c.json(await staffLookup(c.env.DB, u, (c.req.query("q") ?? "").toString()));
 });
 
 const DB_STYLE = `

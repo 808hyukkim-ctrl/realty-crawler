@@ -12,6 +12,7 @@ import DAANGN_HTML from "./daangn.html";
 import { layout } from "./layout";
 import { verifyPassword } from "./auth";
 import { collectPhotos, proxyImage } from "./photos";
+import { staffLookup } from "./staffdb";
 
 type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string; ENGINE_URL: string; ENGINE_SECRET: string };
 export const daangn = new Hono<{ Bindings: Bindings }>();
@@ -132,6 +133,12 @@ async function apiHandler(c: any) {
     const n = items.filter((it: any) => it.ok).reduce((a: number, it: any) => a + ((it.photos || []).length), 0);
     await addLog(db, me.username, "photo", "사진950", `${items.length}개 링크 (${items.map((it: any) => it.site || "x").filter((v: string, i: number, arr: string[]) => arr.indexOf(v) === i).join("·")})`, n);
     return json(c, { items });
+  }
+
+  // ---- 지번 조회 (기능 db) — /db 와 같은 규칙
+  if (action === "db-lookup") {
+    if (!me.features.includes("db")) return json(c, { error: "이 계정에는 'DB 조회' 권한이 없습니다. 관리자에게 요청하세요." }, 403);
+    return json(c, await staffLookup(db, me.username, q("q")));
   }
 
   // ---- 당근 (기능 daangn)

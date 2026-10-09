@@ -157,7 +157,7 @@
   table.bulk .btn{padding:3px 8px; font-size:11px}
   table.bulk tr.done td{background:#f7fdf9; color:#4b5563}
 </style>
-<style>#csubmit,#cdaangn,#bregister,label:has(#blgall),label:has(input[data-lg]){display:none!important}.tab[data-t=photo] .n,.tab[data-t=log] .n{display:none}</style>
+<style>#csubmit,#cdaangn,#bregister,label:has(#blgall),label:has(input[data-lg]){display:none!important}.tab[data-t=photo] .n,.tab[data-t=db] .n,.tab[data-t=log] .n{display:none}</style>
 </head>
 <body>
 
@@ -291,7 +291,7 @@ async function boot() {
   if (!token()) return renderGate()
   el.innerHTML = `<div class="wrap"><div class="empty" style="margin-top:20vh">불러오는 중…</div></div>`
   try { S.me = await api('summary') } catch (e) { if (e.message !== '401') renderGate(e.message); return }
-  const fts = S.me.features || []; const order = [].concat(fts.includes('daangn') ? ['create', 'uploads'] : [], fts.includes('photo') ? ['photo'] : [], ['log'])
+  const fts = S.me.features || []; const order = [].concat(fts.includes('daangn') ? ['create', 'uploads'] : [], fts.includes('photo') ? ['photo'] : [], fts.includes('db') ? ['db'] : [], ['log'])
   if (!fts.includes('daangn') && !fts.includes('photo')) setTimeout(() => toast('이 계정에는 아직 당근 광고·사진950 권한이 없습니다. 관리자에게 요청하세요.'), 400)
   if (!order.length) return renderGate('이 토큰에는 열람 권한이 없습니다.')
   if (!order.includes(S.tab)) S.tab = order[0]
@@ -307,7 +307,7 @@ async function refresh() {
 }
 
 /* ── 껍데기 ───────────────────────────────────────────── */
-const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함', photo:'사진 950', log:'내 활동' }
+const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함', photo:'사진 950', db:'지번 조회', log:'내 활동' }
 function renderShell(order) {
   el.innerHTML = `
     <header>
@@ -368,8 +368,9 @@ async function load(tab, quiet) {
     if (!(S.data.create && restoreCreate())) paintCreate()
     S.painted = 'create'; return
   }
-  const paint = { supply: paintSupply, review: paintReview, cs: paintCS, uploads: paintUploads, photo: paintPhoto, log: paintLog }[tab]
+  const paint = { supply: paintSupply, review: paintReview, cs: paintCS, uploads: paintUploads, photo: paintPhoto, db: paintDb, log: paintLog }[tab]
   if (tab === 'photo') { paintPhoto(); S.painted = 'photo'; return }
+  if (tab === 'db') { paintDb(); S.painted = 'db'; return }
   if (S.data[tab]) { paint(); S.painted = tab }   // 캐시로 먼저 그리고 뒤에서 갱신 (늦게 보이던 문제)
   else if (!quiet) { body.innerHTML = `<div class="empty" style="padding:60px">불러오는 중…</div>`; S.painted = tab }
   let fresh
@@ -2121,7 +2122,38 @@ function paintPhoto() {
   }
 }
 
-const BUILD = '2026-10-09 11:02 당근'
+/* ── 지번 조회 (기능 db): /db 와 같은 규칙 — 지번(동+번지)만, 5건까지, 조회 기록 남음 */
+function paintDb() {
+  S.painted = 'db'
+  if (document.getElementById('db_q')) return
+  document.getElementById('body').innerHTML = `
+    <div class="paste" style="border-color:#f6b4cf;background:#fff4f8">
+      <div style="font-weight:800">🔎 지번 조회 <span style="font-weight:400;color:var(--dim);font-size:12px">지번(예: 논현동 124-12 또는 124-12)을 치면 매물·임대인 DB 에서 바로 찾습니다. 5건까지 보이고 조회 기록이 남습니다.</span></div>
+      <div class="row-acts" style="align-items:center"><input id="db_q" placeholder="예: 논현동 124-12 302호" autocomplete="off" style="flex:1;min-width:240px;font:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--line);border-radius:10px"><button class="btn b" id="db_go">찾기</button><span class="hint" id="db_msg" style="margin:0">치는 대로 바로 찾습니다.</span></div>
+      <div id="db_res" style="margin-top:10px;overflow-x:auto"></div>
+    </div>`
+  const $d = id => document.getElementById(id)
+  let t = null, last = ''
+  const lookup = async () => {
+    const q = $d('db_q').value.trim(); const res = $d('db_res'), msg = $d('db_msg')
+    if (q.length < 2) { res.innerHTML = ''; msg.textContent = '치는 대로 바로 찾습니다.'; return }
+    if (q === last) return; last = q; msg.textContent = '찾는 중…'
+    try {
+      const r = await api('db-lookup?q=' + encodeURIComponent(q))
+      if ($d('db_q').value.trim() !== q) return
+      if (r.error) { res.innerHTML = `<div class="hint" style="color:var(--warn)">${esc(r.error)}</div>`; msg.textContent = ''; return }
+      if (!r.rows.length) { res.innerHTML = `<div class="hint">"${esc(q)}" 에 해당하는 줄이 없습니다.</div>`; msg.textContent = '0건'; return }
+      res.innerHTML = `<div class="card scroll"><table><thead><tr><th>지번·호수</th><th>임대인 연락처</th><th>임차인·관리 등</th><th>종류</th><th>거래</th><th>금액</th><th>이름·제목</th><th>메모</th><th>올린 날</th></tr></thead><tbody>${r.rows.map(x => `<tr><td style="font-weight:700">${esc(x.addr)}</td><td style="font-family:Consolas,monospace;font-weight:700">${esc(x.phone)}</td><td style="white-space:normal;font-size:12px">${esc(x.contacts)}</td><td>${esc(x.kind)}</td><td>${esc(x.deal)}</td><td>${esc(x.price)}</td><td>${esc(x.title)}</td><td style="white-space:normal;max-width:220px">${esc(x.memo)}</td><td style="white-space:nowrap">${esc(x.last_at)}</td></tr>`).join('')}</tbody></table>${r.more ? '<div class="hint">5건까지만 보입니다. 호수까지 치면 더 정확히 나옵니다.</div>' : ''}</div>`
+      msg.textContent = r.count + '건' + (r.more ? '+' : '')
+    } catch (e) { if (e.message !== '401') msg.textContent = '오류: ' + e.message }
+  }
+  $d('db_q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(lookup, 300) })
+  $d('db_q').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(t); last = ''; lookup() } })
+  $d('db_go').onclick = () => { last = ''; lookup() }
+  $d('db_q').focus()
+}
+
+const BUILD = '2026-10-09 11:09 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()
