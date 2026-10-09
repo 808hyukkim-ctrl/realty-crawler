@@ -525,6 +525,7 @@ listings.get("/admin/listings", async (c) => {
   const body = html`
     <div class="page-head">
       <h1>매물·임대인 DB</h1>
+      <button type="button" class="btn btn-primary xlall" id="xlall" title="필터와 상관없이 쌓인 전체를 엑셀 한 파일로">⬇ 전체 DB 엑셀 다운로드</button>
       <span class="small muted">전체 ${bySite.reduce((a: number, r: any) => a + r.n, 0)}건 (${bySite.map((r: any) => `${siteLabel(r.site)} ${r.n}`).join(" · ") || "없음"})</span>
     </div>
     ${notice ? html`<div class="notice">${notice}</div>` : ""}
@@ -676,6 +677,8 @@ const LT_STYLE = `
 .x{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 4px}
 .x:hover{color:var(--danger)}
 .pager{display:flex;gap:12px;align-items:center;justify-content:center;margin:16px 0}
+.xlall{font-size:14px;padding:10px 18px;background:#0288d1;border-color:#0288d1;box-shadow:0 4px 14px rgba(2,136,209,.25)}
+.xlall:hover{background:#01579b;border-color:#01579b}
 .upbox{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:13px}
 .upbox b{color:var(--accent-dark)}
 .pastebox textarea{flex:1;min-width:280px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);font-size:12.5px;font-family:inherit;margin:0}
@@ -874,8 +877,8 @@ const LT_JS = `
     if(r.success) location.href='/admin/listings?'+LT_QS+'&deleted='+r.deleted; else alert(r.message||'삭제 실패');
   };
   document.querySelectorAll('.undo').forEach(function(b){ b.onclick=async function(){ b.disabled=true; var r=await fetch('/admin/listings/undo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batch:b.dataset.batch})}).then(function(x){return x.json()}); if(r.success) location.href='/admin/listings?restored='+(r.restored!=null?r.restored:0)+'&undeleted='+(r.deleted!=null?r.deleted:0); else { alert(r.message||'되돌리기 실패'); b.disabled=false; } }; });
-  $('xl').onclick=async function(){
-    var btn=$('xl'); btn.disabled=true; var msg=$('xlmsg'); var all=[]; var after=0;
+  async function exportXlsx(btn, qs, siteLabel){
+    btn.disabled=true; var msg=$('xlmsg'); var all=[]; var after=0; var LT_QS=qs, LT_SITE=siteLabel;
     try{
       while(true){
         msg.textContent='내려받는 중… '+all.length+' / '+LT_TOTAL+'건';
@@ -898,6 +901,8 @@ const LT_JS = `
       msg.textContent='엑셀 저장 완료: '+all.length+'건';
     }catch(e){ msg.textContent='오류: '+e.message; }
     btn.disabled=false;
-  };
+  }
+  $('xl').onclick=function(){ exportXlsx($('xl'), window.LT_QS, window.LT_SITE); };
+  $('xlall').onclick=function(){ exportXlsx($('xlall'), '', '전체'); };
 })();
 `;
