@@ -70,7 +70,6 @@ async function userOf(c: any): Promise<Me | null> {
   if (!u || !u.is_active) return null;
   if (u.expires_at && new Date(u.expires_at).getTime() < Date.now()) return null;
   const features = featsOf(u.features);
-  if (!features.some((f) => PORTAL_FEATURES.includes(f))) return null;
   if (Date.now() - new Date(row.last_at).getTime() > 3600e3) c.env.DB.prepare("UPDATE daangn_web_sessions SET last_at = ? WHERE token = ?").bind(nowIso(), tok).run().catch(() => {});
   return { username: row.username, features };
 }
@@ -91,8 +90,7 @@ daangn.post("/daangn/api/login", async (c) => {
   if (!row || !(await verifyPassword(password, row.password_hash))) return json(c, { error: "아이디 또는 비밀번호가 올바르지 않습니다." }, 401);
   if (!row.is_active) return json(c, { error: "비활성화된 계정입니다. 관리자에게 문의하세요." }, 403);
   if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) return json(c, { error: "이용권이 만료되었습니다." }, 403);
-  const features = featsOf(row.features);
-  if (!features.some((f) => PORTAL_FEATURES.includes(f))) return json(c, { error: "이 계정은 '당근 광고'·'사진950' 이용권이 없습니다. 관리자에게 문의하세요." }, 403);
+  const features = featsOf(row.features);   // 기능이 없어도 로그인은 되고, 화면에서 가진 기능 탭만 보인다 (2026-10-09)
   const token = randomToken();
   await c.env.DB.prepare("INSERT INTO daangn_web_sessions (token, username, created_at, last_at) VALUES (?, ?, ?, ?)").bind(token, username, nowIso(), nowIso()).run();
   await addLog(c.env.DB, username, features.includes("daangn") ? "daangn" : "photo", "로그인", "웹 포털", null);
