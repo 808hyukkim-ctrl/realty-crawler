@@ -263,7 +263,7 @@ function renderGate(err) {
   el.innerHTML = `
     <div class="wrap"><div class="gate">
       <div class="brand" style="font-size:20px">당근 <span>광고자동화</span></div>
-      <p style="margin-top:6px">매물수집기 계정(아이디·비밀번호)으로 로그인하세요. '당근 광고' 또는 '사진950' 이용권이 있는 계정만 들어올 수 있습니다. 탭은 가진 기능만 보입니다.</p>
+      <p style="margin-top:6px">매물수집기 계정(아이디·비밀번호)으로 로그인하세요. 수집기와 같은 아이디·비밀번호입니다. 탭은 관리자가 켜 준 기능만 보입니다.</p>
       ${err ? `<div class="err">${esc(err)}</div>` : ''}
       <input id="lg_id" placeholder="아이디" autocomplete="username" spellcheck="false" style="margin-bottom:8px">
       <input id="lg_pw" type="password" placeholder="비밀번호" autocomplete="current-password">
@@ -292,6 +292,7 @@ async function boot() {
   el.innerHTML = `<div class="wrap"><div class="empty" style="margin-top:20vh">불러오는 중…</div></div>`
   try { S.me = await api('summary') } catch (e) { if (e.message !== '401') renderGate(e.message); return }
   const fts = S.me.features || []; const order = [].concat(fts.includes('daangn') ? ['create', 'uploads'] : [], fts.includes('photo') ? ['photo'] : [], ['log'])
+  if (!fts.includes('daangn') && !fts.includes('photo')) setTimeout(() => toast('이 계정에는 아직 당근 광고·사진950 권한이 없습니다. 관리자에게 요청하세요.'), 400)
   if (!order.length) return renderGate('이 토큰에는 열람 권한이 없습니다.')
   if (!order.includes(S.tab)) S.tab = order[0]
   renderShell(order)
@@ -2120,7 +2121,7 @@ function paintPhoto() {
   }
 }
 
-const BUILD = '2026-10-09 10:55 당근'
+const BUILD = '2026-10-09 10:57 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()
