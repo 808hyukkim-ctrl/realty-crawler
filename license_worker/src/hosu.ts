@@ -83,20 +83,27 @@ function formatCands(cs: Unit[]): string {
 }
 
 // ---------------------------------------------------------------- 한 링크
-async function naverDetail(no: string): Promise<any> {
-  const r = await fetch(`https://new.land.naver.com/api/articles/${no}?complexNo=`, { headers: NAVER_HEADERS });
-  if (r.status === 429) throw new Error("네이버가 잠시 요청을 막았습니다(429). 1~2분 뒤 다시 해주세요.");
-  if (!r.ok) throw new Error(`네이버 상세 응답 ${r.status} (내려간 매물일 수 있음)`);
-  const d: any = await r.json().catch(() => null);
-  if (!d || !d.articleDetail) throw new Error("매물 정보가 비어 있습니다 (삭제·비공개)");
-  return d;
+async function naverDetail(no: string, complexNo = ""): Promise<any> {
+  // 네이버가 가끔 200 인데 상세가 빈 응답을 준다(짧은 차단) → 1.5초 뒤 한 번 더 (단지 번호가 있으면 같이 보냄)
+  let last = "";
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const r = await fetch(`https://new.land.naver.com/api/articles/${no}?complexNo=${attempt === 2 ? complexNo : ""}`, { headers: NAVER_HEADERS });
+    if (r.status === 429) throw new Error("네이버가 잠시 요청을 막았습니다(429). 1~2분 뒤 다시 해주세요.");
+    if (!r.ok) throw new Error(`네이버 상세 응답 ${r.status} (내려간 매물일 수 있음)`);
+    const d: any = await r.json().catch(() => null);
+    if (d && d.articleDetail) return d;
+    last = d ? JSON.stringify(d).slice(0, 80) : "json 아님";
+    if (attempt === 1) await sleep(1500);
+  }
+  throw new Error("네이버가 상세를 비워서 보냈습니다 — 잠시 뒤 다시 눌러주세요 (계속 비면 삭제·비공개 매물)" + (last ? ` [${last}]` : ""));
 }
 async function sameGroup(no: string): Promise<any[]> {
   try { const r = await fetch(`https://new.land.naver.com/api/articles?representativeArticleNo=${no}`, { headers: NAVER_HEADERS }); if (!r.ok) return []; const j: any = await r.json().catch(() => null); return Array.isArray(j) ? j : []; } catch { return []; }
 }
 async function hosuOne(c: any, url: string) {
   const no = naverNo(url); if (!no) throw new Error("네이버 매물 링크가 아닙니다");
-  const d = await naverDetail(no);
+  const complexNo = (s(url).match(/complexes\/(\d+)/) || (s(url).match(/complexNo=(\d+)/)) || [])[1] || "";
+  const d = await naverDetail(no, complexNo);
   const ad = d.articleDetail || {}, ft = d.articleFloor || {}, sp = d.articleSpace || {}, add = d.articleAddition || {};
   const name = s(ad.aptName || ad.articleName || add.articleName);
   const dong = s(ad.buildingName || add.buildingName);                                      // "422동" / "1동" / ""
