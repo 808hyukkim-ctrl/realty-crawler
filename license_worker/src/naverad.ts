@@ -136,13 +136,12 @@ function parseJibunQuery(q: string) {
 naverad.post("/admin/naverad/search", async (c) => {
   await ensureListings(c.env.DB);
   const body: any = await c.req.json().catch(() => ({}));
-  const q = s(body.q); const maxPages = Math.min(80, Math.max(5, parseInt(body.max_pages, 10) || 40));
-  const startPage = Math.max(1, parseInt(body.start_page, 10) || 1);   // [더 훑기] 는 이어서
+  const q = s(body.q);
   const pj = parseJibunQuery(q);
   if (!pj) return c.json({ error: "지번을 '동이름 번지' 꼴로 적어주세요. 예: 역삼동 777-2" }, 400);
   // 1) 우리 DB
   const [where, binds] = lookupWhere(`${pj.dong} ${pj.lot}`, false);
-  const { results } = await c.env.DB.prepare("SELECT id, site, addr, phone, contacts, kind, deal, price, title, url, last_at FROM listings" + where + " ORDER BY addr, id LIMIT 50").bind(...binds).all();
+  const { results } = await c.env.DB.prepare("SELECT id, site, addr, phone, contacts, kind, deal, price, title, url, last_at, file FROM listings" + where + " ORDER BY addr, id LIMIT 50").bind(...binds).all();
   const db = (results ?? []).map((r: any) => ({ ...r, last_at: kst(r.last_at) }));
   // 2) 법정동코드
   let cands = NAME2CODES[pj.dong] || [];
@@ -154,61 +153,73 @@ naverad.post("/admin/naverad/search", async (c) => {
   const geo = await engineJson(c, "/geocode?q=" + encodeURIComponent(`${cortar.full} ${pj.lot}`.replace(/^서울시/, "서울특별시")));
   if (!geo || !geo.ok) return c.json({ db, naver: { error: "지번의 좌표를 구하지 못했습니다 (엔진/브이월드). 지번이 맞는지 확인해주세요.", ambiguous, cortar: cortar.full } });
   const lat = Number(geo.lat), lng = Number(geo.lng);
-  // 4) 네이버 목록(그 동 전체)을 넘기며 가까운 매물만
-  const base = "https://new.land.naver.com/api/articles?order=rank&realEstateType=APT:OPST:VL:DDDGG:JWJT:SGJT:HOJT:ABYG:OBYG:GM:OR:SG:SMS:GJCG:APTHGJ:TJ:JGC:JGB&tradeType=&tag=::::::::&rentPriceMin=0&rentPriceMax=900000000&priceMin=0&priceMax=900000000&areaMin=0&areaMax=900000000&oldBuildYears=&recentlyBuildYears=&minHouseHoldCount=&maxHouseHoldCount=&showArticle=false&sameAddressGroup=false&minMaintenanceCost=&maxMaintenanceCost=&priceType=RETAIL&directions=&articleState=&cortarNo=" + cortar.code;
-  const near: any[] = []; let scanned = 0, pages = 0, blocked = "", more = true;
-  const endPage = startPage + maxPages - 1;
-  for (let p = startPage; p <= endPage && more; p += 4) {
-    const batch = [p, p + 1, p + 2, p + 3].filter((x) => x <= endPage);
-    const rs = await Promise.all(batch.map((pg) => fetch(`${base}&page=${pg}`, { headers: NAVER_HEADERS }).then(async (r) => ({ pg, status: r.status, j: r.ok ? await r.json().catch(() => null) : null })).catch(() => ({ pg, status: 0, j: null }))));
-    for (const r of rs.sort((a, b) => a.pg - b.pg)) {
-      if (r.status === 429) { blocked = "네이버가 잠시 요청을 막았습니다(429). 1~2분 뒤 다시 해주세요."; more = false; break; }
-      if (!r.j) { if (r.status && r.status !== 200) blocked = `네이버 목록 응답 ${r.status}`; more = false; break; }
-      pages++;
-      const list: any[] = Array.isArray(r.j.articleList) ? r.j.articleList : [];
-      scanned += list.length;
-      for (const a of list) {
-        const la = Number(a.latitude), lo = Number(a.longitude); if (!la || !lo) continue;
-        const d = distM(lat, lng, la, lo);
-        if (d <= 70) near.push({ no: s(a.articleNo), name: s(a.articleName), type: s(a.realEstateTypeName), trade: s(a.tradeTypeName), price: s(a.dealOrWarrantPrc), rent: s(a.rentPrc), floor: s(a.floorInfo), area1: a.area1 ?? "", area2: a.area2 ?? "", dir: s(a.direction), realtor: s(a.realtorName), cp: s(a.cpName), confirm: ymd(a.articleConfirmYmd), bld: s(a.buildingName), dist: Math.round(d), lat: la, lng: lo });
-      }
-      if (!r.j.isMoreData || !list.length) { more = false; break; }
+  // 4) 네이버 목록을 지도 범위로 (zoom=18 + 범위 → 그 자리 주변 60m 상자만, 보통 2~5쪽)
+  const d = 0.0006;
+  const base = `https://new.land.naver.com/api/articles?order=rank&realEstateType=APT:OPST:VL:DDDGG:JWJT:SGJT:HOJT:ABYG:OBYG:GM:OR:SG:SMS:GJCG:APTHGJ:TJ:JGC:JGB&tradeType=&tag=::::::::&rentPriceMin=0&rentPriceMax=900000000&priceMin=0&priceMax=900000000&areaMin=0&areaMax=900000000&oldBuildYears=&recentlyBuildYears=&minHouseHoldCount=&maxHouseHoldCount=&showArticle=false&sameAddressGroup=false&minMaintenanceCost=&maxMaintenanceCost=&priceType=RETAIL&directions=&articleState=&zoom=18&cortarNo=${cortar.code}&leftLon=${lng - d}&rightLon=${lng + d}&topLat=${lat + d}&bottomLat=${lat - d}`;
+  const near: any[] = []; let scanned = 0, pages = 0, blocked = "";
+  for (let p = 1; p <= 12; p++) {
+    let r: Response; try { r = await fetch(`${base}&page=${p}`, { headers: NAVER_HEADERS }); } catch { blocked = "네이버 목록을 불러오지 못했습니다"; break; }
+    if (r.status === 429) { blocked = "네이버가 잠시 요청을 막았습니다(429). 1~2분 뒤 다시 해주세요."; break; }
+    const j: any = r.ok ? await r.json().catch(() => null) : null;
+    if (!j) { blocked = `네이버 목록 응답 ${r.status}`; break; }
+    pages++;
+    const list: any[] = Array.isArray(j.articleList) ? j.articleList : [];
+    scanned += list.length;
+    for (const a of list) {
+      const la = Number(a.latitude) || 0, lo = Number(a.longitude) || 0;
+      near.push({ no: s(a.articleNo), name: s(a.articleName), type: s(a.realEstateTypeName), trade: s(a.tradeTypeName), price: s(a.dealOrWarrantPrc), rent: s(a.rentPrc), floor: s(a.floorInfo), area1: a.area1 ?? "", area2: a.area2 ?? "", dir: s(a.direction), realtor: s(a.realtorName), cp: s(a.cpName), confirm: ymd(a.articleConfirmYmd), feature: s(a.articleFeatureDesc), same: a.sameAddrCnt ?? 1, lat: la, lng: lo, dist: la ? Math.round(distM(lat, lng, la, lo)) : null, locShow: !!a.isLocationShow, jibun: "", exact: false, url: `https://new.land.naver.com/houses?articleNo=${s(a.articleNo)}` });
     }
+    if (!j.isMoreData || !list.length) break;
   }
-  // 5) 가까운 매물의 지번을 fin.land 로 확인 (최대 15건, 4개씩)
-  near.sort((a, b) => a.dist - b.dist);
-  const check = near.slice(0, 25);
-  const apply = (it: any, fl: Record<string, string>) => { it.jibun = fl.jibun ? `${CODE2NAME[fl.legal] || cortar.full} ${fl.jibun}` : ""; it.exact = !!fl.jibun && fl.jibun === pj.lot && (!fl.legal || fl.legal === cortar.code); it.road = fl.road || ""; it.approval = fl.approval || ""; it.parking = fl.parking || ""; };
-  for (let i = 0; i < check.length; i += 3) {
-    await Promise.all(check.slice(i, i + 3).map(async (it) => { let fl = await finLand(it.no); if (!fl.jibun) { await new Promise((r) => setTimeout(r, 400)); fl = await finLand(it.no); } apply(it, fl); }));
+  // 5) 지번 확인 — 같은 좌표(=같은 건물)끼리 한 건만: 상세 API exposureAddress(주소 공개면 번지까지) → 없으면 fin.land
+  const lotOf = (addr: string) => { const m = s(addr).match(/(산\s*)?(\d{1,4}(?:-\d{1,4})?)\s*$/); return m ? (m[1] ? "산" : "") + m[2] : ""; };
+  const dongOk = (addr: string) => !addr || addr.includes(pj.dong);
+  const groups = new Map<string, any[]>();
+  for (const it of near) { const k = `${it.lat}|${it.lng}`; (groups.get(k) || groups.set(k, []).get(k)!).push(it); }
+  const reps = [...groups.values()].sort((a, b) => (a[0].dist ?? 9e9) - (b[0].dist ?? 9e9)).slice(0, 30);
+  let checked = 0;
+  const detailAddr = async (no: string): Promise<string> => {
+    try { const r = await fetch(`https://new.land.naver.com/api/articles/${no}?complexNo=`, { headers: NAVER_HEADERS }); if (!r.ok) return ""; const j: any = await r.json().catch(() => null); return s(j?.articleDetail?.exposureAddress); } catch { return ""; }
+  };
+  for (let i = 0; i < reps.length; i += 4) {
+    await Promise.all(reps.slice(i, i + 4).map(async (g) => {
+      checked++;
+      let addr = ""; let road = "", approval = "", parking = "";
+      for (const it of g.slice(0, 2)) { addr = await detailAddr(it.no); if (lotOf(addr)) break; }
+      if (!lotOf(addr)) { const fl = await finLand(g[0].no); if (fl.jibun) { addr = `${CODE2NAME[fl.legal] || cortar.full} ${fl.jibun}`; road = fl.road || ""; approval = fl.approval || ""; parking = fl.parking || ""; } }
+      const lot = lotOf(addr);
+      const exact = !!lot && lot === pj.lot && dongOk(addr);
+      const likely = !lot && g[0].dist != null && g[0].dist <= 15;   // 주소 비공개지만 바로 그 자리(15m 안) → 그 건물로 본다
+      for (const it of g) { it.jibun = lot ? addr : ""; it.exact = exact || likely; it.likely = likely; it.road = road; it.approval = approval; it.parking = parking; }
+    }));
   }
-  // 같은 건물(매물명·좌표가 같은 것)은 확인된 지번을 물려받는다 — 확인 못 한 줄도 같은 건물이면 일치로
-  const known = new Map<string, any>();
-  for (const it of near) if (it.jibun) known.set(`${it.name}|${it.lat}|${it.lng}`, it);
-  for (const it of near) { if (it.jibun) continue; const k = known.get(`${it.name}|${it.lat}|${it.lng}`); if (k) { it.jibun = k.jibun; it.exact = k.exact; it.road = k.road; it.approval = k.approval; it.parking = k.parking; it.inherited = true; } }
-  for (const it of near) it.url = `https://new.land.naver.com/houses?articleNo=${it.no}`;
-  const exact = near.filter((x) => x.exact), unknown = near.filter((x) => !x.exact);
-  return c.json({ db, naver: { cortar: cortar.full, code: cortar.code, lat, lng, pages, scanned, blocked, ambiguous, exact, near: unknown, checked: check.length, more_pages: more, next_page: more ? endPage + 1 : null, start_page: startPage } });
+  near.sort((a, b) => (a.dist ?? 9e9) - (b.dist ?? 9e9));
+  const exact = near.filter((x) => x.exact), rest = near.filter((x) => !x.exact);
+  const brokers = Array.from(new Set(exact.map((x) => x.realtor).filter(Boolean)));
+  return c.json({ db, naver: { cortar: cortar.full, code: cortar.code, lat, lng, pages, scanned, blocked, ambiguous, exact, near: rest, brokers, count: exact.length, broker_count: brokers.length, checked } });
 });
 
 // ---------------------------------------------------------------- 화면
 naverad.get("/admin/naverad", (c) => c.html(layout("네이버 광고정리", PAGE())));
 function PAGE() {
   return html`
-<div class="page-head"><h1>네이버 광고정리</h1><span class="small muted">왼쪽: 링크 넣으면 광고용 정보 자동 정리 · 오른쪽: 지번으로 우리 DB + 지금 네이버에 걸린 매물 찾기</span></div>
-<div class="na-grid">
-  <section class="panel">
-    <h2>링크 자동 정리</h2>
+<div class="page-head"><h1>네이버 광고정리</h1><span class="small muted">위: 링크 넣으면 광고용 정보 자동 정리 · 아래: 지번으로 우리 DB + 지금 네이버에 걸린 매물 찾기 (줄을 누르면 그 매물이 바로 정리됩니다)</span></div>
+<div class="na-stack">
+  <section class="panel green">
+    <h2>⚡ 링크 자동 정리</h2>
     <textarea id="na_links" rows="4" placeholder="네이버 매물 링크를 여러 개 넣어도 됩니다 (줄바꿈·쉼표·공백 구분) — 당근·온하우스 링크도 됩니다&#10;https://new.land.naver.com/houses?articleNo=2653867465"></textarea>
     <div class="na-bar"><button class="btn btn-primary" id="na_go">자동 정리</button><button class="btn" id="na_clip">📋 클립보드에서</button><span class="small muted" id="na_msg"></span></div>
     <div class="na-bar" id="na_tools" style="display:none"><button class="btn btn-primary" id="na_save">체크한 줄 DB에 저장</button><button class="btn" id="na_xl">엑셀 다운로드</button><button class="btn" id="na_copyall">전체 광고문구 복사</button><label class="small"><input type="checkbox" id="na_all" checked> 전체 선택</label></div>
     <div id="na_out" class="na-out"></div>
   </section>
-  <section class="panel">
-    <h2>지번으로 네이버 매물 찾기</h2>
-    <div class="na-bar"><input type="text" id="na_q" placeholder="예: 역삼동 777-2 (구 이름을 붙이면 더 정확: 강남구 역삼동 777-2)" style="flex:1;min-width:240px"><button class="btn btn-primary" id="na_find">찾기</button></div>
-    <div class="small muted" id="na_fmsg">우리 DB 에 쌓인 줄은 바로, 네이버는 그 동의 매물 목록을 넘기며 좌표가 가까운 것만 추린 뒤 지번을 확인합니다 (10~30초).</div>
-    <div id="na_fout" class="na-out"></div>
+  <section class="panel pink">
+    <h2><span class="nlogo">N</span>🔍 지번으로 매물 찾기</h2>
+    <div class="na-bar"><input type="text" id="na_q" placeholder="예: 양재동 17-27 (구 이름을 붙이면 더 정확: 서초구 양재동 17-27)" style="flex:1;min-width:240px"><button class="btn btn-primary" id="na_find">찾기</button></div>
+    <div class="small muted" id="na_fmsg">우리 DB 에 쌓인 줄은 바로, 네이버는 그 지번 자리(60m 안)의 매물을 모아 지번을 확인합니다 (5~15초). 줄을 누르면 오른쪽에 바로 정리됩니다.</div>
+    <div class="na-split">
+      <div id="na_fout" class="na-out"></div>
+      <div id="na_pick" class="na-pick"><div class="small muted" style="padding:14px">← 결과 줄을 누르면 그 매물의 광고 정보가 여기에 정리됩니다 (위 정리 목록에도 추가)</div></div>
+    </div>
   </section>
 </div>
 <style>${raw(NA_STYLE)}</style>
@@ -217,9 +228,22 @@ function PAGE() {
 }
 const NA_STYLE = `
 .muted{color:var(--muted)}
-.na-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.na-stack{display:flex;flex-direction:column;gap:16px}
+.panel.green{border-color:#8fd3a8;background:#f3fbf5;box-shadow:0 6px 24px rgba(47,158,110,.08)}
+.panel.green h2{color:#1f7a4d}
+.panel.pink{border-color:#f6b4cf;background:#fff4f8}
+.panel.pink h2{color:#c2366f}
+.nlogo{display:inline-block;background:#03c75a;color:#fff;font-weight:900;border-radius:5px;padding:0 6px;margin-right:4px;font-size:14px;line-height:22px;vertical-align:middle}
+.na-split{display:grid;grid-template-columns:minmax(0,3fr) minmax(300px,2fr);gap:14px;align-items:start}
+.na-pick{position:sticky;top:12px}
+.na-table tr.pick{cursor:pointer}
+.na-table tr.pick:hover td{background:#fff0f6}
+.na-table tr.pick.on td{background:#ffe3ee}
+.cnt{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;margin:8px 0 4px}
+.cnt b{font-size:22px;color:#03c75a}
+.cnt .b2 b{color:#c2366f}
 .na-out{overflow-x:auto}
-@media(max-width:1000px){.na-grid{grid-template-columns:1fr}}
+@media(max-width:1000px){.na-split{grid-template-columns:1fr}.na-pick{position:static}}
 .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:0 6px 24px rgba(255,92,154,.06)}
 .panel h2{margin:0 0 10px;font-size:16px;color:var(--accent-dark)}
 .panel textarea,.panel input[type=text]{width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);font-size:13px;box-sizing:border-box}
@@ -294,32 +318,51 @@ const NA_JS = `
   };
   $('na_copyall').onclick=function(){ var t=ITEMS.filter(function(x){return x.ok&&x.sel!==false}).map(adText).join('\\n\\n----------\\n\\n'); navigator.clipboard.writeText(t).then(function(){ $('na_msg').textContent='전체 광고문구를 복사했습니다'; }); };
 
-  // ── 지번 검색
-  function naRow(x, kind){ return '<tr><td>'+(kind==='exact'?'<span class="tag ok">지번 일치'+(x.inherited?' (같은 건물)':'')+'</span>':'<span class="tag q">근처 '+x.dist+'m'+(x.jibun?'':' · 지번 미확인')+'</span>')+'</td><td><a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.no)+'</a></td><td>'+esc(x.name)+(x.bld?' '+esc(x.bld):'')+'</td><td>'+esc(x.type)+' '+esc(x.trade)+'</td><td>'+esc(x.price)+(x.rent&&x.rent!=='0'?' / '+esc(x.rent):'')+'</td><td>'+esc(x.floor)+'</td><td>'+esc(x.area1)+'/'+esc(x.area2)+'</td><td>'+esc(x.jibun||'')+'</td><td>'+esc(x.realtor)+'</td><td>'+esc(x.confirm)+'</td></tr>'; }
-  var ACC={q:'',exact:[],near:[],pages:0,scanned:0};
-  async function find(startPage){
-    var q=$('na_q').value.trim(); if(q.length<2) return; $('na_find').disabled=true; $('na_fmsg').textContent=(startPage>1?'더 훑는 중… ':'찾는 중… ')+'(우리 DB → 네이버 목록 → 지번 확인, 10~30초)';
-    if(!startPage||startPage<2){ ACC={q:q,exact:[],near:[],pages:0,scanned:0}; $('na_fout').innerHTML=''; }
+  // ── 지번 검색 (줄을 누르면 그 매물을 자동 정리해 오른쪽에 + 위 목록에 추가)
+  function cardHtml(it, title){
+    if(!it.ok) return '<div class="na-card err"><div class="ttl"><b>'+esc(title||'')+'</b> <span class="small">'+esc(it.url)+'</span></div><div style="color:var(--danger);font-size:13px">'+esc(it.error)+'</div></div>';
+    var r=it.row, h='<div class="na-card"><div class="ttl"><b>'+esc(title||r['세부주소']||r['매물명']||it.url)+'</b> <span class="tag db">'+esc(it.site||'')+'</span> <span class="small muted">'+esc(it.money||'')+'</span> <button class="x" data-pcopy="1">광고문구 복사</button> <a class="x" href="'+esc(it.url)+'" target="_blank" rel="noopener">네이버에서 열기</a></div><div class="kv">';
+    COLS.forEach(function(k){ if(k==='매물번호') return; var v=r[k]; if(v===''||v==null) return; h+='<div'+(k==='세부주소'||k==='도로명'||k==='중개사무소'?' class="big"':'')+'><b>'+esc(LABEL[k])+'</b>'+esc(v)+'</div>'; });
+    return h+'</div>'+(it.memo?'<div class="small muted" style="margin-top:6px;white-space:pre-wrap">'+esc(it.memo)+'</div>':'')+'</div>';
+  }
+  async function pick(url, tr){
+    document.querySelectorAll('.na-table tr.pick.on').forEach(function(x){x.classList.remove('on')}); if(tr) tr.classList.add('on');
+    $('na_pick').innerHTML='<div class="small muted" style="padding:14px">정리 중… (네이버 상세 + 건축물대장, 5초 안팎)</div>';
     try{
-      var r=await fetch('/admin/naverad/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:q,start_page:startPage||1})}).then(function(x){return x.json()});
+      var r=await fetch('/admin/naverad/parse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({urls:[url]})}).then(function(x){return x.json()});
+      var it=(r.items||[])[0]; if(!it){ $('na_pick').innerHTML='<div class="na-card err">응답이 비었습니다</div>'; return; }
+      $('na_pick').innerHTML=cardHtml(it,'선택한 매물');
+      var b=$('na_pick').querySelector('[data-pcopy]'); if(b) b.onclick=function(){ navigator.clipboard.writeText(adText(it)).then(function(){ $('na_fmsg').textContent='광고문구를 복사했습니다'; }); };
+      if(it.ok && !ITEMS.some(function(x){return x.ok&&x.no===it.no})){ ITEMS.push(it); paint(); $('na_msg').textContent='지번 찾기에서 '+(it.row['세부주소']||it.no)+' 추가 — 위 목록에서 DB 저장·엑셀·광고문구 가능'; }
+    }catch(e){ $('na_pick').innerHTML='<div class="na-card err">'+esc(e.message)+'</div>'; }
+  }
+  function naRow(x, kind){
+    var tag = kind==='exact' ? (x.likely?'<span class="tag ok" title="주소 비공개지만 바로 그 자리(15m 안)에 찍힌 매물">위치 일치</span>':'<span class="tag ok">지번 일치</span>') : '<span class="tag q">근처 '+(x.dist==null?'?':x.dist)+'m'+(x.jibun?'':' · 지번 비공개')+'</span>';
+    return '<tr class="pick" data-url="'+esc(x.url)+'" title="누르면 이 매물을 바로 정리합니다"><td>'+tag+'</td><td>'+esc(x.no)+'</td><td>'+esc(x.name)+(x.feature?'<div class="small muted" style="white-space:normal;max-width:220px">'+esc(x.feature)+'</div>':'')+'</td><td>'+esc(x.type)+' '+esc(x.trade)+'</td><td>'+esc(x.price)+(x.rent?' / '+esc(x.rent):'')+'</td><td>'+esc(x.floor)+'</td><td>'+esc(x.area1)+'/'+esc(x.area2)+'</td><td>'+esc(x.jibun||'')+'</td><td>'+esc(x.realtor)+'</td><td>'+esc(x.confirm)+'</td></tr>';
+  }
+  async function find(){
+    var q=$('na_q').value.trim(); if(q.length<2) return; $('na_find').disabled=true; $('na_fmsg').textContent='찾는 중… (우리 DB → 네이버 그 자리 매물 → 지번 확인, 5~15초)'; $('na_fout').innerHTML='';
+    try{
+      var r=await fetch('/admin/naverad/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:q})}).then(function(x){return x.json()});
       if(r.error){ $('na_fmsg').textContent=r.error; $('na_find').disabled=false; return; }
-      if(r.naver&&!r.naver.error){ var seen={}; ACC.exact.concat(ACC.near).forEach(function(x){seen[x.no]=1}); (r.naver.exact||[]).forEach(function(x){ if(!seen[x.no]){seen[x.no]=1;ACC.exact.push(x);} }); (r.naver.near||[]).forEach(function(x){ if(!seen[x.no]){seen[x.no]=1;ACC.near.push(x);} }); ACC.pages+=r.naver.pages||0; ACC.scanned+=r.naver.scanned||0; r.naver.exact=ACC.exact; r.naver.near=ACC.near; r.naver.pages=ACC.pages; r.naver.scanned=ACC.scanned; }
-      var h='<h3 style="font-size:14px;margin:8px 0 4px">우리 DB <span class="tag db">'+(r.db||[]).length+'건</span></h3>';
-      if((r.db||[]).length){ h+='<table class="na-table"><tr><th>지번·호수</th><th>임대인 연락처</th><th>임차인·관리 등</th><th>종류</th><th>거래</th><th>금액</th><th>이름</th><th>올린 날</th></tr>'; r.db.forEach(function(x){ h+='<tr><td>'+esc(x.addr)+'</td><td><b>'+esc(x.phone)+'</b></td><td>'+esc(x.contacts)+'</td><td>'+esc(x.kind)+'</td><td>'+esc(x.deal)+'</td><td>'+esc(x.price)+'</td><td>'+esc(x.title)+'</td><td>'+esc(x.last_at)+'</td></tr>'; }); h+='</table>'; } else h+='<div class="small muted">없음</div>';
-      var n=r.naver||{};
-      h+='<h3 style="font-size:14px;margin:14px 0 4px">네이버 <span class="tag ok">지번 일치 '+(n.exact||[]).length+'건</span> <span class="tag q">근처 '+(n.near||[]).length+'건</span></h3>';
+      var n=r.naver||{}, ex=n.exact||[], nr=n.near||[];
+      var h='';
+      if(!n.error){ h+='<div class="cnt"><span>네이버에 <b>'+ex.length+'</b>건 올라와 있음</span><span class="b2">부동산 <b>'+(n.broker_count||0)+'</b>곳</span><span class="small muted">근처 다른 지번 '+nr.length+'건 · '+esc(n.cortar||'')+' · 목록 '+(n.pages||0)+'쪽 '+(n.scanned||0)+'건 중 확인 '+(n.checked||0)+'건물'+(n.blocked?' · '+esc(n.blocked):'')+(n.ambiguous?' · 같은 이름의 동이 여럿: '+esc(n.ambiguous.join(', '))+' → 구 이름을 붙여주세요':'')+'</span></div>'; }
+      h+='<h3 style="font-size:14px;margin:8px 0 4px">우리 DB <span class="tag db">'+(r.db||[]).length+'건</span></h3>';
+      if((r.db||[]).length){ h+='<table class="na-table"><tr><th>지번·호수</th><th>임대인 연락처</th><th>임차인·관리 등</th><th>종류</th><th>거래</th><th>금액</th><th>이름</th><th>출처</th><th>올린 날</th></tr>'; r.db.forEach(function(x){ h+='<tr><td>'+esc(x.addr)+'</td><td>'+esc(x.phone)+'</td><td>'+esc(x.contacts)+'</td><td>'+esc(x.kind)+'</td><td>'+esc(x.deal)+'</td><td>'+esc(x.price)+'</td><td>'+esc(x.title)+'</td><td class="small muted">'+esc(x.site)+' · '+esc(x.file||'')+'</td><td>'+esc(x.last_at)+'</td></tr>'; }); h+='</table>'; }
+      h+='<h3 style="font-size:14px;margin:14px 0 4px">네이버 <span class="tag ok">지번 일치 '+ex.length+'건</span> <span class="tag q">근처 '+nr.length+'건</span></h3>';
       if(n.error){ h+='<div style="color:var(--danger);font-size:13px">'+esc(n.error)+'</div>'; }
       else{
-        h+='<div class="small muted">'+esc(n.cortar)+' · 목록 '+n.pages+'쪽 '+n.scanned+'건 훑음'+(n.blocked?' · '+esc(n.blocked):'')+(n.ambiguous?' · 같은 이름의 동이 여럿: '+esc(n.ambiguous.join(', '))+' → 구 이름을 붙여주세요':'')+(n.more_pages?' · <button class="x" id="na_more" data-next="'+n.next_page+'">목록이 더 있습니다 — 다음 800건 더 훑기</button>':' · 목록 끝까지 훑었습니다')+'</div>';
-        var all=(n.exact||[]).map(function(x){return naRow(x,'exact')}).concat((n.near||[]).map(function(x){return naRow(x,'near')}));
+        var all=ex.map(function(x){return naRow(x,'exact')}).concat(nr.map(function(x){return naRow(x,'near')}));
         if(all.length) h+='<table class="na-table"><tr><th></th><th>매물번호</th><th>매물명</th><th>종류·거래</th><th>금액</th><th>층</th><th>공급/전용</th><th>지번(확인)</th><th>중개사</th><th>확인일</th></tr>'+all.join('')+'</table>';
-        else h+='<div class="small muted">지금 네이버에는 이 지번 근처 매물이 없습니다.</div>';
+        else h+='<div class="small muted">지금 네이버에는 이 지번 자리의 매물이 없습니다.</div>';
       }
-      $('na_fout').innerHTML=h; $('na_fmsg').textContent='완료 — 지번 일치 '+(n.exact||[]).length+'건';
-      var mb=$('na_more'); if(mb) mb.onclick=function(){ find(+mb.dataset.next); };
+      $('na_fout').innerHTML=h; $('na_fmsg').textContent='완료 — 네이버 '+ex.length+'건 (부동산 '+(n.broker_count||0)+'곳)'+(nr.length?' · 근처 '+nr.length+'건':'');
+      document.querySelectorAll('#na_fout tr.pick').forEach(function(tr){ tr.onclick=function(){ pick(tr.dataset.url, tr); }; });
     }catch(e){ $('na_fmsg').textContent='오류: '+e.message; }
     $('na_find').disabled=false;
   }
-  $('na_find').onclick=function(){ find(1); }; $('na_q').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); find(1); } });
+  $('na_find').onclick=find; $('na_q').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); find(); } });
 })();
 `;
+

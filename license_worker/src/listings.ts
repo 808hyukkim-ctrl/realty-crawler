@@ -214,6 +214,47 @@ listings.post("/admin/listings/upload", async (c) => {
   return c.json({ success: true, ...r });
 });
 
+// 텍스트 붙여넣기: 한 줄 = 매물 하나. 지번·호수 / 연락처 / 거래·금액 / 종류 / 이름 을 알아서 찾는다 (2026-10-09)
+const KIND_RX = /아파트|오피스텔|상가주택|빌라|다세대|다가구|단독|주택|상가|사무실|원룸|투룸|쓰리룸|토지|건물|공장|창고|지식산업센터|근생|점포/;
+export function parsePastedText(text: string): { rows: Record<string, string>[]; skipped: string[] } {
+  const rows: Record<string, string>[] = []; const skipped: string[] = [];
+  for (const line0 of String(text || "").split(/\r?\n/)) {
+    const line = line0.replace(/\t+/g, " ").replace(/\s+/g, " ").trim();
+    if (!line) continue;
+    let t = " " + line + " ";
+    const row: Record<string, string> = {};
+    const phones: string[] = [];
+    t = t.replace(/(0\d{1,2})[-. ]?(\d{3,4})[-. ]?(\d{4})(?!\d)/g, (_m, a, b, cc) => { phones.push(`${a}-${b}-${cc}`); return " "; });
+    const addr = t.match(/([가-힣]{1,10}(?:동|리|가|읍|면))\s*(산\s*)?(\d{1,4}(?:-\d{1,4})?)(?:번지)?(?:\s*((?:[A-Za-z가-힣0-9]{1,6}동\s*)?(?:지하\s*)?(?:B?\d{1,4}호|\d{1,3}층(?:\s*\d{1,4}호)?)))?/);
+    if (!addr) { skipped.push(line); continue; }
+    row["지번·호수"] = `${addr[1]} ${addr[2] ? "산" : ""}${addr[3]}${addr[4] ? " " + addr[4].replace(/\s+/g, " ") : ""}`.replace(/\s+/g, " ").trim();
+    t = t.replace(addr[0], " ");
+    const deal = t.match(/매매|전세|월세|반전세|단기임대|단기/); if (deal) { row["거래"] = deal[0] === "단기" ? "단기임대" : deal[0]; t = t.replace(deal[0], " "); }
+    const price = t.match(/(\d[\d,]*(?:억)?\s*\d*[\d,]*(?:천|만)?\s*\/\s*\d[\d,]*(?:만)?)|(\d+억(?:\s*\d[\d,]*(?:천|만)?)?)|(\d{1,3}(?:,\d{3})+|\d{4,})(?:\s*만원?)?/);
+    if (price) { row["금액"] = price[0].trim(); t = t.replace(price[0], " "); }
+    const kind = t.match(KIND_RX); if (kind) { row["종류"] = kind[0]; t = t.replace(kind[0], " "); }
+    // 번호: 앞에 '임차인/세입자/관리/중개' 가 붙은 번호는 기타, 그 밖에 첫 번호가 임대인
+    const others: string[] = []; let owner = "";
+    for (const p of phones) { const idx = line.indexOf(p.replace(/-/g, "")) >= 0 ? line.indexOf(p.replace(/-/g, "")) : line.indexOf(p); const before = line.slice(Math.max(0, idx - 8), idx); if (/임차|세입|관리|중개|부동산|기타/.test(before) || (owner && true)) { if (!owner && !/임차|세입|관리|중개|부동산|기타/.test(before)) owner = p; else others.push((before.match(/임차인|세입자|관리|중개|부동산/) || [""])[0] + (before.match(/임차인|세입자|관리|중개|부동산/) ? " " : "") + p); } else owner = p; }
+    if (!owner && phones.length) owner = phones[0];
+    if (owner) row["임대인 연락처"] = owner;
+    if (others.length) row["기타 연락처"] = others.join(" ");
+    const name = t.match(/([가-힣]{2,4})\s*(사장님|사장|대표님|대표|소유주|임대인|님|씨)/); if (name) { row["이름"] = name[1] + (name[2] ? " " + name[2] : ""); t = t.replace(name[0], " "); }
+    const rest = t.replace(/임차인|세입자|관리|중개|부동산|기타|연락처|번호|:|·|\|/g, " ").replace(/\s+/g, " ").trim();
+    if (rest) row["메모"] = rest;
+    rows.push(row);
+  }
+  return { rows, skipped };
+}
+listings.post("/admin/listings/paste", async (c) => {
+  const body: any = await c.req.json().catch(() => ({}));
+  const { rows, skipped } = parsePastedText(String(body.text || ""));
+  if (!rows.length) return c.json({ success: false, message: "지번(예: 논현동 124-12)이 들어 있는 줄이 없습니다.", skipped });
+  const label = "텍스트 붙여넣기 " + kst(nowIso()).slice(0, 16);
+  const r = await ingest(c.env.DB, c.env.ADMIN_USER || "admin", s(body.site) || "임대인", label, rows.slice(0, 500));
+  return c.json({ success: true, ...r, parsed: rows.length, skipped, preview: rows.slice(0, 5) });
+});
+
 // 수기 한 줄
 listings.post("/admin/listings/manual", async (c) => {
   const form = await c.req.formData();
@@ -346,6 +387,7 @@ listings.get("/admin/listings", async (c) => {
       <td class="small ttl">${r.title ?? ""}</td>
       <td class="small memo ed" data-f="memo" title="클릭해서 고치기">${r.memo ?? ""}</td>
       <td class="mono small" title="처음 ${kst(r.first_at)} · ${r.seen}회 · ${siteLabel(r.site)} · ${r.username} · ${r.file ?? ""}">${kst(r.last_at)}${r.seen > 1 ? html` <span class="seen">×${r.seen}</span>` : ""}</td>
+      <td class="small muted src" title="${r.username} 계정이 올림"><a href="/admin/listings?${raw(qs({ site: "", q: "", from: "", to: "", user: "", file: r.file ?? "" }))}" title="이 파일에서 온 줄만 보기">${r.file ?? ""}</a><div>${siteLabel(r.site)}</div></td>
       <td class="nowrap"><details class="det"><summary>상세</summary><div class="detbox">${r.url ? html`<div class="kv"><b>링크</b><span><a href="${r.url}" target="_blank" rel="noopener">${r.url}</a></span></div>` : ""}${detail}</div></details>
         <form method="post" action="/admin/listings/${r.id}/delete" class="inline-form" onsubmit="return confirm('이 줄을 삭제할까요?')"><button type="submit" class="x" title="삭제">✕</button></form></td>
     </tr>`;
@@ -388,6 +430,13 @@ listings.get("/admin/listings", async (c) => {
       <button type="button" class="btn btn-primary" id="upgo">올리기</button>
       <span class="small muted" id="upmsg">열 이름 줄은 자동으로 찾습니다(위에 제목 줄이 있어도 됨). 지번·주소와 임대인 연락처는 맨 앞에, 임차인·세입자·관리·중개 번호(010·02·0502…)는 그 옆 칸에 정리됩니다. 같은 행을 다시 올리면 중복 없이 갱신됩니다.</span>
     </div>
+    <div class="upbox pastebox">
+      <b>텍스트 붙여넣기</b>
+      <input type="text" id="pssite" placeholder="구분" value="임대인" style="width:90px">
+      <textarea id="pstext" rows="4" placeholder="카톡·메모·엑셀에서 복사한 글을 그대로 붙여넣으세요. 한 줄 = 매물 하나.&#10;예) 논현동 124-12 302호 010-1234-5678 월세 5000/150 빌라 김사장님&#10;    역삼동 777-2 2층 02-555-1234 임차인 010-2222-3333 매매 15억 상가"></textarea>
+      <button type="button" class="btn btn-primary" id="psgo">넣기</button>
+      <span class="small muted" id="psmsg">지번·호수, 임대인 연락처(첫 번호)·그 밖의 번호, 거래·금액, 종류, 이름을 줄마다 알아서 찾아 칸에 넣고, 못 알아본 글은 메모에 남깁니다. 지번이 없는 줄은 건너뜁니다.</span>
+    </div>
     <form class="search-form lf" method="get" id="lf">
       <select name="site"><option value="">전체 구분</option>${siteOpts}</select>
       <select name="user"><option value="">전체 계정</option>${userOpts}</select>
@@ -403,8 +452,8 @@ listings.get("/admin/listings", async (c) => {
     <div id="xlmsg" class="small muted" style="margin:-8px 0 12px"></div>
     ${recent.length ? html`<div class="recent"><b>최근 올린 파일</b> ${recent.map((r: any) => html`<a class="chip" href="/admin/listings?${raw(qs({ site: "", q: "", from: "", to: "", user: "", file: r.file }))}" title="${r.username} · ${kst(r.t)}">${siteLabel(r.site)} · ${r.file} <em>${r.n}</em></a>`)}</div>` : ""}
     <table class="user-table lt">
-      <thead><tr><th>지번·호수</th><th>임대인 연락처</th><th>임차인·관리 등</th><th>종류</th><th>거래</th><th>금액</th><th>이름·제목</th><th>메모</th><th>올린 날</th><th></th></tr></thead>
-      <tbody>${rows.length ? rows : html`<tr><td colspan="10" class="empty">${total ? "이 페이지에는 없습니다." : "아직 비어 있습니다. 위에서 수기로 넣거나 엑셀을 올리면 쌓입니다."}</td></tr>`}</tbody>
+      <thead><tr><th>지번·호수</th><th>임대인 연락처</th><th>임차인·관리 등</th><th>종류</th><th>거래</th><th>금액</th><th>이름·제목</th><th>메모</th><th>올린 날</th><th>출처 파일</th><th></th></tr></thead>
+      <tbody>${rows.length ? rows : html`<tr><td colspan="11" class="empty">${total ? "이 페이지에는 없습니다." : "아직 비어 있습니다. 위에서 수기로 넣거나 엑셀을 올리면 쌓입니다."}</td></tr>`}</tbody>
     </table>
     <div class="pager">${page > 1 ? pageLink(page - 1, "‹ 이전") : ""}<span class="small">${page} / ${pages} 페이지 · ${total}건</span>${page < pages ? pageLink(page + 1, "다음 ›") : ""}</div>
     <form method="post" action="/admin/listings/delete" id="delf" style="display:none">
@@ -490,6 +539,9 @@ const LT_STYLE = `
 .pager{display:flex;gap:12px;align-items:center;justify-content:center;margin:16px 0}
 .upbox{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:13px}
 .upbox b{color:var(--accent-dark)}
+.pastebox textarea{flex:1;min-width:280px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);font-size:12.5px;font-family:inherit;margin:0}
+.lt td.src{max-width:160px;white-space:normal;word-break:break-all;font-size:11.5px;line-height:1.3}
+.lt td.src a{color:var(--accent-dark)}
 .upbox input[type=text]{width:140px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);margin:0;display:inline-block}
 .upbox input[type=file]{color:var(--muted);font-size:12px;display:inline-block;width:auto;margin:0}
 .status-pink{background:rgba(255,92,154,.15);color:var(--accent-dark)}
@@ -529,6 +581,16 @@ const LT_JS = `
     for(var j=0;j<sc.length;j++){ if(sc[j]>=3 && sc[j]>=mx*0.6) return j; }
     return 0;
   }
+  $('psgo').onclick=async function(){
+    var text=$('pstext').value; if(!text.trim()){ $('psmsg').textContent='붙여넣을 글이 없습니다'; return; }
+    $('psgo').disabled=true; $('psmsg').textContent='정리해서 넣는 중…';
+    try{
+      var r=await fetch('/admin/listings/paste',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({site:$('pssite').value,text:text})}).then(function(x){return x.json()});
+      if(!r.success){ $('psmsg').textContent=r.message||'실패'; $('psgo').disabled=false; return; }
+      $('psmsg').textContent='넣었습니다: 추가 '+r.inserted+'건 · 갱신 '+r.updated+'건'+(r.skipped&&r.skipped.length?' · 지번 없어 건너뜀 '+r.skipped.length+'줄':'')+' — 잠시 뒤 표가 새로 뜹니다';
+      setTimeout(function(){ location.href='/admin/listings?file='+encodeURIComponent('텍스트 붙여넣기'); },900);
+    }catch(e){ $('psmsg').textContent='오류: '+e.message; $('psgo').disabled=false; }
+  };
   $('upgo').onclick=async function(){
     var files=$('upfile').files; var site=$('upsite').value.trim(); var msg=$('upmsg');
     if(!files.length){ msg.textContent='엑셀 파일을 고르세요.'; return; }
