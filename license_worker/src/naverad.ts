@@ -301,7 +301,7 @@ const NA_JS = `
     if(r['해당층']!==''||r['전체층']!=='') L.push('층: '+(r['해당층']||'-')+'/'+(r['전체층']||'-')); if(r['공급/계약/대지']||r['전용/연']) L.push('면적: 공급 '+(r['공급/계약/대지']||'-')+'㎡ / 전용 '+(r['전용/연']||'-')+'㎡');
     if(r['사용승인일']) L.push('사용승인일: '+r['사용승인일']); if(r['총주차대수']) L.push('총주차대수: '+r['총주차대수']+(r['세대당주차']?' (세대당 '+r['세대당주차']+')':'')); if(r['방수']!==''||r['화장실수']!=='') L.push('방 '+(r['방수']||'-')+' / 욕실 '+(r['화장실수']||'-'));
     if(r['방향']) L.push('향: '+r['방향']); if(r['입주가능일']) L.push('입주: '+r['입주가능일']); if(r['관리비']) L.push('관리비: '+r['관리비']); L.push(r['매물번호']||''); return L.join('\\n'); }
-  function links(){ var out=[],seen={}; $('na_links').value.split(/[\\s,;]+/).forEach(function(t){ t=t.trim(); if(/^(https?:\\/\\/|\\d{7,12}$)/.test(t)&&!seen[t]){seen[t]=1;out.push(t);} }); return out; }
+  function links(){ var out=[],seen={}; $('na_links').value.split(/\\s+|[,;]+(?=https?:)/).forEach(function(t){ t=t.trim(); if(/^(https?:\\/\\/|\\d{7,12}$)/.test(t)&&!seen[t]){seen[t]=1;out.push(t);} }); return out; }
   function paint(){
     var h=''; ITEMS.forEach(function(it,i){
       if(!it.ok){ h+='<div class="na-card err"><div class="ttl"><b>'+(i+1)+'.</b> <span class="small">'+esc(it.url)+'</span></div><div style="color:var(--danger);font-size:13px">'+esc(it.error)+'</div></div>'; return; }

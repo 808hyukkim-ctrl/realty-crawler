@@ -285,7 +285,7 @@ const PH_JS = `
   $('fixh').onchange=function(){ $('h').disabled=!this.checked; };
   function log(s){ var el=$('log'); el.textContent+=s+'\\n'; el.scrollTop=el.scrollHeight; }
   function setBar(p){ $('bar').style.width=Math.max(0,Math.min(100,p))+'%'; }
-  function links(){ var out=[],seen={}; $('links').value.split(/[\\s,;]+/).forEach(function(t){ t=t.trim(); if(/^https?:\\/\\//.test(t)&&!seen[t]){seen[t]=1;out.push(t);} }); return out; }
+  function links(){ var out=[],seen={}; $('links').value.split(/\\s+|[,;]+(?=https?:)/).forEach(function(t){ t=t.trim(); if(/^https?:\\/\\//.test(t)&&!seen[t]){seen[t]=1;out.push(t);} }); return out; }
   function loadImg(url, ref){ return new Promise(function(ok,bad){ var im=new Image(); im.onload=function(){ok(im)}; im.onerror=function(){bad(new Error('load'))}; im.src='/admin/photos/img?u='+encodeURIComponent(url)+(ref?'&r='+encodeURIComponent(ref):''); }); }
   function resize(im, w, h, q){ var cw=w, ch=h>0?h:Math.max(1,Math.round(im.naturalHeight*w/im.naturalWidth)); var c=document.createElement('canvas'); c.width=cw; c.height=ch; var x=c.getContext('2d'); x.imageSmoothingQuality='high';
     if(h>0){ var s=Math.max(cw/im.naturalWidth, ch/im.naturalHeight); var dw=im.naturalWidth*s, dh=im.naturalHeight*s; x.drawImage(im,(cw-dw)/2,(ch-dh)/2,dw,dh); } else { x.drawImage(im,0,0,cw,ch); }

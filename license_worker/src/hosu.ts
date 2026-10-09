@@ -201,7 +201,7 @@ const HS_JS = `
   var $=function(i){return document.getElementById(i)};
   var esc=function(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')};
   var ITEMS=[];
-  function links(){ var out=[],seen={}; $('hs_links').value.split(/[\\s,;]+/).forEach(function(t){ t=t.trim(); if(/^(https?:\\/\\/|\\d{7,12}$)/.test(t)&&!seen[t]){seen[t]=1;out.push(t);} }); return out; }
+  function links(){ var out=[],seen={}; $('hs_links').value.split(/\\s+|[,;]+(?=https?:)/).forEach(function(t){ t=t.trim(); if(/^(https?:\\/\\/|\\d{7,12}$)/.test(t)&&!seen[t]){seen[t]=1;out.push(t);} }); return out; }
   function tag(st){ return st==='확정'?'<span class="tag ok">확정</span>':st==='추정'?'<span class="tag q">추정 (면적 근사)</span>':/^후보/.test(st)?'<span class="tag q">'+esc(st)+'</span>':'<span class="tag no">'+esc(st||'확인불가')+'</span>'; }
   function paint(){
     var h='<table class="hs-table"><tr><th>#</th><th>매물</th><th>동 · 층/총층 · 전용</th><th>결과</th><th>호수</th><th>근거</th></tr>';
