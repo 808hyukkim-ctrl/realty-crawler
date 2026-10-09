@@ -103,7 +103,7 @@ async function parseOne(c: any, url: string): Promise<any> {
     "사용승인일": fl.approval || (ledger && ledger.approval) || "", "총주차대수": fl.parking || (ledger && ledger.parking) || "", "세대당주차": s(fl.parkingPer),
     "중개사무소": s(j.realtor), "중개사전화": s(j.realtor_phone), "출처": s(j._source || (no ? "naver" : "")),
   } as Record<string, any>;
-  return { ok: true, url, no, site: s(j._source), row, money: moneyText(deal, j.price, j.deposit, j.rent), photos: Array.isArray(j.photos) ? j.photos.length : 0, memo: s(j.memo).slice(0, 400), fin: fl._status ? `fin.land ${fl._status}` : "", ledger };
+  return { ok: true, url, no, site: s(j._source), row, money: moneyText(deal, j.price, j.deposit, j.rent), photos: Array.isArray(j.photos) ? j.photos.length : 0, memo: s(j.memo).slice(0, 2500), fin: fl._status ? `fin.land ${fl._status}` : "", ledger };
 }
 naverad.post("/admin/naverad/parse", async (c) => {
   const body: any = await c.req.json().catch(() => ({}));
@@ -257,6 +257,9 @@ const NA_STYLE = `
 .bsec td.r,.bsec th.r{text-align:right}
 .bsec tr.hit td{background:#fff0f6;font-weight:700}
 .bnote{font-size:11.5px;color:var(--muted)}
+.golink{color:#03c75a!important;font-weight:800}
+.na-card .desc{margin-top:8px;font-size:12.5px;line-height:1.55;background:var(--soft);border-radius:8px;padding:8px 10px}
+.na-card .desc b{display:block;color:var(--accent-dark);margin-bottom:4px}
 .na-table tr.pick{cursor:pointer}
 .na-table tr.pick:hover td{background:#fff0f6}
 .na-table tr.pick.on td{background:#ffe3ee}
@@ -341,11 +344,24 @@ const NA_JS = `
   $('na_copyall').onclick=function(){ var t=ITEMS.filter(function(x){return x.ok&&x.sel!==false}).map(adText).join('\\n\\n----------\\n\\n'); navigator.clipboard.writeText(t).then(function(){ $('na_msg').textContent='전체 광고문구를 복사했습니다'; }); };
 
   // ── 지번 검색 (줄을 누르면 그 매물을 자동 정리해 오른쪽에 + 위 목록에 추가)
-  function cardHtml(it, title){
+  // 정리 서버 memo 에서 글 내용만: 앞의 요약 줄([네이버]·거래:·층:·전용·등록일·향·방·입주), 중개사 이름/전화 줄, '<중개대상물의 표시…>' 이후를 뺀다
+  function descOnly(memo){
+    var lines=String(memo||'').replace(/\\r/g,'').split('\\n'), out=[], started=false;
+    for(var i=0;i<lines.length;i++){ var t=lines[i].trim();
+      if(/^<\\s*중개대상물/.test(t)) break;
+      if(!started){ if(!t||/^\\[/.test(t)||/^(거래|층|전용|공급|네이버 등록일|등록일|확인일|향|방|욕실|입주|관리비|면적|주차|해당층|총층)\\s*[:：]?\\s*/.test(t)&&t.length<60||/^전용\\s*\\d/.test(t)) continue; started=true; }
+      if(/공인중개사|부동산중개|중개법인|중개사무소|☎|\\d{2,3}-\\d{3,4}-\\d{4}|개설등록번호/.test(t)) continue;
+      out.push(t);
+    }
+    return out.join('\\n').replace(/\\n{3,}/g,'\\n\\n').trim();
+  }
+  var HIDE_PICK={'중개사무소':1,'중개사전화':1,'출처':1,'매물번호':1};
+  function cardHtml(it, title, pickMode){
     if(!it.ok) return '<div class="na-card err"><div class="ttl"><b>'+esc(title||'')+'</b> <span class="small">'+esc(it.url)+'</span></div><div style="color:var(--danger);font-size:13px">'+esc(it.error)+'</div></div>';
-    var r=it.row, h='<div class="na-card"><div class="ttl"><b>'+esc(title||r['세부주소']||r['매물명']||it.url)+'</b> <span class="tag db">'+esc(it.site||'')+'</span> <span class="small muted">'+esc(it.money||'')+'</span> <button class="x" data-pcopy="1">광고문구 복사</button> <a class="x" href="'+esc(it.url)+'" target="_blank" rel="noopener">네이버에서 열기</a></div><div class="kv">';
-    COLS.forEach(function(k){ if(k==='매물번호') return; var v=r[k]; if(v===''||v==null) return; h+='<div'+(k==='세부주소'||k==='도로명'||k==='중개사무소'?' class="big"':'')+'><b>'+esc(LABEL[k])+'</b>'+esc(v)+'</div>'; });
-    return h+'</div>'+(it.memo?'<div class="small muted" style="margin-top:6px;white-space:pre-wrap">'+esc(it.memo)+'</div>':'')+'</div>';
+    var r=it.row, h='<div class="na-card"><div class="ttl"><b>'+esc(title||r['세부주소']||r['매물명']||it.url)+'</b> <span class="tag db">'+esc(it.site||'')+'</span> <span class="small muted">'+esc(it.money||'')+'</span> <button class="x" data-pcopy="1">광고문구 복사</button> <a class="x golink" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+(pickMode?'매물 링크로 바로가기 ↗':'네이버에서 열기')+'</a></div><div class="kv">';
+    COLS.forEach(function(k){ if(k==='매물번호') return; if(pickMode&&HIDE_PICK[k]) return; var v=r[k]; if(v===''||v==null) return; h+='<div'+(k==='세부주소'||k==='도로명'||k==='중개사무소'?' class="big"':'')+'><b>'+esc(LABEL[k])+'</b>'+esc(v)+'</div>'; });
+    var memo=pickMode?descOnly(it.memo):it.memo;
+    return h+'</div>'+(memo?'<div class="desc"><b>설명</b><div style="white-space:pre-wrap">'+esc(memo)+'</div></div>':'')+'</div>';
   }
   async function pick(url, tr){
     document.querySelectorAll('.na-table tr.pick.on').forEach(function(x){x.classList.remove('on')}); if(tr) tr.classList.add('on');
@@ -353,11 +369,13 @@ const NA_JS = `
     try{
       var r=await fetch('/admin/naverad/parse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({urls:[url]})}).then(function(x){return x.json()});
       var it=(r.items||[])[0]; if(!it){ $('na_pick').innerHTML='<div class="na-card err">응답이 비었습니다</div>'; return; }
-      $('na_pick').innerHTML=cardHtml(it,'선택한 매물')+(it.ok?'<div class="na-bar" style="margin:6px 0 0"><button class="btn btn-primary" data-psave="1">이 매물 DB에 저장</button><button class="btn" data-pup="1">위 정리 목록에도 넣기</button><span class="small muted" id="na_pmsg"></span></div>':'');
+      $('na_pick').innerHTML=cardHtml(it,'선택한 매물',true)+(it.ok?'<div class="na-bar" style="margin:6px 0 0"><button class="btn btn-primary" data-psave="1">이 매물 DB에 저장</button><button class="btn" data-pup="1">위 정리 목록에도 넣기</button><span class="small muted" id="na_pmsg"></span></div>':'');
       var b=$('na_pick').querySelector('[data-pcopy]'); if(b) b.onclick=function(){ navigator.clipboard.writeText(adText(it)).then(function(){ $('na_pmsg').textContent='광고문구를 복사했습니다'; }); };
       var sv=$('na_pick').querySelector('[data-psave]'); if(sv) sv.onclick=async function(){ sv.disabled=true; try{ var rr=await fetch('/admin/naverad/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows:[it.row]})}).then(function(x){return x.json()}); $('na_pmsg').textContent=rr.success?('DB 저장: 추가 '+rr.inserted+'건 · 갱신 '+rr.updated+'건'):('저장 실패: '+(rr.message||'')); }catch(e){ $('na_pmsg').textContent='저장 실패: '+e.message; } sv.disabled=false; };
       var up=$('na_pick').querySelector('[data-pup]'); if(up) up.onclick=function(){ if(!ITEMS.some(function(x){return x.ok&&x.no===it.no})){ ITEMS.push(it); paint(); } $('na_pmsg').textContent='위 링크 자동 정리 목록에 넣었습니다'; };
-      var hoM=String(it.ok&&it.row['세부주소']||'').match(/(\d{1,4}[A-Za-z]?)호\s*$/); if(hoM&&BL.addr) loadBldg(BL.addr, hoM[1]);
+      var sa=String(it.ok&&it.row['세부주소']||''); var hoM=sa.match(/(\\d{1,4}[A-Za-z]?)호\\s*$/);
+      var jb=(sa.match(/^(.*?[가-힣]+(?:동|리|가)\\s*(?:산\\s*)?\\d{1,4}(?:-\\d{1,4})?)/)||[])[1]||'';
+      if(jb||BL.addr) loadBldg((jb||BL.addr).replace(/^서울시/,'서울특별시'), hoM?hoM[1]:'');
     }catch(e){ $('na_pick').innerHTML='<div class="na-card err">'+esc(e.message)+'</div>'; }
   }
   // ── 건축물대장 패널 (엔진 /building: 요약 · 호실 · 층별 현황 · 주변 정보)
