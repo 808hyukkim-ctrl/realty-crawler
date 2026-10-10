@@ -32,7 +32,7 @@ const DURATION_PRESETS: Record<string, [string, number | null]> = {
 };
 
 // 계정별 기능: 수집기(crawl) / 사진950(photo). 둘 다 체크면 둘 다, 하나만 체크면 그것만 쓸 수 있다 (2026-10-02)
-const FEATURES: [string, string][] = [["crawl", "매물 수집"], ["photo", "사진950"], ["db", "DB 조회"], ["daangn", "당근 광고"], ["brief", "손님 브리핑"]];   // db = 직원용 /db 지번 조회 (2026-10-08)
+const FEATURES: [string, string][] = [["crawl", "매물 수집"], ["photo", "사진950"], ["db", "DB 조회"], ["daangn", "당근 광고"], ["brief", "손님 브리핑"], ["naverad", "네이버 광고정리"]];   // db = 직원용 /db 지번 조회 (2026-10-08)
 let featuresReady = false;
 async function ensureFeatures(db: D1Database) {
   if (featuresReady) return;
@@ -60,7 +60,7 @@ async function hmacHex(secret: string, msg: string): Promise<string> {
   return toHex(new Uint8Array(sig));
 }
 const logToken = (secret: string, username: string) => hmacHex(secret, "log:" + username);
-const APP_LABEL: Record<string, string> = { crawl: "매물 수집기", photo: "사진950", db: "DB 조회", daangn: "당근 광고", brief: "손님 브리핑" };
+const APP_LABEL: Record<string, string> = { crawl: "매물 수집기", photo: "사진950", db: "DB 조회", daangn: "당근 광고", brief: "손님 브리핑", naverad: "네이버 광고정리" };
 
 const featureList = (s: any) => String(s ?? "crawl").split(",").map((x) => x.trim()).filter(Boolean);
 const featureLabel = (key: string) => (FEATURES.find(([k]) => k === key) || [key, key])[1];

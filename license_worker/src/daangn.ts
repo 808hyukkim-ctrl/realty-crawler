@@ -16,6 +16,7 @@ import { collectPhotos, proxyImage, getSetting, setSetting } from "./photos";
 import { matchUnits } from "./listings";
 import { staffLookup } from "./staffdb";
 import { briefApi } from "./brief";   // 손님 브리핑 (포털 탭, 2026-10-10)
+import { naverad } from "./naverad";   // 네이버 광고정리 (포털 탭, 2026-10-10)
 
 type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string; ENGINE_URL: string; ENGINE_SECRET: string; LOUNGE_INTRANET_API?: string };
 export const daangn = new Hono<{ Bindings: Bindings }>();
@@ -218,6 +219,14 @@ async function apiHandler(c: any) {
     return json(c, { label: me.username, features: me.features, scopes: hasDaangn ? ["create", "building"] : [], create: { pending: 0 }, review: { listings: 0, signups: 0 },
       daangn: s ? { connected: true, phone: s.phone ?? "", name: s.name ?? "", broker: s.broker ?? "", connected_at: s.connected_at } : { connected: false }, uploads_active: cnt?.n ?? 0,
       guard: hasDaangn ? { ...(await guardFor(db, me.username)), today: await todayCount(db, me.username), wait: await guardWait(db, me.username) } : null });
+  }
+  if (action.startsWith("naverad-")) {   // 네이버 광고정리 탭 (기능 naverad) → naverad 서브앱의 /admin/naverad/<sub> 로 내부 전달 (기본 인증 없이, 계정은 x-account)
+    if (!me.features.includes("naverad")) return json(c, { error: "이 계정에는 '네이버 광고정리' 권한이 없습니다. 관리자(사용자 관리)에게 요청하세요." }, 403);
+    const u = new URL(c.req.url); const sub = action.slice("naverad-".length);
+    if (!/^(parse|save|search|building)$/.test(sub)) return json(c, { error: "없는 창구: " + action }, 404);
+    const init: RequestInit = { method: c.req.method, headers: { "content-type": "application/json", "x-account": me.username } };
+    if (c.req.method === "POST") init.body = await c.req.text();
+    return naverad.fetch(new Request("https://internal/admin/naverad/" + sub + u.search, init), c.env, c.executionCtx);
   }
   if (action.startsWith("brief-")) { if (!me.features.includes("brief")) return json(c, { error: "이 계정에는 '손님 브리핑' 권한이 없습니다. 관리자(사용자 관리)에게 요청하세요." }, 403); return briefApi(c, me, action); }   // 손님 브리핑 탭 (기능 brief)
   if (action === "prefs") {   // 계정별 설정(자주 쓰는 문구·전부 넣기 체크 등) — 같은 PC 에서 다른 아이디와 섞이지 않고, 어느 PC 에서나 같은 값
