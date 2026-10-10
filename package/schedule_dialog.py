@@ -90,6 +90,8 @@ def format_settings_summary(site: str, s: dict) -> str:
 
         if s.get("date_preset"):
             lines.append(f"등록일: {s['date_preset']}")
+        if s.get("sort_views"):
+            lines.append("정렬: 조회수 많은 순")
         elif s.get("date_use") and s.get("date_start"):
             lines.append(f"날짜: {s['date_start']} ~ {s.get('date_end', '')}")
         else:

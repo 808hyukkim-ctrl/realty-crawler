@@ -182,6 +182,9 @@ class DaangnWorker(QObject):
                     site = self.params.get("site_name", "사이트")
                     region = self.params.get("region_for_file", "전체_전체_전체")
                     out = os.path.join(out_dir, f"{site}_{region}_{len(all_results)}건_{ts}.xlsx")
+                if self.params.get("sort_views"):   # 조회수 많은 순 (같으면 관심 → 채팅 순)
+                    all_results.sort(key=lambda r: (-_to_int(r.get("조회수")), -_to_int(r.get("관심")), -_to_int(r.get("채팅"))))
+                    self.status.emit("당근: 조회수 많은 순으로 정렬했습니다")
                 crawler._save_to_excel([daangn_excel_row(r) for r in all_results], filepath=out, columns=DAANGN_EXCEL_COLUMNS)
                 sheets = split_excel_by_category(out)
                 if sheets:
@@ -452,9 +455,17 @@ KEYWORD_HIGHLIGHT_COLUMNS = ("간략설명", "설명")
 # 당근 엑셀 출력 컬럼과 순서 (사용자 지정, 2026-10-02) — 수집 데이터의 키 이름이 다른 것은 DAANGN_COLUMN_SOURCE 로 맞춘다
 DAANGN_EXCEL_COLUMNS = [
     "매물번호", "매물_URL", "매물유형", "거래유형", "지번주소", "거래주체", "매매가", "전세금", "보증금", "월세", "관리비", "권리금",
-    "제목", "상세내용", "등록일시", "방수", "욕실수", "층수", "최고층수", "사용승인일", "건축용도", "방향", "입주가능일",
+    "제목", "상세내용", "등록일시", "조회수", "관심", "채팅", "방수", "욕실수", "층수", "최고층수", "사용승인일", "건축용도", "방향", "입주가능일",
 ]
 DAANGN_COLUMN_SOURCE = {"상세내용": "상세_내용", "건축용도": "건축물용도"}
+
+
+def _to_int(v) -> int:
+    """'1,234' / 12 / None → 정수 (정렬용)"""
+    try:
+        return int(float(str(v).replace(",", "").strip() or 0))
+    except Exception:
+        return 0
 
 
 def _norm_key(*parts) -> str:
@@ -1131,6 +1142,9 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self.dg_dedupe.setChecked(True)
         dr.addSpacing(16)
         dr.addWidget(self.dg_dedupe)
+        self.dg_sort_views = QCheckBox("조회수 많은 순으로 정렬")
+        self.dg_sort_views.setToolTip("당근 매물마다 조회수·관심·채팅 수를 함께 수집하고(엑셀 열), 체크하면 조회수 많은 순으로 저장합니다")
+        dr.addWidget(self.dg_sort_views)
         dr.addStretch(1)
         v.addWidget(date_box)
         price_box = QGroupBox("가격/면적 (직접 입력, 빈칸=제한없음)")
@@ -1917,6 +1931,7 @@ class MainWindow(QMainWindow, ScheduleMixin):
             "detail_uses": self.dg_use_group.selected(),
             "writer_types": writer_types,
             "dedupe_same": self.dg_dedupe.isChecked(),
+            "sort_views": self.dg_sort_views.isChecked(),
             "site_name": "당근",
             "region_for_file": region_for_file,
             "timestamp": ts,

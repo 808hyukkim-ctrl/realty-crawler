@@ -1,0 +1,285 @@
+<!-- 손님 브리핑 화면 — 어드민(/admin/brief, brief.ts 가 layout 안에 넣음)과 직원 포털(/daangn 의 '손님 브리핑' 탭, build_daangn_html.py 가 style+script 를 끼움) 공용.
+     briefMount(root, { api, token }) 로 그 자리에 그린다. 정리는 daangn-parse 워커 /bulk, 사진은 brief-photo, 손님이 O/X 를 제출하면 목록에 '제출완료'. -->
+<style>
+  .bf-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .bf-head h1{margin:0;font-size:22px;color:var(--accent-dark)}
+  .bf-box{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px 20px;box-shadow:0 6px 24px rgba(255,92,154,.06);margin-bottom:16px}
+  .bf-box h2{margin:0 0 10px;font-size:15px;color:var(--accent-dark)}
+  .bf-hint{font-size:12.5px;color:var(--muted);line-height:1.5}
+  .bf-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .bf-lb{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:700}
+  .bf-box input,.bf-box textarea{font:inherit;font-size:14px;padding:9px 11px;border:1px solid var(--border);border-radius:9px;width:100%;background:var(--input);color:var(--text)}
+  .bf-box input:focus,.bf-box textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,92,154,.15)}
+  .bf-box textarea{resize:vertical}
+  .bf-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+  .bf-msg{font-size:12.5px;color:var(--muted)} .bf-msg.warn{color:var(--warn)}
+  .bf-card{border:1px solid var(--border);background:#fffafc;border-radius:12px;padding:12px 14px;margin-top:10px;position:relative}
+  .bf-card.drag{outline:3px dashed var(--accent);outline-offset:-3px;background:#fff0f6}
+  .bf-card .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .bf-no{flex:none;width:32px;height:32px;border-radius:10px;background:var(--accent);color:#fff;font-weight:900;font-size:15px;display:flex;align-items:center;justify-content:center}
+  .bf-card input{font-size:13.5px;padding:7px 9px}
+  .bf-g3{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:6px 10px;margin-top:8px}
+  .bf-ph{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+  .bf-th{position:relative;width:64px;height:64px}
+  .bf-th img{width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border);background:#f3f4f6}
+  .bf-th button{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:1px solid #f5c9db;background:#fff;color:var(--danger);font-weight:900;line-height:1;padding:0;cursor:pointer}
+  .bf-th.own::after{content:"올림";position:absolute;left:0;bottom:0;background:rgba(214,58,120,.85);color:#fff;font-size:10px;padding:1px 5px;border-radius:0 6px 0 8px}
+  .bf-drop{display:flex;align-items:center;gap:8px;border:1.5px dashed #f5c9db;border-radius:9px;padding:7px 10px;font-size:12.5px;color:var(--muted);background:#fff;cursor:pointer}
+  .bf-drop:hover{border-color:var(--accent);color:var(--accent-dark)}
+  .bf-drop input{display:none}
+  .bf-ox{font-size:12px;font-weight:900;padding:3px 9px;border-radius:999px;margin-left:4px}
+  .bf-ox.o{background:#dcfce7;color:#15803d} .bf-ox.x{background:#fee2e2;color:#b91c1c}
+  .bf-out{margin-top:10px;background:var(--soft);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+  .bf-out a.link{font-weight:800;word-break:break-all}
+  .bf-resp{margin-top:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:10px 12px;font-size:13.5px}
+  .bf-resp b.done{color:#b91c1c;font-size:15px}
+  .bf-table{width:100%;border-collapse:collapse;font-size:13px}
+  .bf-table th,.bf-table td{padding:9px 10px;border-bottom:1px solid #fbe3ec;text-align:left;vertical-align:middle}
+  .bf-table th{color:var(--accent-dark);background:var(--soft);font-weight:700;white-space:nowrap}
+  .bf-table tr.cur td{background:#fff0f6}
+  .bf-table tr.sub td{background:#f0fdf4}
+  .bf-pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:var(--soft);color:var(--accent-dark);margin-left:4px}
+  .bf-done{color:#b91c1c;font-weight:900;font-size:14px}
+  .bf-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#3b2230;color:#fff;padding:10px 16px;border-radius:10px;font-size:13.5px;z-index:99;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+  .bf-scroll{overflow-x:auto}
+  @media (max-width:760px){ .bf-grid3,.bf-g3{grid-template-columns:1fr} .container{padding:14px 12px} }
+  /* 포털(다른 테마)에서도 같은 모양 — 어드민 테마 변수와 버튼을 #brief_root 안에서 보장 */
+  #brief_root{--accent:#ff5c9a;--accent-dark:#d63a78;--border:#f5c9db;--panel:#fff;--soft:#ffe9f2;--muted:#9d7488;--text:#3b2230;--input:#fff;--danger:#e04a6a;--warn:#e08a2f;color:var(--text)}
+  #brief_root .btn{display:inline-block;padding:9px 16px;border-radius:999px;border:1px solid var(--border);background:#fff;color:var(--accent-dark);cursor:pointer;font-size:13px;font-weight:600;font-family:inherit}
+  #brief_root .btn:hover{background:var(--soft)} #brief_root .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff} #brief_root .btn-primary:hover{background:var(--accent-dark)}
+  #brief_root .btn-danger{background:transparent;color:var(--danger);border-color:var(--danger)} #brief_root .btn-sm{padding:6px 10px;font-size:12px} #brief_root .btn[disabled]{opacity:.45;cursor:default}
+  #brief_root .badge{padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600} #brief_root .status-soon{background:rgba(224,138,47,.14);color:var(--warn)}
+</style>
+<div id="brief_root"></div>
+<script>
+/*BRIEF_JS_START*/
+const BRIEF_MARKUP = "<div class=\"bf-head\"><h1>🧾 손님 브리핑</h1><div class=\"bf-hint\">링크든 글이든 엑셀 줄이든 넣으면 사진·주소·금액·역 도보를 손님용 카드로 정리하고, 손님에게 보낼 링크를 만듭니다. 손님은 번호를 누르면 사진과 내용이 펼쳐지고, O/X 를 골라 제출하면 아래 목록에 <b style=\"color:#b91c1c\">제출완료</b>로 뜹니다.</div></div>\n\n<div class=\"bf-box\" id=\"bf_box\">\n  <div class=\"bf-grid3\">\n    <label class=\"bf-lb\">손님 이름·호칭 <span style=\"color:var(--danger)\">*</span><input id=\"br_customer\" placeholder=\"예: 김민수 고객\" autocomplete=\"off\"></label>\n    <label class=\"bf-lb\">담당자 이름<input id=\"br_sname\" placeholder=\"예: 홍길동 공인중개사\"></label>\n    <label class=\"bf-lb\">담당자 연락처 (손님 페이지 '전화' 버튼)<input id=\"br_sphone\" placeholder=\"010-0000-0000\" inputmode=\"tel\"></label>\n  </div>\n  <textarea id=\"br_memo\" rows=\"2\" placeholder=\"손님께 보일 인사말·안내 (선택) — 예: 요청하신 역삼동 원룸 3곳입니다. 편하신 시간에 연락 주세요.\" style=\"margin-top:10px\"></textarea>\n  <label style=\"display:flex;align-items:center;gap:6px;margin-top:8px;font-size:13px;color:var(--text);cursor:pointer\"><input type=\"checkbox\" id=\"br_wm\" checked style=\"width:auto;margin:0\"> 사진 가운데 워터마크 가리기 <span class=\"bf-hint\">(네이버·당근·온하우스 사진의 한가운데를 손님 페이지에서 흐리게 가립니다. 직접 올린 사진은 그대로)</span></label>\n  <div id=\"br_resp\"></div>\n  <h2 style=\"margin-top:16px\">매물 담기 <span id=\"br_cnt\" class=\"bf-hint\" style=\"font-weight:400\">0 / 10</span></h2>\n  <textarea id=\"br_in\" rows=\"4\" placeholder=\"한 줄에 매물 하나 — 링크(네이버부동산·당근·온하우스·그 밖의 사이트), 글(주소 금액 층…), 수집기 엑셀 줄 모두 됩니다. 여러 줄이면 한 번에 정리합니다. (링크만 붙여넣으면 바로 정리)\"></textarea>\n  <div class=\"bf-acts\"><button class=\"btn btn-primary\" id=\"br_add\">정리해서 담기</button><label class=\"btn\" style=\"margin:0;cursor:pointer\">엑셀·CSV 파일로 담기<input type=\"file\" id=\"br_file\" accept=\".xlsx,.xls,.csv\" style=\"display:none\"></label><button class=\"btn\" id=\"br_blank\" title=\"링크 없이 직접 적고 사진을 올릴 매물\">빈 매물 추가</button><span class=\"bf-msg\" id=\"br_msg\"></span></div>\n  <div id=\"br_items\"></div>\n  <div class=\"bf-acts\" style=\"margin-top:14px\"><button class=\"btn btn-primary\" id=\"br_make\" style=\"padding:11px 20px;font-size:14px\">🔗 손님 링크 만들기</button><button class=\"btn\" id=\"br_new\">새로 시작</button></div>\n  <div id=\"br_out\"></div>\n</div>\n\n<div class=\"bf-box\"><h2>내 손님 링크 <span id=\"br_lcnt\" class=\"bf-hint\" style=\"font-weight:400\"></span> <span class=\"bf-hint\" style=\"font-weight:400\">— 링크는 <span id=\"br_maxtxt\">5</span>개까지. 안 쓰는 링크는 지워서 자리를 비우세요. 손님이 O/X 를 제출하면 '손님 응답' 칸에 뜹니다(1분마다 새로 확인).</span></h2><div id=\"br_list\" class=\"bf-scroll\"><div class=\"bf-hint\">불러오는 중…</div></div></div>"
+function briefMount(root, cfg) {
+root.innerHTML = BRIEF_MARKUP
+const API = String(cfg.api || '/admin/brief/api/')                       // 어드민은 기본 인증(브라우저가 붙임), 포털은 토큰 헤더
+const HDR = cfg.token ? { 'x-intranet-token': cfg.token } : {}
+const PARSE_BULK = 'https://daangn-parse.808hyukkim.workers.dev/bulk'   // 정리 워커 (링크·글·엑셀 줄 → 매물 칸)
+const $ = id => document.getElementById(id)
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))
+let toastT; const toast = m => { document.querySelectorAll('.bf-toast').forEach(n => n.remove()); const d = document.createElement('div'); d.className = 'bf-toast'; d.textContent = m; document.body.appendChild(d); clearTimeout(toastT); toastT = setTimeout(() => d.remove(), 2800) }
+const dt = s => { if (!s) return ''; const d = new Date(s), p = v => String(v).padStart(2, '0'); return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}` }
+const ago = s => { if (!s) return ''; const m = Math.floor((Date.now() - new Date(s)) / 60000); if (m < 1) return '방금'; if (m < 60) return m + '분 전'; if (m < 1440) return Math.floor(m / 60) + '시간 전'; return Math.floor(m / 1440) + '일 전' }
+const firstUrl = s => (String(s || '').match(/https?:\/\/[^\s"'<>]+/) || [])[0] || ''
+async function api(path, body, raw) {
+  const r = await fetch(API + path, raw ? { method: 'POST', headers: HDR, body: raw } : { method: body ? 'POST' : 'GET', headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...HDR }, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' })
+  let j = {}; try { j = await r.json() } catch (_) {}
+  if (!r.ok) { const e = new Error(j.error || ('요청 실패 (' + r.status + ')')); e.code = j.code || ''; throw e }
+  return j
+}
+const BR = { items: [], customer: '', memo: '', staff_name: '', staff_phone: '', id: '', url: '', response: null, wm: true, busy: false, list: null, max: 5, maxItems: 10, stQ: 0 }
+try { const v = JSON.parse(localStorage.getItem('brief_staff_v1') || 'null'); if (v) { BR.staff_name = v.name || ''; BR.staff_phone = v.phone || '' } } catch (_) {}
+const brHas = v => v !== null && v !== undefined && v !== ''
+const brMan = n => { if (!brHas(n)) return ''; n = Number(String(n).replace(/,/g, '')); if (!Number.isFinite(n)) return ''; const e = Math.floor(n / 10000), r = Math.round(n % 10000); return e ? `${e}억${r ? ' ' + r.toLocaleString('ko-KR') : ''}` : n.toLocaleString('ko-KR') }
+const brPrice = g => { const d = g.deal_type || ''
+  if (d === '매매') return brHas(g.sale_price) ? `매매 ${brMan(g.sale_price)}` : ''
+  if (d === '전세') return brHas(g.deposit) ? `전세 ${brMan(g.deposit)}` : ''
+  if (brHas(g.deposit) || brHas(g.monthly_rent)) return `${d || '월세'} ${brMan(g.deposit) || '0'} / ${brMan(g.monthly_rent) || '0'}`
+  return '' }
+const brLot = s => { const m = String(s || '').match(/([가-힣]+(?:동|리|가))\s*(산\s*)?(\d{1,4}(?:-\d{1,4})?)(?![\d-])/); return m ? m[1] + ' ' + (m[2] ? '산' : '') + m[3] : '' }
+const BR_SPEC = ['deal_type', 'deposit', 'monthly_rent', 'sale_price', 'manage_prc', 'area_exclusive', 'area_supply', 'floor_no', 'total_floors', 'room_count', 'bathroom_count', 'direction', 'available_date', 'is_parking', 'is_pet', 'property_type', 'bd_nm', 'ho_nm', 'dong_nm', 'road_addr']
+const blankItem = () => ({ title: '', addr: '', price: '', station: '', stState: 'none', memo: '', photos: [], spec: {}, src: '', lat: null, lng: null })
+function brItemFrom(g, input) {
+  g = g || {}; const spec = {}; BR_SPEC.forEach(k => { if (brHas(g[k])) spec[k] = g[k] })
+  const addr = String(g.address_q || g.road_addr || g.jibun_addr || '').trim()
+  const title = [brLot(addr) || g.bd_nm || addr, g.ho_nm, g.property_type].filter(Boolean).join(' ') || String(g.headline || '').slice(0, 40) || '매물'
+  const lat = Number(g.lat) || null, lng = Number(g.lng) || null
+  return { title: title.slice(0, 80), addr: addr || String(g.bd_nm || ''), price: brPrice(g), station: '', stState: (addr || g.bd_nm || (lat && lng)) ? 'todo' : 'none', memo: '', photos: (Array.isArray(g.photos) ? g.photos : []).filter(u => /^https?:\/\//.test(String(u))).slice(0, 30), spec, src: String(g.source_url || firstUrl(input || '') || ''), lat, lng }
+}
+/* 역 도보: 서버 brief-station — 매물 좌표(네이버)가 있으면 좌표로, 없으면 지번/건물명으로 주소를 확정해서 가장 가까운 지하철역. 2개씩 */
+async function brStations() {
+  if (BR.stQ >= 2) return
+  const it = BR.items.find(x => x.stState === 'todo'); if (!it) return
+  it.stState = 'busy'; BR.stQ++; brPaintStation(it)
+  try { const r = await api('brief-station', { address: it.addr, bd_nm: (it.spec || {}).bd_nm || '', lat: it.lat, lng: it.lng }); if (it.stState === 'busy') { it.station = it.station || r.station || ''; it.stState = r.station ? 'ok' : 'none' } }
+  catch (e) { if (it.stState === 'busy') it.stState = 'fail' }
+  finally { BR.stQ--; brPaintStation(it); brStations() }
+  brStations()
+}
+function brPaintStation(it) {
+  const i = BR.items.indexOf(it); if (i < 0) return
+  const inp = document.querySelector(`#br_items [data-i="${i}"] input[data-k="station"]`); if (!inp) return
+  if (document.activeElement !== inp) inp.value = it.station || ''
+  inp.placeholder = it.stState === 'busy' ? '가까운 역을 찾는 중…' : it.stState === 'fail' ? '역 정보를 못 찾음 — 직접 적어도 됩니다' : it.stState === 'none' && !it.station ? '못 찾음 — 예: 강남역 도보 5분' : '예: 강남역 도보 5분'
+}
+const oxOf = n => { const r = BR.response; if (!r) return ''; if ((r.picks || []).includes(n)) return '<span class="bf-ox o">손님 O</span>'; if ((r.rejects || []).includes(n)) return '<span class="bf-ox x">손님 X</span>'; return '' }
+const brPhotosHtml = it => (it.photos.length ? it.photos.map((u, k) => `<span class="bf-th ${u.startsWith('/b/p/') ? 'own' : ''}"><img src="${esc(u)}" referrerpolicy="no-referrer" loading="lazy" alt=""><button type="button" data-rm="${k}" title="이 사진 빼기">×</button></span>`).join('') : '<span class="bf-hint">사진 없음</span>')
+  + `<label class="bf-drop" title="사진을 여기에 끌어다 놓거나 눌러서 고르세요 (여러 장 가능, 1280px 로 줄여 올립니다)">📷 사진 올리기 <small>(끌어다 놓기 · 여러 장)</small><input type="file" accept="image/*" multiple data-up="1"></label>`
+  + `<span class="bf-hint" style="margin-left:4px" data-phmsg>사진 ${it.photos.length}장 · 첫 사진이 대표</span>`
+function brBindPhotos(card, it) {
+  const ph = card.querySelector('.bf-ph'); if (!ph) return
+  ph.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { it.photos.splice(Number(b.dataset.rm), 1); ph.innerHTML = brPhotosHtml(it); brBindPhotos(card, it) })
+  ph.querySelectorAll('img').forEach(im => im.onerror = () => { if (im.dataset.fb || !/^https?:/.test(im.src)) return; im.dataset.fb = '1'; im.src = '/b/img?u=' + encodeURIComponent(im.src) })
+  const up = ph.querySelector('[data-up]'); if (up) up.onchange = () => { brUpload(card, it, [...up.files]); up.value = '' }
+  const over = e => { e.preventDefault(); card.classList.add('drag') }, leave = () => card.classList.remove('drag')
+  card.ondragover = over; card.ondragenter = over; card.ondragleave = leave
+  card.ondrop = e => { e.preventDefault(); leave(); const files = [...(e.dataTransfer && e.dataTransfer.files || [])].filter(f => /^image\//.test(f.type)); if (files.length) brUpload(card, it, files); else toast('사진 파일만 올릴 수 있습니다') }
+}
+/** 사진 줄이기(최대 1280px, JPEG) → 서버 brief-photo → /b/p/<id> 를 사진 목록에 추가 */
+const shrink = file => new Promise((ok, bad) => {
+  const im = new Image(); const url = URL.createObjectURL(file)
+  im.onload = () => { URL.revokeObjectURL(url); const s = Math.min(1, 1280 / Math.max(im.naturalWidth, im.naturalHeight)); const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(im.naturalWidth * s)); c.height = Math.max(1, Math.round(im.naturalHeight * s))
+    const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(im, 0, 0, c.width, c.height)
+    c.toBlob(b => b ? ok(b) : bad(new Error('변환 실패')), 'image/jpeg', 0.85) }
+  im.onerror = () => { URL.revokeObjectURL(url); bad(new Error('사진을 읽지 못했습니다: ' + file.name)) }
+  im.src = url
+})
+async function brUpload(card, it, files) {
+  files = files.filter(f => /^image\//.test(f.type)); if (!files.length) return
+  const room = 30 - it.photos.length; if (room <= 0) return toast('사진은 매물마다 30장까지입니다')
+  files = files.slice(0, room)
+  const msg = () => card.querySelector('[data-phmsg]'); let n = 0, fail = 0
+  for (const f of files) {
+    n++; const m = msg(); if (m) m.textContent = `사진 올리는 중… ${n}/${files.length}`
+    try { let b = await shrink(f); if (b.size > 1000000) { b = await new Promise((ok) => { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = Math.round(im.width * 0.7); c.height = Math.round(im.height * 0.7); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); c.toBlob(ok, 'image/jpeg', 0.75) }; im.src = URL.createObjectURL(b) }) }
+      const fd = new FormData(); fd.append('file', b, 'photo.jpg'); const j = await api('brief-photo', null, fd); it.photos.push(j.url) }
+    catch (e) { fail++; toast('사진 올리기 실패: ' + e.message) }
+  }
+  const ph = card.querySelector('.bf-ph'); ph.innerHTML = brPhotosHtml(it); brBindPhotos(card, it)
+  toast(`사진 ${n - fail}장을 올렸습니다${fail ? ` (실패 ${fail})` : ''}`)
+}
+function paintBrItems() {
+  const box = $('br_items'); $('br_cnt').textContent = `${BR.items.length} / ${BR.maxItems}`
+  if (!BR.items.length) { box.innerHTML = '<div class="bf-hint" style="margin-top:8px">아직 담긴 매물이 없습니다. 위 칸에 링크나 글을 넣고 [정리해서 담기]를 누르거나, [빈 매물 추가]로 직접 적고 사진을 올리세요.</div>'; return }
+  box.innerHTML = BR.items.map((it, i) => `
+    <div class="bf-card" data-i="${i}">
+      <div class="top"><span class="bf-no">${i + 1}</span>${oxOf(i + 1)}<input data-k="title" value="${esc(it.title)}" placeholder="손님께 보일 제목 (예: 역삼동 606 501호 원룸)" style="flex:1;min-width:160px;width:auto">
+        <span class="bf-acts" style="margin:0"><button class="btn btn-sm" data-mv="-1" ${i === 0 ? 'disabled' : ''} title="위로">↑</button><button class="btn btn-sm" data-mv="1" ${i === BR.items.length - 1 ? 'disabled' : ''} title="아래로">↓</button><button class="btn btn-sm btn-danger" data-del="1">삭제</button></span></div>
+      <div class="bf-g3">
+        <label class="bf-lb">📍 주소<input data-k="addr" value="${esc(it.addr)}" placeholder="손님께 보일 주소"></label>
+        <label class="bf-lb">💰 금액<input data-k="price" value="${esc(it.price)}" placeholder="예: 월세 1,000 / 65"></label>
+        <label class="bf-lb">🚇 역 도보<input data-k="station" value="${esc(it.station)}" placeholder="예: 강남역 도보 5분"></label>
+      </div>
+      <input data-k="memo" value="${esc(it.memo)}" placeholder="담당자 한마디 (손님께 보임, 선택) — 예: 채광 좋고 관리 잘 된 집입니다" style="margin-top:8px">
+      <div class="bf-ph">${brPhotosHtml(it)}</div>
+      <div class="bf-hint" style="margin-top:4px">${it.src ? `원문: <a href="${esc(it.src)}" target="_blank" rel="noopener">${esc(it.src.slice(0, 70))}${it.src.length > 70 ? '…' : ''}</a> <span style="color:#c9a3b5">(손님에겐 안 보임)</span>` : '원문 링크 없음(직접 적은 매물)'}${it.lat && it.lng ? ' · 좌표 있음(역은 좌표 기준)' : ''}</div>
+    </div>`).join('')
+  box.querySelectorAll('.bf-card').forEach(card => {
+    const i = Number(card.dataset.i), it = BR.items[i]
+    card.querySelectorAll('input[data-k]').forEach(inp => inp.oninput = () => { it[inp.dataset.k] = inp.value; if (inp.dataset.k === 'station' && inp.value) it.stState = 'ok' })
+    card.querySelector('input[data-k="addr"]').onchange = () => { if (it.addr && !it.station && !(it.lat && it.lng)) { it.stState = 'todo'; brStations() } }   // 주소를 적으면 역을 다시 찾는다
+    card.querySelectorAll('[data-mv]').forEach(b => b.onclick = () => { const j = i + Number(b.dataset.mv); if (j < 0 || j >= BR.items.length) return; BR.items.splice(i, 1); BR.items.splice(j, 0, it); paintBrItems() })
+    card.querySelector('[data-del]').onclick = () => { if (!confirm(`${i + 1}번 매물을 목록에서 뺄까요?`)) return; BR.items.splice(i, 1); paintBrItems() }
+    brBindPhotos(card, it)
+  })
+  BR.items.forEach(brPaintStation)
+}
+function brSetMsg(t, warn) { const m = $('br_msg'); m.textContent = t || ''; m.className = 'bf-msg' + (warn ? ' warn' : '') }
+/* 링크·글·엑셀 줄(여러 줄) 또는 파일 → 정리 워커 /bulk → 카드로 담기 */
+async function brAdd(text, file) {
+  if (BR.busy) return
+  const lines = String(text || '').split('\n').map(l => l.trim()).filter(Boolean)
+  if (!file && !lines.length) return toast('링크나 글을 넣어주세요')
+  if (BR.maxItems - BR.items.length <= 0) return toast(`매물은 링크 하나에 ${BR.maxItems}개까지입니다. 지우고 넣어주세요.`)
+  BR.busy = true; $('br_add').disabled = true
+  brSetMsg(file ? '파일을 읽고 정리하는 중… (링크가 많으면 1분쯤)' : lines.length > 1 ? `${lines.length}줄을 정리하는 중…` : '정리하는 중…')
+  const errs = []; let gots = []
+  try {
+    let r
+    if (file) { const fd = new FormData(); fd.append('file', file, file.name); fd.append('photos', '1'); r = await fetch(PARSE_BULK, { method: 'POST', body: fd }) }
+    else r = await fetch(PARSE_BULK, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ lines, photos: true }) })
+    const j = await r.json().catch(() => null)
+    if (!r.ok || !j) throw new Error((j && j.error) || `정리 서버 응답 ${r.status}`)
+    gots = (j.items || []).map(it => ({ ok: it.ok, got: it.got, input: it.input, error: it.error }))
+  } catch (e) { BR.busy = false; $('br_add').disabled = false; brSetMsg('정리 실패: ' + e.message, true); return }
+  let added = 0, skipped = 0
+  for (const g of gots) {
+    if (!g.ok || !g.got) { errs.push((g.input || '').slice(0, 40) + ' — ' + (g.error || '정리 못함')); continue }
+    if (BR.items.length >= BR.maxItems) { skipped++; continue }
+    BR.items.push(brItemFrom(g.got, g.input)); added++
+  }
+  BR.busy = false; $('br_add').disabled = false
+  paintBrItems(); brStations()
+  brSetMsg(`${added}건 담았습니다.` + (skipped ? ` ${skipped}건은 ${BR.maxItems}개 제한으로 못 담았습니다.` : '') + (errs.length ? ` 못 읽은 줄 ${errs.length}: ${errs.join(' / ').slice(0, 300)}` : ''), !!(skipped || errs.length))
+  if (added) $('br_in').value = ''
+}
+async function brLoadList(quiet) {
+  try { const j = await api('brief-list'); BR.list = j.rows || []; BR.max = j.max || BR.max; BR.maxItems = j.max_items || BR.maxItems; $('br_maxtxt').textContent = BR.max
+    if (BR.id) { const cur = BR.list.find(r => r.id === BR.id); if (cur && JSON.stringify(cur.response) !== JSON.stringify(BR.response)) { BR.response = cur.response; brPaintResp(); paintBrItems(); if (cur.response) toast(`'${cur.customer}' 손님이 O/X 를 제출했습니다!`) } } }
+  catch (e) { BR.list = BR.list || []; if (!quiet) brSetMsg(e.message, true) }
+  paintBrList()
+}
+const respText = r => r ? `O ${r.picks.length ? r.picks.map(n => n + '번').join('·') : '없음'} / X ${r.rejects.length ? r.rejects.map(n => n + '번').join('·') : '없음'}` : ''
+function paintBrList() {
+  const box = $('br_list'), rows = BR.list || []
+  $('br_lcnt').textContent = `${rows.length} / ${BR.max}`
+  box.innerHTML = rows.length ? `<table class="bf-table"><thead><tr><th>손님</th><th>매물</th><th>손님 응답</th><th>손님 조회</th><th>마지막 수정</th><th>링크</th><th></th></tr></thead><tbody>${rows.map(r => `<tr data-id="${esc(r.id)}" class="${r.id === BR.id ? 'cur' : ''} ${r.response ? 'sub' : ''}">
+      <td style="font-weight:700;white-space:nowrap">${esc(r.customer)}${r.id === BR.id ? '<span class="bf-pill">편집 중</span>' : ''}</td><td>${r.count}건</td>
+      <td>${r.response ? `<span class="bf-done">제출완료 !!!!!</span><div style="font-size:12.5px">${esc(respText(r.response))} <span class="bf-hint">(${esc(ago(r.response.at))})</span></div>` : '<span class="bf-hint">아직 없음</span>'}</td>
+      <td>${r.views ? `${r.views}회 <span class="bf-hint">(${esc(ago(r.last_view_at))})</span>` : '<span class="bf-hint">아직 안 봄</span>'}</td><td style="white-space:nowrap">${esc(dt(r.updated_at))}</td>
+      <td><a href="${esc(r.url)}" target="_blank" rel="noopener" style="word-break:break-all">${esc(r.url.replace(/^https?:\/\//, ''))}</a></td>
+      <td style="white-space:nowrap"><span class="bf-acts" style="margin:0"><button class="btn btn-sm" data-copy="${esc(r.url)}">복사</button><button class="btn btn-sm" data-edit="${esc(r.id)}">수정</button><button class="btn btn-sm btn-danger" data-rm="${esc(r.id)}">삭제</button></span></td></tr>`).join('')}</tbody></table>`
+    : '<div class="bf-hint">아직 만든 링크가 없습니다.</div>'
+  box.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => brCopy(b.dataset.copy))
+  box.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => brEdit(b.dataset.edit))
+  box.querySelectorAll('[data-rm]').forEach(b => b.onclick = async () => {
+    const r = rows.find(x => x.id === b.dataset.rm); if (!confirm(`'${r ? r.customer : ''}' 링크를 지울까요? 손님이 열어 둔 링크도 더는 열리지 않습니다.`)) return
+    try { await api('brief-delete', { id: b.dataset.rm }); if (BR.id === b.dataset.rm) { BR.id = ''; BR.url = ''; BR.response = null; brPaintOut(); brPaintResp() } toast('지웠습니다'); brLoadList() } catch (e) { toast(e.message) }
+  })
+}
+async function brCopy(u) { try { await navigator.clipboard.writeText(u); toast('링크를 복사했습니다 — 카톡 등에 붙여넣으세요') } catch (_) { prompt('아래 링크를 복사하세요', u) } }
+async function brEdit(id) {
+  if (BR.items.length && BR.id !== id && !confirm('지금 편집 중인 목록을 버리고 이 링크를 불러올까요?')) return
+  try {
+    const j = await api('brief-get?id=' + encodeURIComponent(id))
+    BR.id = j.id; BR.url = j.url; BR.customer = j.customer; BR.memo = j.memo || ''; BR.response = j.response || null; BR.wm = !(j.opts && j.opts.wm === false); if (j.staff_name) BR.staff_name = j.staff_name; if (j.staff_phone) BR.staff_phone = j.staff_phone
+    BR.items = (j.items || []).map(it => ({ title: it.title || '', addr: it.addr || '', price: it.price || '', station: it.station || '', stState: it.station ? 'ok' : ((it.addr || (it.lat && it.lng)) ? 'todo' : 'none'), memo: it.memo || '', photos: Array.isArray(it.photos) ? it.photos.slice() : [], spec: it.spec || {}, src: it.src || '', lat: it.lat || null, lng: it.lng || null }))
+    brPaintHead(); brPaintResp(); paintBrItems(); brPaintOut(); paintBrList(); brStations()
+    $('bf_box').scrollIntoView({ behavior: 'smooth', block: 'start' })
+    toast(`'${j.customer}' 링크를 불러왔습니다. 고친 뒤 [이 링크 갱신]을 누르세요.`)
+  } catch (e) { toast(e.message) }
+}
+function brPaintHead() { $('br_customer').value = BR.customer || ''; $('br_memo').value = BR.memo || ''; $('br_sname').value = BR.staff_name || ''; $('br_sphone').value = BR.staff_phone || ''; $('br_wm').checked = BR.wm !== false }
+function brPaintResp() { const r = BR.response; $('br_resp').innerHTML = r ? `<div class="bf-resp"><b class="done">제출완료 !!!!!</b> ${esc(BR.customer)} 손님이 ${esc(dt(r.at))} 에 골랐습니다 — <b>${esc(respText(r))}</b><div class="bf-hint">아래 카드의 '손님 O / 손님 X' 표시가 그 응답입니다.</div></div>` : '' }
+function brPaintOut() {
+  const out = $('br_out'); $('br_make').textContent = BR.id ? '🔗 이 링크 갱신' : '🔗 손님 링크 만들기'
+  out.innerHTML = BR.url ? `<div class="bf-out"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="color:var(--accent-dark)">손님 링크</b><a class="link" href="${esc(BR.url)}" target="_blank" rel="noopener">${esc(BR.url)}</a>
+      <span class="bf-acts" style="margin:0"><button class="btn btn-sm btn-primary" id="br_copy">복사</button><a class="btn btn-sm" href="${esc(BR.url)}" target="_blank" rel="noopener">열어보기</a>${navigator.share ? '<button class="btn btn-sm" id="br_share">공유</button>' : ''}</span></div>
+      <div class="bf-hint" style="margin-top:4px">손님에게 이 주소를 보내면 됩니다. 매물을 고치고 [이 링크 갱신]을 누르면 같은 주소에서 바뀐 내용이 보입니다.</div></div>` : ''
+  const c = $('br_copy'); if (c) c.onclick = () => brCopy(BR.url)
+  const sh = $('br_share'); if (sh) sh.onclick = () => navigator.share({ title: `${BR.customer}님 추천 매물`, url: BR.url }).catch(() => {})
+}
+async function brMake() {
+  if (BR.busy) return
+  BR.customer = $('br_customer').value
+  if (!String(BR.customer).trim()) { toast('손님 이름(호칭)을 넣어주세요'); $('br_customer').focus(); return }
+  if (!BR.items.length) return toast('담긴 매물이 없습니다')
+  if (!BR.id && BR.list && BR.list.length >= BR.max) return toast(`손님 링크는 ${BR.max}개까지입니다. 아래 목록에서 안 쓰는 링크를 지워주세요.`)
+  $('br_make').disabled = true
+  try { localStorage.setItem('brief_staff_v1', JSON.stringify({ name: BR.staff_name, phone: BR.staff_phone })) } catch (_) {}
+  try {
+    const j = await api('brief-save', { id: BR.id || undefined, customer: BR.customer, memo: BR.memo, staff_name: BR.staff_name, staff_phone: BR.staff_phone, opts: { wm: BR.wm !== false }, items: BR.items.map(it => ({ title: it.title, addr: it.addr, price: it.price, station: it.station, memo: it.memo, photos: it.photos, spec: it.spec, src: it.src, lat: it.lat, lng: it.lng })) })
+    BR.id = j.id; BR.url = j.url; brPaintOut(); toast(j.updated ? '링크 내용을 갱신했습니다' : '손님 링크를 만들었습니다'); brLoadList()
+    $('br_out').scrollIntoView({ behavior: 'smooth', block: 'center' })
+  } catch (e) { toast(e.message) }
+  finally { $('br_make').disabled = false }
+}
+function brReset(ask) {
+  if (ask && (BR.items.length || BR.customer) && !confirm('지금 목록을 비우고 새 손님 브리핑을 시작할까요? (만든 링크는 아래 목록에 남습니다)')) return
+  BR.items = []; BR.customer = ''; BR.memo = ''; BR.id = ''; BR.url = ''; BR.response = null; BR.wm = true
+  brPaintHead(); brPaintResp(); paintBrItems(); brPaintOut(); paintBrList(); brSetMsg('')
+}
+brPaintHead(); paintBrItems(); brPaintOut()
+$('br_customer').oninput = () => { BR.customer = $('br_customer').value }
+$('br_memo').oninput = () => { BR.memo = $('br_memo').value }
+$('br_wm').onchange = () => { BR.wm = $('br_wm').checked }
+$('br_sname').oninput = () => { BR.staff_name = $('br_sname').value }
+$('br_sphone').oninput = () => { BR.staff_phone = $('br_sphone').value }
+$('br_add').onclick = () => brAdd($('br_in').value, null)
+$('br_blank').onclick = () => { if (BR.items.length >= BR.maxItems) return toast(`매물은 ${BR.maxItems}개까지입니다`); BR.items.push(blankItem()); paintBrItems(); const last = document.querySelector(`#br_items [data-i="${BR.items.length - 1}"] input[data-k="title"]`); if (last) last.focus() }
+$('br_in').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); brAdd($('br_in').value, null) } })
+$('br_in').addEventListener('paste', e => { const t = (e.clipboardData || window.clipboardData).getData('text') || ''; const lines = t.split('\n').map(l => l.trim()).filter(Boolean)
+  if (lines.length && lines.every(l => /^https?:\/\/\S+$/.test(l))) { e.preventDefault(); $('br_in').value = t; brAdd(t, null) } })
+$('br_file').onchange = () => { const f = $('br_file').files[0]; if (f) brAdd('', f); $('br_file').value = '' }
+$('br_make').onclick = brMake
+$('br_new').onclick = () => brReset(true)
+brLoadList()
+if (!root._brTimer) root._brTimer = setInterval(() => { if (!document.hidden && document.body.contains(root)) brLoadList(true) }, 60000)   // 손님 제출을 1분마다 확인
+}
+/*BRIEF_JS_END*/
+briefMount(document.getElementById('brief_root'), { api: '/admin/brief/api/' })
+</script>

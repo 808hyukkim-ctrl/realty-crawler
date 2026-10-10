@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>당근 광고자동화 — 매물 올리기</title>
+<title>부동산 포털 — 손님 브리핑·당근 광고·사진950</title>
 <style>
   :root{
     --bg:#f4f6fa; --card:#fff; --line:#e3e8f0; --ink:#111827; --dim:#6b7280;
@@ -157,7 +157,57 @@
   table.bulk .btn{padding:3px 8px; font-size:11px}
   table.bulk tr.done td{background:#f7fdf9; color:#4b5563}
 </style>
-<style>#csubmit,#cdaangn,#bregister,label:has(#blgall),label:has(input[data-lg]){display:none!important}.tab[data-t=photo] .n,.tab[data-t=db] .n,.tab[data-t=fill] .n,.tab[data-t=log] .n{display:none}</style>
+<style>#csubmit,#cdaangn,#bregister,label:has(#blgall),label:has(input[data-lg]){display:none!important}.tab[data-t=photo] .n,.tab[data-t=db] .n,.tab[data-t=fill] .n,.tab[data-t=log] .n,.tab[data-t=brief] .n{display:none}</style>
+<style>
+  .bf-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .bf-head h1{margin:0;font-size:22px;color:var(--accent-dark)}
+  .bf-box{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px 20px;box-shadow:0 6px 24px rgba(255,92,154,.06);margin-bottom:16px}
+  .bf-box h2{margin:0 0 10px;font-size:15px;color:var(--accent-dark)}
+  .bf-hint{font-size:12.5px;color:var(--muted);line-height:1.5}
+  .bf-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .bf-lb{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:700}
+  .bf-box input,.bf-box textarea{font:inherit;font-size:14px;padding:9px 11px;border:1px solid var(--border);border-radius:9px;width:100%;background:var(--input);color:var(--text)}
+  .bf-box input:focus,.bf-box textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,92,154,.15)}
+  .bf-box textarea{resize:vertical}
+  .bf-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+  .bf-msg{font-size:12.5px;color:var(--muted)} .bf-msg.warn{color:var(--warn)}
+  .bf-card{border:1px solid var(--border);background:#fffafc;border-radius:12px;padding:12px 14px;margin-top:10px;position:relative}
+  .bf-card.drag{outline:3px dashed var(--accent);outline-offset:-3px;background:#fff0f6}
+  .bf-card .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .bf-no{flex:none;width:32px;height:32px;border-radius:10px;background:var(--accent);color:#fff;font-weight:900;font-size:15px;display:flex;align-items:center;justify-content:center}
+  .bf-card input{font-size:13.5px;padding:7px 9px}
+  .bf-g3{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:6px 10px;margin-top:8px}
+  .bf-ph{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+  .bf-th{position:relative;width:64px;height:64px}
+  .bf-th img{width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border);background:#f3f4f6}
+  .bf-th button{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:1px solid #f5c9db;background:#fff;color:var(--danger);font-weight:900;line-height:1;padding:0;cursor:pointer}
+  .bf-th.own::after{content:"올림";position:absolute;left:0;bottom:0;background:rgba(214,58,120,.85);color:#fff;font-size:10px;padding:1px 5px;border-radius:0 6px 0 8px}
+  .bf-drop{display:flex;align-items:center;gap:8px;border:1.5px dashed #f5c9db;border-radius:9px;padding:7px 10px;font-size:12.5px;color:var(--muted);background:#fff;cursor:pointer}
+  .bf-drop:hover{border-color:var(--accent);color:var(--accent-dark)}
+  .bf-drop input{display:none}
+  .bf-ox{font-size:12px;font-weight:900;padding:3px 9px;border-radius:999px;margin-left:4px}
+  .bf-ox.o{background:#dcfce7;color:#15803d} .bf-ox.x{background:#fee2e2;color:#b91c1c}
+  .bf-out{margin-top:10px;background:var(--soft);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+  .bf-out a.link{font-weight:800;word-break:break-all}
+  .bf-resp{margin-top:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:10px 12px;font-size:13.5px}
+  .bf-resp b.done{color:#b91c1c;font-size:15px}
+  .bf-table{width:100%;border-collapse:collapse;font-size:13px}
+  .bf-table th,.bf-table td{padding:9px 10px;border-bottom:1px solid #fbe3ec;text-align:left;vertical-align:middle}
+  .bf-table th{color:var(--accent-dark);background:var(--soft);font-weight:700;white-space:nowrap}
+  .bf-table tr.cur td{background:#fff0f6}
+  .bf-table tr.sub td{background:#f0fdf4}
+  .bf-pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:var(--soft);color:var(--accent-dark);margin-left:4px}
+  .bf-done{color:#b91c1c;font-weight:900;font-size:14px}
+  .bf-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#3b2230;color:#fff;padding:10px 16px;border-radius:10px;font-size:13.5px;z-index:99;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+  .bf-scroll{overflow-x:auto}
+  @media (max-width:760px){ .bf-grid3,.bf-g3{grid-template-columns:1fr} .container{padding:14px 12px} }
+  /* 포털(다른 테마)에서도 같은 모양 — 어드민 테마 변수와 버튼을 #brief_root 안에서 보장 */
+  #brief_root{--accent:#ff5c9a;--accent-dark:#d63a78;--border:#f5c9db;--panel:#fff;--soft:#ffe9f2;--muted:#9d7488;--text:#3b2230;--input:#fff;--danger:#e04a6a;--warn:#e08a2f;color:var(--text)}
+  #brief_root .btn{display:inline-block;padding:9px 16px;border-radius:999px;border:1px solid var(--border);background:#fff;color:var(--accent-dark);cursor:pointer;font-size:13px;font-weight:600;font-family:inherit}
+  #brief_root .btn:hover{background:var(--soft)} #brief_root .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff} #brief_root .btn-primary:hover{background:var(--accent-dark)}
+  #brief_root .btn-danger{background:transparent;color:var(--danger);border-color:var(--danger)} #brief_root .btn-sm{padding:6px 10px;font-size:12px} #brief_root .btn[disabled]{opacity:.45;cursor:default}
+  #brief_root .badge{padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600} #brief_root .status-soon{background:rgba(224,138,47,.14);color:var(--warn)}
+</style>
 </head>
 <body>
 
@@ -172,6 +222,9 @@
     REFRESH_MS: 300000,          // 현황 자동 새로고침 주기
     // 네이버 매물 링크 정리 서버 (브라우저에서 네이버를 직접 부를 수 없어 워커가 대신 읽는다). 비우면 글 붙여넣기만 동작
     PARSE_API: 'https://daangn-parse.808hyukkim.workers.dev/parse',
+    PREFS_SYNC: true,          // true 면 자주 쓰는 문구 등 계정별 설정을 서버(prefs 창구)에도 저장해 어느 PC 에서나 같다 (직원 포털)
+    // 당근 광고(본인 계정 QR 연결·등록·안전장치)는 라이선스 서버가 맡는다. 같은 인트라넷 토큰으로 부르고, 권한은 라이선스 어드민 '사용자 관리'의 인트라넷 직원 목록에서 켠다. 비우면 API_BASE 와 같은 서버.
+    DAANGN_API: '',   // 라운지 인트라넷은 라이선스 서버와 연동하지 않는다(사용자 결정 2026-10-10). 비우면 API_BASE 와 같은 서버(포털)
   }
 </script>
 
@@ -253,8 +306,30 @@ async function api(path, body) {
   return j
 }
 
+/* ── 당근 광고 서버 (라이선스 워커) — 같은 토큰으로, 다른 주소. 401 이어도 인트라넷 토큰은 지우지 않는다 ── */
+async function dapi(path, body) {
+  if (!CONFIG.DAANGN_API) return api(path, body)
+  const res = await fetch(String(CONFIG.DAANGN_API).replace(/\/$/, '') + '/' + path, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json', 'x-intranet-token': token() }, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' })
+  let j = {}; try { j = await res.json() } catch (_) {}
+  if (!res.ok) { const err = new Error(j.error || (res.status === 401 ? '당근 광고 권한이 확인되지 않습니다 (라이선스 어드민 사용자 관리에서 인트라넷 직원 권한을 켜야 합니다)' : '당근 서버 요청 실패 (' + res.status + ')')); err.code = j.code || ''; err.data = j; throw err }
+  return j
+}
+const dgMine = () => !!(S.dg && Array.isArray(S.dg.features) && S.dg.features.includes('daangn'))   // 이 사람이 본인 당근 계정으로 올릴 권한이 있는가
 /* ── 상태 ─────────────────────────────────────────────── */
-const S = { me:null, tab:null, data:{}, busy:{} }
+const S = { me:null, dg:null, tab:null, data:{}, busy:{} }
+/* 계정별 저장(자주 쓰는 문구·전부 넣기 체크): 브라우저 저장은 계정(label)별 키 — 같은 PC 에서 다른 아이디로 들어가도 섞이지 않는다.
+   CONFIG.PREFS_SYNC 면 서버(prefs)에도 저장해 어느 PC 에서나 같은 값 (2026-10-09) */
+const PREF_KEYS = ['lounge_intranet_phrases_v1', 'lounge_intranet_phrases_all', 'lounge_intranet_phrases_all_bulk']
+const prefKey = k => k + ':' + String((S.me && S.me.label) || '')
+const PREF = {
+  get: k => { try { return localStorage.getItem(prefKey(k)) } catch (_) { return null } },
+  set: (k, v) => { try { localStorage.setItem(prefKey(k), v) } catch (_) {} ; if (CONFIG.PREFS_SYNC) api('prefs', { key: k, value: v }).catch(() => {}) },
+}
+async function loadPrefs() {
+  if (CONFIG.PREFS_SYNC) { try { const j = await api('prefs'); for (const k of PREF_KEYS) if (j.prefs && typeof j.prefs[k] === 'string') localStorage.setItem(prefKey(k), j.prefs[k]) } catch (_) {} }
+  else { try { if (!localStorage.getItem('lounge_intranet_prefs_migrated')) { for (const k of PREF_KEYS) { const v = localStorage.getItem(k); if (v !== null && localStorage.getItem(prefKey(k)) === null) localStorage.setItem(prefKey(k), v) } localStorage.setItem('lounge_intranet_prefs_migrated', '1') } } catch (_) {} }   // 예전 공용 저장값은 처음 들어온 계정으로 한 번만 옮긴다
+  BULK.phrAll = PREF.get('lounge_intranet_phrases_all_bulk') === '1'
+}
 let timer
 
 /* ── 토큰 입력 화면 ───────────────────────────────────── */
@@ -291,9 +366,12 @@ async function boot() {
   if (!token()) return renderGate()
   el.innerHTML = `<div class="wrap"><div class="empty" style="margin-top:20vh">불러오는 중…</div></div>`
   try { S.me = await api('summary') } catch (e) { if (e.message !== '401') renderGate(e.message); return }
-  const fts = S.me.features || []; const order = [].concat(fts.includes('daangn') ? ['create', 'uploads'] : [], fts.includes('photo') ? ['photo'] : [], fts.includes('db') ? ['db', 'fill'] : [], ['log'])
-  if (!fts.includes('daangn') && !fts.includes('photo')) setTimeout(() => toast('이 계정에는 아직 당근 광고·사진950 권한이 없습니다. 관리자에게 요청하세요.'), 400)
-  if (!order.length) return renderGate('이 토큰에는 열람 권한이 없습니다.')
+  await loadPrefs()
+  S.dg = CONFIG.DAANGN_API ? await dapi('summary').catch(() => null) : S.me   // 당근 광고 서버의 내 정보(권한·연결·안전장치)
+  const fts = S.me.features || []; const order = [].concat(fts.includes('brief') ? ['brief'] : [], fts.includes('daangn') ? ['create', 'uploads'] : [], fts.includes('photo') ? ['photo'] : [], fts.includes('db') ? ['db'] : [])   // 직원에겐 '내 활동'·'엑셀DB대조' 탭 없음 (사용자 결정 2026-10-10)
+  if (!fts.includes('daangn') && !fts.includes('photo') && !fts.includes('brief') && !fts.includes('db')) setTimeout(() => toast('이 계정에는 아직 켜진 기능이 없습니다. 관리자(사용자 관리)에게 요청하세요.'), 400)
+  if (CONFIG.DAANGN_API && dgMine()) order.splice(Math.max(1, order.indexOf('uploads') + 1), 0, 'daangn')   // 권한 있는 사람만 '🥕 당근 광고' 탭
+  if (!order.length) return renderGate('이 계정에는 아직 켜진 기능이 없습니다. 관리자(사용자 관리)에서 손님 브리핑·당근 광고·사진950·DB 조회 중 필요한 기능을 켜 달라고 하세요.')
   if (!order.includes(S.tab)) S.tab = order[0]
   renderShell(order)
   await load(S.tab)
@@ -302,17 +380,17 @@ async function boot() {
 }
 
 async function refresh() {
-  try { S.me = await api('summary') } catch (_) { return }
+  try { S.me = await api('summary'); if (!CONFIG.DAANGN_API) S.dg = S.me } catch (_) { return }
   paintCounts(); await load(S.tab, true)
 }
 
 /* ── 껍데기 ───────────────────────────────────────────── */
-const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함', photo:'사진 950', db:'지번 조회', fill:'엑셀DB대조', log:'내 활동' }
+const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', daangn:'🥕 당근 광고', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함', photo:'사진 950', db:'지번 조회', fill:'엑셀DB대조', brief:'🧾 손님 브리핑', log:'내 활동' }
 function renderShell(order) {
   el.innerHTML = `
     <header>
       <div class="hbar">
-        <div class="brand">당근 <span>광고자동화</span></div>
+        <div class="brand">부동산 <span>포털</span></div>
         <div class="who">${esc(S.me.label)}</div><span id="hconn" style="font-size:12px;margin-left:8px"></span>
         <div class="grow"></div>
         <span id="stamp" style="font-size:12px;color:var(--dim)"></span>
@@ -340,6 +418,8 @@ function paintCounts() {
     supply: (S.me.supply?.pending ?? 0) + (S.me.supply?.active ?? 0),
     review: (S.me.review?.listings ?? 0) + (S.me.review?.signups ?? 0),
     cs: (S.me.cs?.feedback ?? 0) + (S.me.cs?.clean ?? 0) + (S.me.cs?.move ?? 0),
+    daangn: (S.dg && S.dg.uploads_active) || 0,
+    uploads: (S.me && S.me.uploads_active) || 0,   // 포털: 살아 있는 당근 업로드 수 (2026-10-10, 전엔 늘 0)
   }
   el.querySelectorAll('[data-c]').forEach(n => n.textContent = c[n.dataset.c] ?? 0)
   const st = document.getElementById('stamp')
@@ -368,7 +448,9 @@ async function load(tab, quiet) {
     if (!(S.data.create && restoreCreate())) paintCreate()
     S.painted = 'create'; return
   }
-  const paint = { supply: paintSupply, review: paintReview, cs: paintCS, uploads: paintUploads, photo: paintPhoto, db: paintDb, fill: paintFill, log: paintLog }[tab]
+  if (tab === 'daangn') { paintDaangnTab(); S.painted = 'daangn'; return }
+  const paint = { supply: paintSupply, review: paintReview, cs: paintCS, uploads: paintUploads, photo: paintPhoto, db: paintDb, fill: paintFill, brief: paintBrief, log: paintLog }[tab]
+  if (tab === 'brief') { paintBrief(); S.painted = 'brief'; return }
   if (tab === 'fill') { paintFill(); S.painted = 'fill'; return }
   if (tab === 'photo') { paintPhoto(); S.painted = 'photo'; return }
   if (tab === 'db') { paintDb(); S.painted = 'db'; return }
@@ -621,10 +703,10 @@ function paintUploads() {
       <div class="kpi"><div class="k">라운지+당근 (진행중)</div><div class="v">${cnt('라운지+당근')}<em>건</em></div></div>
       <div class="kpi"><div class="k">라운지만</div><div class="v" style="color:#1d4ed8">${cnt('라운지만')}<em>건</em></div></div>
       <div class="kpi"><div class="k">당근만</div><div class="v" style="color:#ff6f0f">${cnt('당근만')}<em>건</em></div></div>
-      <div class="kpi"><div class="k">나간 매물</div><div class="v" style="color:var(--dim)">${rows.filter(r => r.closed).length}<em>건</em></div></div>
+      <div class="kpi"><div class="k">나간 매물</div><div class="v" style="color:var(--dim)">${rows.filter(r => r.closed).length}<em>건</em></div></div>${rows.some(r => r.src_state) ? `<div class="kpi"><div class="k">⚠️ 확인 요망 (원문 내려감)</div><div class="v" style="color:var(--bad)">${rows.filter(r => r.src_state === 'gone' && !r.closed).length}<em>건</em></div></div>` : ''}
     </div>
     <div class="row-acts" style="margin:8px 0;align-items:center">
-      <select id="up_days">${[7, 30, 90, 180, 365].map(n => `<option value="${n}" ${+d.days === n ? 'selected' : ''}>최근 ${n}일</option>`).join('')}</select>
+      <select id="up_days">${[7, 30, 90, 180, 365].map(n => `<option value="${n}" ${+d.days === n ? 'selected' : ''}>최근 ${n}일</option>`).join('')}</select>${S.me && Array.isArray(S.me.features) ? `<button class="btn" id="up_srccheck" style="margin-left:6px" title="업로드 기록의 원문 링크를 지금 열어 봅니다(40건까지). 매일 오전 11시·오후 6시에 자동으로도 확인해 삭제·내려간 매물은 '확인 요망'으로 표시됩니다">🔁 원문 지금 확인</button><span class="hint" style="margin:0 0 0 8px">${S.data.uploads && S.data.uploads.src_last ? `마지막 자동 확인 ${esc(dt(S.data.uploads.src_last.at))} · ${S.data.uploads.src_last.checked}건 중 내려감 ${S.data.uploads.src_last.gone}건` : '매일 오전 11시·오후 6시 원문 자동 확인'}</span>` : ''}
       <select id="up_where"><option value="">올린 곳 전체</option>${['라운지+당근', '라운지만', '당근만', '당근 실패'].map(w => `<option value="${w}" ${f.where === w ? 'selected' : ''}>${w}</option>`).join('')}</select>
       <select id="up_by"><option value="">담당 전체</option>${bys.map(b => `<option value="${esc(b)}" ${f.by === b ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select>
       <input id="up_q" placeholder="주소·연락처·번호 검색" value="${esc(f.q || '')}" style="width:170px">
@@ -635,7 +717,7 @@ function paintUploads() {
     <div class="card scroll"><table id="uptbl"><thead><tr><th title="나간 매물 체크">나감</th><th>링크</th><th>임대인 연락처</th><th>주소 · 호수</th><th>금액(만원)</th><th>거래</th><th>업로드일</th><th>라운지 / 당근</th><th>담당</th></tr></thead><tbody>
       ${shown.map(r => `<tr data-key="${esc(r.key)}" style="${r.closed ? 'opacity:.5;background:#f3f4f6' : ''}">
         <td><input type="checkbox" data-close="${esc(r.key)}" ${r.closed ? 'checked' : ''} style="width:auto;margin:0" title="${r.closed ? '나간 매물 (체크 해제하면 표시만 풀림)' : '나간 매물로 표시'}"></td>
-        <td class="nowrap ed" data-ed="source" data-key="${esc(r.key)}" title="눌러서 링크 수정">${r.source ? `<a href="${esc(r.source)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">원문 ↗</a> <span class="small" data-pen style="color:var(--dim);cursor:pointer" title="링크 수정">✎</span>` : '<span class="small" data-pen style="color:var(--dim)">링크 넣기 ✎</span>'}</td>
+        <td class="nowrap ed" data-ed="source" data-key="${esc(r.key)}" title="눌러서 링크 수정">${r.source ? `<a href="${esc(r.source)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">원문 ↗</a>${r.src_state === 'gone' ? `<span class="pill rejected" style="margin-left:4px" title="자동 확인: 원문이 삭제·내려감 — 당근에서 내리고 나감 체크하세요 (${esc(dt(r.src_gone_at || r.src_checked_at))})">⚠️ 확인 요망 · 원문 내려감</span>` : r.src_state === 'ok' ? `<span class="small" style="color:var(--ok);margin-left:4px" title="원문 살아 있음 (확인 ${esc(dt(r.src_checked_at))})">✓</span>` : r.src_state === 'unknown' ? `<span class="small" style="color:var(--dim);margin-left:4px" title="원문 확인 못함 (${esc(dt(r.src_checked_at))})">?</span>` : ''} <span class="small" data-pen style="color:var(--dim);cursor:pointer" title="링크 수정">✎</span>` : '<span class="small" data-pen style="color:var(--dim)">링크 넣기 ✎</span>'}</td>
         <td class="nowrap ed" data-ed="phone" data-key="${esc(r.key)}" title="눌러서 연락처·구분 수정">${r.phone ? `<span class="small" style="color:var(--dim)">${esc(roleL(r.role))}</span> ${esc(r.phone)}` : '<span class="small" style="color:var(--dim)">연락처 넣기</span>'}</td>
         <td class="ed" data-ed="addr" data-key="${esc(r.key)}" title="눌러서 주소·호수 수정"><b>${esc(r.addr || '')}</b>${r.ho ? ' ' + esc(r.ho) : ''}</td>
         <td class="nowrap num">${esc(r.price || '')}</td>
@@ -648,6 +730,7 @@ function paintUploads() {
     </tbody></table></div>`
   const setF = patch => { S.upFilter = { ...f, ...patch }; paintUploads() }
   document.getElementById('up_days').onchange = e => { S.upDays = +e.target.value; S.data.uploads = null; load('uploads') }
+  const sc = document.getElementById('up_srccheck'); if (sc) sc.onclick = async () => { sc.disabled = true; sc.textContent = '원문 확인 중… (건당 1초 안팎)'; try { const r = await api('uploads-check', {}); toast(`${r.checked}건 확인 — 내려감 ${r.gone}건${r.unknown ? ` · 확인 못함 ${r.unknown}건` : ''}`); S.data.uploads = null; load('uploads') } catch (e) { toast(e.message); sc.disabled = false; sc.textContent = '🔁 원문 지금 확인' } }
   document.getElementById('up_where').onchange = e => setF({ where: e.target.value })
   document.getElementById('up_by').onchange = e => setF({ by: e.target.value })
   document.getElementById('up_hide').onchange = e => setF({ hideClosed: e.target.checked })
@@ -1060,7 +1143,7 @@ function moveInDate(t) {
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const BULK = { rows: [], busy: false, msg: '', formRow: null, dgRun: false, dgSec: 30, phrAll: (() => { try { return localStorage.getItem('lounge_intranet_phrases_all_bulk') === '1' } catch (_) { return false } })() }
 /* 일괄 줄 설명에 자주 쓰는 문구 전부 넣기/빼기 (폼의 문구 목록과 같은 저장소) */
-const phrList = () => { try { const v = JSON.parse(localStorage.getItem('lounge_intranet_phrases_v1') || 'null'); return Array.isArray(v) ? v.map(x => String(x).trim()).filter(Boolean) : [] } catch (_) { return [] } }
+const phrList = () => { try { const v = JSON.parse(PREF.get('lounge_intranet_phrases_v1') || 'null'); return Array.isArray(v) ? v.map(x => String(x).trim()).filter(Boolean) : [] } catch (_) { return [] } }
 const normTxt = t => String(t || '').replace(/\r/g, '').replace(/[ \t]+\n/g, '\n').replace(/\s+$/, '')
 /** 설명 글에 문구 전부 붙이기 — 이미 들어 있는 문구(글 전체 기준)는 건너뛰어 중복이 안 생긴다 */
 const phrApplyText = (text, list) => { let cur = normTxt(text); for (const p of list) { const q = normTxt(p); if (!q || cur.includes(q)) continue; cur = (cur.trim() ? cur + '\n' : '') + q } return cur }
@@ -1182,7 +1265,7 @@ async function bulkLedger(r) {
     if (r.ledger.parking != null && (g.parking_total == null || g.parking_total === '')) g.parking_total = r.ledger.parking   // 대장 주차대수 자동
   } catch (e) { r.ledger = { err: String(e.message || '오류') } }
   finally { LEDGER_Q.running--; const next = LEDGER_Q.queue.shift(); if (next) next() }
-  if (r.ledgerKey === key) { const el = document.querySelector(`[data-areadiff="${r.n}"]`); const mm = document.querySelector(`[data-missmemo="${r.n}"]`); if (el) { const t = areaDiffText(r); el.style.display = t ? '' : 'none'; el.textContent = t; if (mm) { const miss = dgMissBulk(r); mm.style.display = miss.length ? '' : 'none'; mm.textContent = '🥕 당근 빠짐: ' + miss.join(' · ') } } else paintBulk() }
+  if (r.ledgerKey === key) { const el = document.querySelector(`[data-areadiff="${r.n}"]`); const mm = document.querySelector(`[data-missmemo="${r.n}"]`); if (el) { const t = areaDiffText(r); el.style.display = t ? '' : 'none'; el.textContent = t; if (mm) { const t = bulkMemoText(r); mm.style.display = t ? '' : 'none'; mm.textContent = t } } else paintBulk() }
 }
 const areaDiffText = r => {
   const L = r.ledger; if (!L || L.busy || L.err || !L.ex) return ''
@@ -1211,18 +1294,54 @@ async function bulkRun(payload, isFile) {
     await Promise.all([w(), w(), w()])
     bulkSummaryMsg()
   } catch (e) { BULK.msg = '정리 실패: ' + e.message }
-  finally { BULK.busy = false; paintBulk() }
+  finally { BULK.busy = false; paintBulk(); if (dgMine() && S.dg.daangn && S.dg.daangn.connected) bulkPrecheck(false) }   // 당근이 연결돼 있으면 정리가 끝난 뒤 중복을 미리 확인
 }
 /* 체크한 매물을 당근부동산에 차례로 올린다 — 건당 간격(초)을 두고, 당근 연결(세션) 문제면 전체 중단 */
+/** 안전장치(서버 429 wait): 남은 초를 세며 기다렸다가 같은 요청을 다시 보낸다 */
+async function dgCallWait(call, status) {
+  for (let tries = 0; tries < 20; tries++) {
+    try { return await call() }
+    catch (err) {
+      if (!(err.code === 'wait' && err.data && err.data.wait > 0)) throw err
+      const w = Math.min(900, Math.ceil(err.data.wait))
+      for (let s = w; s > 0; s--) { status(`안전 간격 — ${s}초 뒤 당근에 올립니다 (당근 제한을 피하려고 등록 사이에 간격을 둡니다)`); await new Promise(res => setTimeout(res, 1000)) }
+    }
+  }
+  throw new Error('안전 간격 대기가 너무 길어 중단했습니다. 잠시 뒤 다시 눌러주세요.')
+}
 const sleepTick = async (sec, label) => { for (let i = sec; i > 0 && BULK.dgRun; i--) { BULK.msg = `${label} — 다음 건까지 ${i}초 대기 (당근 제한을 피하려고 간격을 둡니다)`; const el = document.getElementById('bmsg'); if (el) el.textContent = BULK.msg; dgNow(DG.cur && /대기/.test(DG.cur) ? DG.cur : `${label}`, `다음 건까지 ${i}초 대기 (당근 제한을 피하려고 간격을 둡니다)`); await new Promise(r => setTimeout(r, 1000)) } }
+/** 올리기 전 당근 중복 미리 확인 — 주소가 맞춰진 줄들을 라이선스 서버 daangn-precheck 로 (엔진이 당근에 같은 호실 판매중인지 묻고, 내가 올린 기록도 대조). 중복 줄은 🥕 체크를 끈다 */
+async function bulkPrecheck(manual) {
+  if (!dgMine() || BULK.preRun) return
+  if (!(S.dg.daangn && S.dg.daangn.connected)) { if (manual) toast('먼저 [당근 연결 (QR)] 로 본인 당근 계정을 연결해 주세요.'); return }
+  const rows = BULK.rows.filter(r => r.ok && !(r.dg && r.dg.state === 'done') && (r.addrItems || [])[r.addrIdx])
+  if (!rows.length) { if (manual) toast('주소가 맞춰진 매물이 없습니다'); return }
+  BULK.preRun = true; rows.forEach(r => { r.pre = { state: 'busy' } }); BULK.msg = `🔎 당근 중복 확인 중… (${rows.length}건)`; paintBulk()
+  try {
+    const items = rows.map(r => { const it = r.addrItems[r.addrIdx], g = r.got || {}; return { road_addr: it.roadAddr || it.jibunAddr || '', jibun_addr: it.jibunAddr || '', dong_nm: g.dong_nm || '', ho_nm: g.ho_nm || '', floor_no: g.floor_no ?? null, options: Array.isArray(g.options) ? g.options : [] } })
+    const j = await dapi('daangn-precheck', { items })
+    let dupN = 0, oursN = 0
+    ;(j.items || []).forEach(x => { const r = rows[x.i]; if (!r) return
+      if (x.dup) { dupN++; r.pre = { state: 'dup', no: x.dup.originalId, url: x.dup.url, broker: x.dup.brokerName || '', trade: x.dup.tradeText || '', full: x.fullAddress, ours: x.ours ? x.ours.articleNo : '' }; r.dgOn = false }
+      else if (x.ours) { oursN++; r.pre = { state: 'ours', no: x.ours.articleNo, url: x.ours.url }; r.dgOn = false }
+      else if (x.error) r.pre = { state: 'unk', msg: x.error }
+      else if (x.writable === false) r.pre = { state: 'no', msg: x.reason || '' }
+      else r.pre = { state: 'ok', partial: x.partial || 0, full: x.fullAddress } })
+    BULK.msg = `🔎 당근 중복 확인 끝 — ${rows.length}건 중 당근에 이미 있음 ${dupN}건${oursN ? ` · 내가 올린 것 ${oursN}건` : ''} (중복은 🥕 체크를 꺼 두었습니다)`
+    if (manual) toast(dupN || oursN ? `중복 ${dupN + oursN}건을 찾아 체크를 껐습니다` : '당근에 같은 매물이 없습니다')
+  } catch (e) { rows.forEach(r => { if (r.pre && r.pre.state === 'busy') r.pre = { state: 'unk', msg: e.message } }); BULK.msg = '당근 중복 확인 실패: ' + e.message; if (manual) toast(e.message) }
+  finally { BULK.preRun = false; paintBulk() }
+}
 async function bulkDaangn() {
   if (BULK.busy || BULK.dgRun) return
   const targets = BULK.rows.filter(r => r.dgOn && r.ok && !(r.dg && r.dg.state === 'done'))
   if (!targets.length) return toast('당근으로 올릴 매물을 줄마다 🥕 체크해 주세요.')
-  const sec = Math.max(5, parseInt((document.getElementById('bdgsec') || {}).value || '30', 10) || 30)
+  try { S.me = await api('summary'); S.dg = CONFIG.DAANGN_API ? (dgMine() ? await dapi('summary') : S.dg) : S.me } catch (_) {}   // 안전장치(하루 상한·간격)는 어드민이 정할 때마다 바로 반영 — 실행 직전에 최신값을 읽는다
+  const guardOn = !!(S.dg && S.dg.guard && S.dg.guard.on)
+  const sec = guardOn ? 3 : Math.max(5, parseInt((document.getElementById('bdgsec') || {}).value || '30', 10) || 30)   // 안전장치가 켜져 있으면 간격은 서버가 두므로 화면 간격은 최소로
   const notReady = targets.filter(r => dgMissBulk(r).length || bulkCheck(r))
   const onlyN = targets.filter(r => !r.lgOn && r.status !== 'done').length
-  if (!confirm(`체크한 ${targets.length}건을 당근부동산에 올립니다 (건당 약 20초 + ${sec}초 간격).${notReady.length ? `\n\n빠진 항목이 있는 ${notReady.length}건은 건너뜁니다.` : ''}\n\n계속할까요?`)) return
+  if (!confirm(`체크한 ${targets.length}건을 당근부동산에 올립니다 (건당 약 20초 + ${guardOn ? `안전장치 간격 ${S.dg.guard.min}~${S.dg.guard.max}초, 오늘 ${S.dg.guard.today}/${S.dg.guard.daily || '∞'}건` : `${sec}초 간격`}).${notReady.length ? `\n\n빠진 항목이 있는 ${notReady.length}건은 건너뜁니다.` : ''}\n\n계속할까요?`)) return
   BULK.dgRun = true; let ok = 0, fail = 0, skip = 0
   dgStart(targets.length)
   for (let i = 0; i < targets.length; i++) {
@@ -1237,13 +1356,18 @@ async function bulkDaangn() {
     }
     r.dg = { state: 'uploading', msg: '당근에 올리는 중… (사진 포함 20초 안팎)' }; BULK.msg = `🥕 ${r.n}번 당근에 올리는 중… (${i + 1}/${targets.length})`; dgNow(`${r.n}번 ${dgLabel(r)} — 당근에 올리는 중${directOnly ? ' (당근만 · 라운지 저장 없음)' : ''} (사진 포함 20초 안팎)`); paintBulk()
     try {
-      const j = directOnly ? await api('daangn-direct', bulkBodyOf(r, (document.getElementById('c_hq_kind') || {}).value || 'lounge')) : await api('daangn-publish', { listing_id: r.id })
+      const hqk = (document.getElementById('c_hq_kind') || {}).value || 'lounge'
+      const j = dgMine() ? await dapi('daangn-direct', { ...bulkBodyOf(r, hqk), listing_id: r.id || undefined }) : directOnly ? await api('daangn-direct', bulkBodyOf(r, hqk)) : await api('daangn-publish', { listing_id: r.id })
       r.dg = { state: 'done', url: j.url || '', no: dgArticleNo(j.url, j.articleId, j.articleNo), msg: '당근 등록 완료' }; ok++; dgPush({ ok: true, label: dgLabel(r), url: j.url || '', no: r.dg.no, listing_id: r.id, direct: directOnly })
       if (directOnly) { r.daangnOnly = true; r.status = 'done'; r.msg = '당근에만 올림 (라운지 저장 없음)' }
     } catch (e) {
       const m = String(e.message || '')
       if (e.code === 'daangn_dup') { r.dg = { state: 'dup', no: dgArticleNo(e.data && e.data.url, e.data && e.data.articleId, e.data && e.data.articleNo), url: (e.data && e.data.url) || '', msg: m }; dgPush({ ok: false, dup: true, no: r.dg.no, url: r.dg.url, label: dgLabel(r), msg: m }); paintBulk(); if (i < targets.length - 1 && BULK.dgRun) await sleepTick(3, '중복 건너뜀'); continue }
+      if (e.code === 'wait' && e.data && e.data.wait > 0) {   // 안전장치 간격: 남은 초만큼 기다렸다 같은 줄을 다시 올린다
+        const w = Math.min(900, Math.ceil(e.data.wait)); r.dg = { state: 'uploading', msg: `안전 간격 — ${w}초 뒤 다시 올립니다` }; paintBulk()
+        await sleepTick(w, `🥕 ${r.n}번 안전 간격 대기`); if (BULK.dgRun) i--; continue }
       r.dg = { state: 'fail', msg: m }; fail++; dgPush({ ok: false, label: dgLabel(r), msg: m })
+      if (e.code === 'daily_limit') { BULK.msg = `오늘 등록 상한에 도달해 중단: ${m}`; BULK.dgRun = false; paintBulk(); break }
       if (m === '401') { BULK.dgRun = false; break }
       if (/당근 연결|만료|QR|로그인/.test(m)) { BULK.msg = `당근 연결 문제로 중단: ${m}`; BULK.dgRun = false; paintBulk(); break }
     }
@@ -1305,6 +1429,12 @@ async function bulkRegister(onlyIdx) {
   paintBulk()
   if (done) { toast(`${done}건을 승인대기로 등록했습니다. 검수·승인 탭에서 승인하세요.`); S.data.review = null; refresh() }
 }
+/** 줄 메모: 당근 중복(미리 확인 결과) + 당근 빠진 칸 — '당근에 빠진 것' 자리에 같이 보인다 */
+const bulkMemoText = r => { const miss = dgMissBulk(r); const parts = []
+  if (r.pre && r.pre.state === 'dup') parts.push('⚠️ 당근 중복매물 — 이미 판매중' + (r.pre.no ? ' (당근 ' + r.pre.no + (r.pre.broker ? ' · ' + r.pre.broker : '') + (r.pre.trade ? ' · ' + r.pre.trade : '') + ')' : ''))
+  else if (r.pre && r.pre.state === 'ours') parts.push('⚠️ 당근 중복매물 — 내가 이미 올림' + (r.pre.no ? ' (당근 ' + r.pre.no + ')' : ''))
+  if (miss.length) parts.push('🥕 당근 빠짐: ' + miss.join(' · '))
+  return parts.join('   ') }
 const dgMissBulk = r => {   // 당근 등록에 꼭 필요한 칸 중 비어 있는 것
     const g = r.got || {}, it = r.addrItems[r.addrIdx] || {}; const n = v => { const x = parseFloat(String(v ?? '').replace(/,/g, '')); return isNaN(x) ? null : x }
     const out = []
@@ -1330,8 +1460,17 @@ function paintBulk() {
   ;['bfilego', 'bparse'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = BULK.busy })
   if (!BULK.rows.length) { box.innerHTML = ''; return }
   const ready = BULK.rows.filter(r => r.lgOn && ['ready', 'dup', 'error'].includes(r.status) && !bulkCheck(r)).length
+  const prePill = r => {
+    const p = r.pre; if (!p || (r.dg && (r.dg.state === 'done' || r.dg.state === 'dup'))) return ''
+    if (p.state === 'busy') return `<div style="margin-top:4px"><span class="pill etc">🥕 당근 중복 확인 중…</span></div>`
+    if (p.state === 'dup') return `<div style="margin-top:4px"><span class="pill pending" title="${esc(p.full || '')}">당근 중복${p.no ? ' · ' + esc(p.no) : ''}${p.broker ? ' · ' + esc(p.broker) : ''}${p.trade ? ' · ' + esc(p.trade) : ''}</span>${p.url ? ` <a href="${esc(p.url)}" target="_blank" rel="noopener" style="font-size:12px">보기</a>` : ''}${p.ours ? ` <span class="hint" style="margin:0">(내가 올린 ${esc(p.ours)})</span>` : ''}</div>`
+    if (p.state === 'ours') return `<div style="margin-top:4px"><span class="pill pending">⚠️ 내가 이미 올림 ${esc(p.no || '')}</span>${p.url ? ` <a href="${esc(p.url)}" target="_blank" rel="noopener" style="font-size:12px">보기</a>` : ''}</div>`
+    if (p.state === 'ok') return `<div style="margin-top:4px"><span class="pill active" title="${esc(p.full || '')}">✓ 당근에 없음${p.partial ? ` (같은 건물 다른 호 ${p.partial}건)` : ''}</span></div>`
+    if (p.state === 'no') return `<div style="margin-top:4px"><span class="pill rejected">🥕 올릴 수 없는 주소 — ${esc(p.msg || '')}</span></div>`
+    return `<div style="margin-top:4px"><span class="pill etc">🥕 확인 못함 — ${esc(p.msg || '')}</span></div>`
+  }
   const dgPill = r => {
-    const d = r.dg; if (!d) return ''
+    const d = r.dg; if (!d) return prePill(r)
     if (d.state === 'uploading') return `<div style="margin-top:4px"><span class="pill etc">🥕 ${esc(d.msg)}</span></div>`
     if (d.state === 'dup') return `<div style="margin-top:4px"><span class="pill pending">🥕 당근 중복 — 이미 올라감${d.no ? ' ' + esc(d.no) : ''}</span>${d.url ? ` <a href="${esc(d.url)}" target="_blank" rel="noopener" style="font-size:12px">보기</a>` : ''}</div>`
     if (d.state === 'done') return `<div style="margin-top:4px"><span class="pill active">🥕 당근 완료${d.no ? ' ' + esc(d.no) : ''}</span>${d.url ? ` <a href="${esc(d.url)}" target="_blank" rel="noopener" style="font-size:12px">보기</a>` : ''}</div>`
@@ -1366,11 +1505,12 @@ function paintBulk() {
     <div class="row-acts" style="margin:10px 0 6px;align-items:center">
       <label style="display:flex;align-items:center;gap:4px;margin:0;font-size:12.5px;font-weight:400"><input type="checkbox" id="blgall" ${BULK.rows.some(r => r.ok && r.status !== 'done') && BULK.rows.filter(r => r.ok && r.status !== 'done').every(r => r.lgOn) ? 'checked' : ''} ${BULK.busy || BULK.dgRun ? 'disabled' : ''} style="width:auto;margin:0"> 📍 전부</label>
       <button class="btn b" id="bregister" ${BULK.busy || !ready ? 'disabled' : ''} title="📍 라운지 체크된 줄을 승인대기로 등록">📍 ${ready}건 라운지 일괄등록</button>
-      <button class="btn" id="bclear" ${BULK.busy || BULK.dgRun ? 'disabled' : ''}>목록 비우기</button>
+      <button class="btn" id="bclear" ${BULK.busy || BULK.dgRun ? 'disabled' : ''}>목록 비우기</button>${BULK.rows.some(r => r.got && r.got.views != null) ? `<button class="btn" id="bsortviews" ${BULK.busy || BULK.dgRun ? 'disabled' : ''} title="당근 조회수 많은 순으로 줄을 다시 번호 매깁니다">👁 조회수순</button>` : ''}
       <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;font-size:12.5px">
         <label style="display:flex;align-items:center;gap:4px;margin:0;font-weight:400"><input type="checkbox" id="bdgall" ${BULK.rows.some(r => r.ok && !(r.dg && r.dg.state === 'done')) && BULK.rows.filter(r => r.ok && !(r.dg && r.dg.state === 'done')).every(r => r.dgOn) ? 'checked' : ''} ${BULK.dgRun ? 'disabled' : ''} style="width:auto;margin:0"> 🥕 전부</label>
+        ${dgMine() ? `<button class="btn" id="bdgpre" style="border-color:#fed7aa;color:#c2410c;padding:4px 10px" ${BULK.busy || BULK.dgRun || BULK.preRun || !BULK.rows.some(r => r.ok && !(r.dg && r.dg.state === 'done')) ? 'disabled' : ''} title="연결된 당근 계정 기준으로 같은 호실 매물이 이미 판매중인지 올리기 전에 확인합니다(당근에서 등록 폼이 막는 것과 같은 판정 + 내가 올린 기록)">${BULK.preRun ? '🔎 중복 확인 중…' : '🔎 당근 중복 미리 확인'}</button>` : ''}
         <button class="btn b" id="bdaangn" style="background:#ff6f0f;border-color:#ff6f0f;padding:4px 10px" ${BULK.busy || BULK.dgRun || !BULK.rows.some(r => r.dgOn && !(r.dg && r.dg.state === 'done')) ? 'disabled' : ''}>🥕 체크한 ${BULK.rows.filter(r => r.dgOn && !(r.dg && r.dg.state === 'done')).length}건 당근으로 올리기</button>
-        <span>간격 <input id="bdgsec" type="number" min="5" max="600" value="${BULK.dgSec || 30}" ${BULK.dgRun ? 'disabled' : ''} style="width:52px;font:inherit;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:6px">초</span>
+        ${S.dg && S.dg.guard && S.dg.guard.on ? `<span title="어드민 '사용자 관리'에서 정한 안전장치 — 등록 사이에 이 범위에서 무작위 간격을 두고, 하루 상한을 넘기지 않습니다 (서버가 적용, 정할 때마다 반영)">🛡 간격 ${S.dg.guard.min}~${S.dg.guard.max}초 · 오늘 ${S.dg.guard.today}/${S.dg.guard.daily || '∞'}건</span>` : `<span>간격 <input id="bdgsec" type="number" min="5" max="600" value="${BULK.dgSec || 30}" ${BULK.dgRun ? 'disabled' : ''} style="width:52px;font:inherit;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:6px">초</span>`}
         ${BULK.dgRun ? `<button class="btn no" id="bdgstop" style="padding:4px 10px">중지</button>` : `<button class="btn" id="bdglog" style="padding:4px 10px" title="이 브라우저에 남은 최근 당근 올리기 결과">결과 보기</button>`}
       </span>
       <label style="display:flex;align-items:center;gap:5px;margin:0;font-size:12.5px;font-weight:400" title="켜면 모든 줄의 설명 끝에 자주 쓰는 문구 전부가 붙습니다(이미 있는 줄은 건너뜀). 끄면 뺍니다. 새로 정리한 줄에도 자동"><input type="checkbox" id="bphrall" ${BULK.phrAll ? 'checked' : ''} style="width:auto;margin:0"> 📝 자주 쓰는 문구 전부 넣기</label>
@@ -1384,7 +1524,7 @@ function paintBulk() {
       <td class="nowrap">${esc([g.dong_nm, g.ho_nm].filter(Boolean).join(' ') || '-')}</td>
       <td style="min-width:88px">${r.ok ? `<b>${esc(g.deal_type || '?')}</b> ${esc(moneyLabel(g))}${g.manage_prc ? `<div class="memo">관리 ${esc(g.manage_prc)}</div>` : ''}` : '-'}</td>
       <td style="min-width:78px">${r.ok ? esc([g.property_type, g.floor_no != null ? g.floor_no + (g.total_floors ? '/' + g.total_floors : '') + '층' : '', g.area_exclusive ? g.area_exclusive + '㎡' : ''].filter(Boolean).join(' · ') || '-') : '-'}</td>
-      <td style="min-width:120px;max-width:220px"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.headline || '')}</div><div class="memo" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.input || '')}">${r.ok ? `<b style="color:${r.photoCount ? '#1d4ed8' : 'var(--dim)'}">사진${r.photoCount || 0}</b>${r.photoTotal > (r.photoCount || 0) ? ` <b style="color:var(--bad)">⚠ 원본 ${r.photoTotal}장 — 못 읽음, 알려주세요</b>` : ''} · ` : ''}${esc(({ naver: '네이버', daangn: '당근', generic: '링크', excel: '엑셀', text: '글', onhouse: '온하우스' })[String(g._source || '').replace('+excel', '')] || '')}${g.owner_phone ? ' · ' + ({ manager: '관리업체', tenant: '세입자' }[g.contact_role] || '임대인') + ' 연락처 ✓' : ''} · ${esc((r.input || '').slice(0, 60))}</div>${r.msg ? `<div class="memo" style="color:${r.status === 'done' ? 'var(--ok)' : 'var(--bad)'}">${esc(r.msg)}</div>` : ''}${r.ok ? `<div class="memo" data-areadiff="${r.n}" style="color:#b45309;white-space:normal;${areaDiffText(r) ? '' : 'display:none'}">${esc(areaDiffText(r))}</div>` : ''}${r.ok && r.status !== 'done' ? `<div class="memo" data-missmemo="${r.n}" style="color:#b45309;white-space:normal;${dgMissBulk(r).length ? '' : 'display:none'}" title="당근부동산에 올리려면 채워야 하는 칸 — [설명 수정]·[폼에 넣기]로 채우세요">🥕 당근 빠짐: ${esc(dgMissBulk(r).join(' · '))}</div>` : ''}</td>
+      <td style="min-width:120px;max-width:220px"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.headline || '')}</div><div class="memo" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.input || '')}">${r.ok ? `<b style="color:${r.photoCount ? '#1d4ed8' : 'var(--dim)'}">사진${r.photoCount || 0}</b>${r.photoTotal > (r.photoCount || 0) ? ` <b style="color:var(--bad)">⚠ 원본 ${r.photoTotal}장 — 못 읽음, 알려주세요</b>` : ''} · ` : ''}${esc(({ naver: '네이버', daangn: '당근', generic: '링크', excel: '엑셀', text: '글', onhouse: '온하우스' })[String(g._source || '').replace('+excel', '')] || '')}${g.views != null ? ` · <span title="당근 조회수 · 관심 · 채팅" style="color:#c2410c">👁 ${esc(g.views)}${g.watches != null ? ' ♥' + esc(g.watches) : ''}${g.chats != null ? ' 💬' + esc(g.chats) : ''}</span>` : ''}${g.owner_phone ? ' · ' + ({ manager: '관리업체', tenant: '세입자' }[g.contact_role] || '임대인') + ' 연락처 ✓' : ''} · ${esc((r.input || '').slice(0, 60))}</div>${r.msg ? `<div class="memo" style="color:${r.status === 'done' ? 'var(--ok)' : 'var(--bad)'}">${esc(r.msg)}</div>` : ''}${r.ok ? `<div class="memo" data-areadiff="${r.n}" style="color:#b45309;white-space:normal;${areaDiffText(r) ? '' : 'display:none'}">${esc(areaDiffText(r))}</div>` : ''}${r.ok && r.status !== 'done' ? `<div class="memo" data-missmemo="${r.n}" style="color:#b45309;white-space:normal;${bulkMemoText(r) ? '' : 'display:none'}" title="당근부동산에 올리려면 채워야 하는 칸 — [설명 수정]·[폼에 넣기]로 채우세요">${esc(bulkMemoText(r))}</div>` : ''}</td>
       <td>${stPill(r)}${dgPill(r)}</td>
       <td style="min-width:104px"><div class="row-acts" style="flex-direction:column;align-items:stretch">
         ${r.status === 'dup' ? `<button class="btn no" data-force="${r.n}">중복이어도 등록</button>` : ''}
@@ -1421,18 +1561,20 @@ function paintBulk() {
   box.querySelectorAll('input[data-dg]').forEach(cb => cb.onchange = () => { const r = byN(cb.dataset.dg); r.dgOn = cb.checked; paintBulk() })
   box.querySelectorAll('input[data-lg]').forEach(cb => cb.onchange = () => { const r = byN(cb.dataset.lg); r.lgOn = cb.checked; paintBulk() })
   const lgAll = document.getElementById('blgall'); if (lgAll) lgAll.onchange = () => { BULK.rows.forEach(r => { if (r.ok && r.status !== 'done') r.lgOn = lgAll.checked }); paintBulk() }
+  const preBtn = document.getElementById('bdgpre'); if (preBtn) preBtn.onclick = () => bulkPrecheck(true)
+  const sv = document.getElementById('bsortviews'); if (sv) sv.onclick = () => { const v = r => (r.got && Number(r.got.views)) || 0; const fr = BULK.formRow ? BULK.rows.find(x => x.n === BULK.formRow) : null; BULK.rows.sort((a, b) => v(b) - v(a) || ((b.got && b.got.watches) || 0) - ((a.got && a.got.watches) || 0)); BULK.rows.forEach((r, i) => { r.n = i + 1 }); if (fr) BULK.formRow = fr.n; paintBulk(); toast('조회수 많은 순으로 정렬했습니다') }
   const dgAll = document.getElementById('bdgall'); if (dgAll) dgAll.onchange = () => { BULK.rows.forEach(r => { if (r.ok && !(r.dg && r.dg.state === 'done')) r.dgOn = dgAll.checked }); paintBulk() }
   const dgBtn = document.getElementById('bdaangn'); if (dgBtn) dgBtn.onclick = () => bulkDaangn()
   const dgSec = document.getElementById('bdgsec'); if (dgSec) dgSec.onchange = () => { BULK.dgSec = Math.max(5, parseInt(dgSec.value, 10) || 30) }
   const dgLog = document.getElementById('bdglog'); if (dgLog) dgLog.onclick = () => { if (!DG.items.length) return toast('남은 결과가 없습니다'); DG.batch = DG.items[DG.items.length - 1].batch; paintDgPanel() }
   const dgStop = document.getElementById('bdgstop'); if (dgStop) dgStop.onclick = () => { BULK.dgRun = false; BULK.msg = '중지합니다 — 지금 올리는 건이 끝나면 멈춥니다'; paintBulk() }
-  const phrCb = document.getElementById('bphrall'); if (phrCb) phrCb.onchange = () => { BULK.phrAll = phrCb.checked; try { localStorage.setItem('lounge_intranet_phrases_all_bulk', BULK.phrAll ? '1' : '0') } catch (_) {} ; BULK.rows.forEach(r => { if (r.ok && r.status !== 'done') (BULK.phrAll ? rowPhrApply : rowPhrRemove)(r) }); paintBulk(); toast(BULK.phrAll ? '모든 줄 설명 끝에 문구를 넣었습니다 — 새로 정리한 줄에도 자동으로 붙습니다' : '줄 설명에서 문구를 뺐습니다') }
+  const phrCb = document.getElementById('bphrall'); if (phrCb) phrCb.onchange = () => { BULK.phrAll = phrCb.checked; PREF.set('lounge_intranet_phrases_all_bulk', BULK.phrAll ? '1' : '0'); BULK.rows.forEach(r => { if (r.ok && r.status !== 'done') (BULK.phrAll ? rowPhrApply : rowPhrRemove)(r) }); paintBulk(); toast(BULK.phrAll ? '모든 줄 설명 끝에 문구를 넣었습니다 — 새로 정리한 줄에도 자동으로 붙습니다' : '줄 설명에서 문구를 뺐습니다') }
   const allCb = document.getElementById('bphall'); if (allCb) allCb.onchange = () => { BULK.rows.forEach(r => { if (r.photoCount && r.status !== 'done') r.photosOn = allCb.checked }); paintBulk() }
   box.querySelectorAll('button[data-descedit]').forEach(b => b.onclick = () => { const r = byN(b.dataset.descedit); r.editOpen = !r.editOpen; paintBulk(); if (r.editOpen) { const ta = box.querySelector(`textarea[data-desc="${r.n}"]`); if (ta) { ta.focus(); ta.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) } } })
   box.querySelectorAll('button[data-descok]').forEach(b => b.onclick = () => { const r = byN(b.dataset.descok); r.editOpen = false; paintBulk() })
   box.querySelectorAll('textarea[data-desc]').forEach(t => t.oninput = () => { const r = byN(t.dataset.desc); r.got.description = t.value })   // 고치는 즉시 그 줄에 저장(다시 그리지 않음)
   box.querySelectorAll('input[data-hl]').forEach(t => t.oninput = () => { const r = byN(t.dataset.hl); r.got.headline = t.value })
-  const refreshMiss = r => { const ad = box.querySelector(`[data-areadiff="${r.n}"]`); if (ad) { const t = areaDiffText(r); ad.style.display = t ? '' : 'none'; ad.textContent = t } const el = box.querySelector(`[data-missmemo="${r.n}"]`); if (!el) return; const miss = dgMissBulk(r); el.style.display = miss.length ? '' : 'none'; el.textContent = '🥕 당근 빠짐: ' + miss.join(' · ') }
+  const refreshMiss = r => { const ad = box.querySelector(`[data-areadiff="${r.n}"]`); if (ad) { const t = areaDiffText(r); ad.style.display = t ? '' : 'none'; ad.textContent = t } const el = box.querySelector(`[data-missmemo="${r.n}"]`); if (!el) return; const t = bulkMemoText(r); el.style.display = t ? '' : 'none'; el.textContent = t }
   box.querySelectorAll('select[data-bf]').forEach(t => t.onchange = () => { const r = byN(t.dataset.n); r.got[t.dataset.bf] = t.value })
   box.querySelectorAll('input[data-bf]').forEach(t => t.oninput = () => { const r = byN(t.dataset.n); const v = t.value.trim(); r.got[t.dataset.bf] = v === '' ? undefined : ((t.dataset.bf === 'available_date' || t.dataset.bf === 'owner_phone') ? v : (isNaN(Number(v)) ? v : Number(v))); if (t.dataset.bf === 'available_date') { const cb = box.querySelector(`input[data-bnow="${r.n}"]`); if (cb) cb.checked = v === todayStr() } })
   box.querySelectorAll('input[data-bnow]').forEach(cb => cb.onchange = () => { const r = byN(cb.dataset.bnow); r.got.available_date = cb.checked ? todayStr() : undefined; const di = box.querySelector(`input[data-bf="available_date"][data-n="${r.n}"]`); if (di) di.value = cb.checked ? todayStr() : '' })
@@ -1473,7 +1615,7 @@ function paintCreate() {
   const k = document.getElementById('keep_create'); if (k) k.innerHTML = ''
   const opt = (arr, cur) => arr.map(v => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(v)}</option>`).join('')
   document.getElementById('body').innerHTML = `
-    <div class="paste" id="dgconn" style="border-color:#fed7aa;background:#fff7ed"></div>
+    <div class="paste dgconn" style="border-color:#fed7aa;background:#fff7ed;display:none"></div>
     <div class="paste">
       <div style="font-weight:800">⚡ 붙여넣기로 자동 정리 <span style="font-weight:400;color:var(--dim);font-size:12px">매물 링크(네이버·당근·온하우스·그 밖의 사이트) · 카톡/문자 글 · 엑셀 한 줄 — 무엇이든</span></div>
       <textarea id="cpaste" placeholder="여기에 붙여넣으세요.  링크든, 카톡 글이든, 엑셀에서 복사한 한 줄이든 됩니다.  예) 삼전동 13-6 2층 202호 보증금 5000 월세 130 010-1234-5678"></textarea>
@@ -1875,8 +2017,8 @@ function paintCreate() {
   /* 자주 쓰는 문구: 브라우저(localStorage)에 보관, 고치는 즉시 저장 */
   const PHR_KEY = 'lounge_intranet_phrases_v1'
   const PHR_DEFAULT = ['☎ 문의 환영 — 전화·문자 주시면 바로 안내드립니다.', '즉시 입주 가능 · 입주일 협의 가능합니다.', '주차 가능 · 반려동물 상담 가능합니다.']
-  const loadPhr = () => { try { const v = JSON.parse(localStorage.getItem(PHR_KEY) || 'null'); if (Array.isArray(v)) return v } catch (_) {} return PHR_DEFAULT.slice() }
-  const savePhr = list => { try { localStorage.setItem(PHR_KEY, JSON.stringify(list)) } catch (_) {} }
+  const loadPhr = () => { try { const v = JSON.parse(PREF.get(PHR_KEY) || 'null'); if (Array.isArray(v)) return v } catch (_) {} return PHR_DEFAULT.slice() }
+  const savePhr = list => PREF.set(PHR_KEY, JSON.stringify(list))
   const paintPhr = () => {
     const list = loadPhr(), box = $('c_phr_list'); if (!box) return
     box.innerHTML = ''
@@ -1901,7 +2043,7 @@ function paintCreate() {
   paintPhr()
   /* 전체 넣기: 문구 전부를 설명 끝에(중복 없이) 붙이기 / 빼기. 상태 저장 → 매물이 들어올 때마다 자동 */
   const PHR_ALL_KEY = 'lounge_intranet_phrases_all'
-  const phrAllOn = () => { try { return localStorage.getItem(PHR_ALL_KEY) === '1' } catch (_) { return false } }
+  const phrAllOn = () => PREF.get(PHR_ALL_KEY) === '1'
   const applyAllPhrases = () => {
     const d = $('c_description'); const list = loadPhr().map(x => x.trim()).filter(Boolean); if (!list.length) return
     const next = phrApplyText(d.value, list); if (next === normTxt(d.value)) return
@@ -1910,7 +2052,7 @@ function paintCreate() {
   const removeAllPhrases = () => { const d = $('c_description'); d.value = phrRemoveText(d.value, loadPhr()); fire(d) }
   S.applyAllPhrases = () => { if (phrAllOn()) applyAllPhrases() }
   $('c_phr_all').checked = phrAllOn()
-  $('c_phr_all').onchange = () => { try { localStorage.setItem(PHR_ALL_KEY, $('c_phr_all').checked ? '1' : '0') } catch (_) {} ; if ($('c_phr_all').checked) applyAllPhrases(); else removeAllPhrases(); paintMissing(false); toast($('c_phr_all').checked ? '문구 전부를 설명에 넣었습니다 — 앞으로 매물을 넣을 때마다 자동으로 붙습니다' : '문구를 설명에서 뺐습니다') }
+  $('c_phr_all').onchange = () => { PREF.set(PHR_ALL_KEY, $('c_phr_all').checked ? '1' : '0'); if ($('c_phr_all').checked) applyAllPhrases(); else removeAllPhrases(); paintMissing(false); toast($('c_phr_all').checked ? '문구 전부를 설명에 넣었습니다 — 앞으로 매물을 넣을 때마다 자동으로 붙습니다' : '문구를 설명에서 뺐습니다') }
   const runPaste = async () => {
     const raw = $('cpaste').value; const msg = $('cmsg')
     if (!raw.trim()) { msg.textContent = '붙여넣은 내용이 없습니다.'; return }
@@ -1937,17 +2079,19 @@ function paintCreate() {
   bindBulk()
 
   /* 당근으로 바로 올리기 = 승인대기 등록(사진 포함) → 서버가 당근부동산에 등록 */
-  $('cdaangnonly').onclick = () => { if (!(S.me && S.me.daangn && S.me.daangn.connected)) { toast('먼저 위의 [당근 연결 (QR)] 로 당근 계정을 연결해 주세요.'); const b = document.getElementById('dgconn'); if (b) b.scrollIntoView({ behavior: 'smooth', block: 'center' }); return } F.daangnOnly = true; $('cdaangn').click() }
+  const dgNeedConn = () => { if (dgMine() && !(S.dg.daangn && S.dg.daangn.connected)) { toast('먼저 [당근 연결 (QR)] 로 본인 당근 계정을 연결해 주세요.'); const b = document.querySelector('.dgconn'); if (b) b.scrollIntoView({ behavior: 'smooth', block: 'center' }); return true } return false }
+  $('cdaangnonly').onclick = () => { if (dgNeedConn()) return; F.daangnOnly = true; $('cdaangn').click() }
   paintDgConn()
   $('cdaangn').onclick = () => {
+    if (dgNeedConn()) return
     const mm = dgMissing(); if (F.daangnOnly) mm.req = mm.req.filter(x => x[0] !== 'c_owner_phone')   // 당근만: 라운지 미노출이라 임대인 연락처 불필요(당근 연락처는 관리자 프로필)
     if (mm.req.length) { F.daangnOnly = false; paintMissing(true); const first = $(mm.req[0][3] || mm.req[0][0]); if (first) { first.scrollIntoView({ behavior: 'smooth', block: 'center' }); first.focus() }; toast(`당근에 올리려면 먼저 채워주세요: ${mm.req.map(x => x[1]).join(' · ')}`); return }
     F.daangn = true; if (!$('c_photos').value.trim() && P950.srcUrls?.length) $('c_photos').value = P950.srcUrls.slice(0, 10).join('\n'); $('cform').requestSubmit() }
-  const daangnPublish = async (row) => {
+  const daangnPublish = async (row, body) => {
     $('cstat').textContent = '당근부동산에 올리는 중… (사진 업로드 포함, 20초 안팎)'
     try {
       DG.batch = Date.now(); dgStart(1); dgNow(`${row.road_addr || ''} — 당근에 올리는 중 (사진 포함 20초 안팎)`)
-      const r = await api('daangn-publish', { listing_id: row.id })
+      const r = await dgCallWait(() => dgMine() ? dapi('daangn-direct', { ...(body || {}), listing_id: row.id }) : api('daangn-publish', { listing_id: row.id }), s => { const el = document.getElementById('cstat'); if (el) el.textContent = s })   // 권한 있으면 본인 당근 계정으로(라이선스 서버), 아니면 라운지 공용 계정
       dgPush({ ok: true, label: [row.jibun_addr || row.road_addr || '', $('c_ho_nm').value].filter(Boolean).join(' '), url: r.url || '', no: dgArticleNo(r.url, r.articleId, r.articleNo), listing_id: row.id }); dgEnd()
       $('cmsg').innerHTML += ` <b style="color:#ff6f0f">🥕 당근 등록 완료${dgArticleNo(r.url, r.articleId, r.articleNo) ? ' (당근 매물번호 ' + esc(dgArticleNo(r.url, r.articleId, r.articleNo)) + ')' : ''}</b>${r.url ? ` — <a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url)}</a>` : ''}`
       toast('당근부동산에 올렸습니다')
@@ -1979,7 +2123,7 @@ function paintCreate() {
       DG.batch = Date.now(); dgStart(1); dgNow(`${body.road_addr} ${body.ho_nm || ''} — 당근에 올리는 중 (당근만)`)
       const label = [body.jibun_addr || body.road_addr, body.dong_nm, body.ho_nm].filter(Boolean).join(' ')
       try {
-        const r = await api('daangn-direct', body)
+        const r = await dgCallWait(() => (dgMine() ? dapi : api)('daangn-direct', body), s => { $('cstat').textContent = s })
         const no = dgArticleNo(r.url, r.articleId, r.articleNo); dgPush({ ok: true, label, url: r.url || '', no, direct: true }); dgEnd()
         toast('당근에 올렸습니다 (라운지에는 저장하지 않음)')
         F.force = false; F.source_url = ''; S.data.create = null; paintCreate()
@@ -1999,7 +2143,7 @@ function paintCreate() {
       if (BULK.formRow) { const br = BULK.rows.find(x => x.n === BULK.formRow); if (br) { br.status = 'done'; br.msg = '폼에서 등록'; if (r.row?.id) br.id = r.row.id } BULK.formRow = null }
       F.force = false; F.source_url = ''; S.data.create = null; paintCreate()
       $('cmsg').innerHTML = onlyDaangn ? `<b>당근 전용</b> ${esc(r.row?.road_addr || '')} — 라운지에는 보관용(미노출)으로만 저장` : `<b>등록 완료</b> ${esc(r.row?.road_addr || '')} → 승인대기 (검수·승인 탭 맨 위 '직원 등록', 라운지 어드민 hq-listings 승인 대기 상자에도 뜸). 이어서 다른 매물을 붙여넣으세요.`
-      if (wantDaangn && r.row?.id) await daangnPublish(r.row)
+      if (wantDaangn && r.row?.id) await daangnPublish(r.row, body)
       refresh()
     } catch (err) {
       const m = String(err.message || '')
@@ -2014,44 +2158,15 @@ function paintCreate() {
 
 /* 새 버전 감지: 열어 둔 화면이 옛 버전이면 띠를 띄운다 (배포 때 BUILD 도장이 바뀜 — 배포_인트라넷.sh) */
 
-/* ── 당근 연결 (QR 로그인) — 라이선스 서버가 엔진에 QR 세션을 열고, 성공하면 사용자별 당근 세션을 서버에 보관 ── */
+/* ── 당근 연결 (QR 로그인) — 라이선스 서버(dapi)가 엔진에 QR 세션을 열고, 성공하면 사용자별 당근 세션을 서버에 보관. 권한(dgMine) 있는 사람에게만 보인다 ── */
 const DGC = { sid: '', timer: null, qr: '', state: '', msg: '' }
-function paintDgConn() {
-  const box = document.getElementById('dgconn'); if (!box) return
-  const d = (S.me && S.me.daangn) || {}
-  const hc = document.getElementById('hconn'); if (hc) hc.innerHTML = d.connected ? `<span style="color:#c2410c">🥕 ${esc(d.name || d.phone || '연결됨')}</span>` : `<span style="color:var(--dim)">🥕 당근 미연결</span>`
-  if (DGC.state === 'qr' || DGC.state === 'mfa') {
-    box.innerHTML = `<div style="font-weight:800">🥕 당근 연결 <span style="font-weight:400;color:var(--dim);font-size:12px">당근 앱 → 나의 당근 → 오른쪽 위 QR 아이콘으로 아래 QR 을 찍어주세요 (2분 안에)</span></div>
-      <div style="display:flex;gap:16px;align-items:flex-start;margin-top:8px;flex-wrap:wrap">
-        ${DGC.qr ? `<img src="data:image/png;base64,${DGC.qr}" alt="당근 로그인 QR" style="width:200px;height:200px;border:1px solid var(--line);border-radius:8px;background:#fff">` : ''}
-        <div style="flex:1;min-width:200px"><div id="dgc_msg">${esc(DGC.msg || '앱에서 QR 을 찍으면 자동으로 연결됩니다…')}</div>
-        ${DGC.state === 'mfa' ? '<div style="color:#b45309;margin-top:6px">당근 앱에 뜬 추가 인증(2단계)을 승인해 주세요.</div>' : ''}
-        <div class="row-acts" style="margin-top:10px"><button class="btn" id="dgc_cancel">취소</button></div></div></div>`
-    document.getElementById('dgc_cancel').onclick = () => dgcStop(true)
-    return
-  }
-  box.innerHTML = d.connected
-    ? `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="color:#c2410c">🥕 당근 연결됨</b><span>${esc([d.name, d.phone ? phone10(d.phone) : '', d.broker].filter(Boolean).join(' · '))}</span><span style="color:var(--dim);font-size:12px">${esc(dt(d.connected_at))} 연결</span><div class="grow"></div><button class="btn" id="dgc_re">다시 연결</button><button class="btn no" id="dgc_off">연결 해제</button></div>${DGC.msg ? `<div class="hint" style="margin:6px 0 0;color:var(--warn)">${esc(DGC.msg)}</div>` : ''}`
-    : `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>🥕 당근이 연결되어 있지 않습니다</b><span style="color:var(--dim);font-size:12.5px">본인 당근 계정으로 QR 로그인하면 그 계정으로 광고가 올라갑니다 (당근 쪽에서 로그아웃되면 다시 연결).</span><div class="grow"></div><button class="btn b" id="dgc_start" style="background:#ff6f0f;border-color:#ff6f0f">당근 연결 (QR)</button></div>${DGC.msg ? `<div class="hint" style="margin:6px 0 0;color:var(--warn)">${esc(DGC.msg)}</div>` : ''}`
-  const st = document.getElementById('dgc_start') || document.getElementById('dgc_re'); if (st) st.onclick = dgcStart
-  const off = document.getElementById('dgc_off'); if (off) off.onclick = async () => { if (!confirm('당근 연결을 해제할까요? 다시 QR 로 연결할 수 있습니다.')) return; try { await api('daangn-disconnect', {}); S.me.daangn = { connected: false }; DGC.msg = ''; paintDgConn(); toast('연결을 해제했습니다') } catch (e) { toast(e.message) } }
-}
-async function dgcStart() {
-  DGC.msg = 'QR 을 준비하는 중… (10초 안팎)'; DGC.state = 'qr'; DGC.qr = ''; paintDgConn()
-  try {
-    const r = await api('daangn-connect', { step: 'start' })
-    if (!r.session_id) throw new Error(r.error || 'QR 시작 실패')
-    DGC.sid = r.session_id; DGC.qr = r.qr_image || ''; DGC.msg = ''; paintDgConn()
-    clearInterval(DGC.timer); DGC.timer = setInterval(dgcPoll, 2500)
-  } catch (e) { DGC.state = ''; DGC.msg = e.message === '401' ? '' : 'QR 준비 실패: ' + e.message; paintDgConn() }
-}
 let dgcBusy = false
 async function dgcPoll() {
   if (!DGC.sid) return dgcStop(false)
   if (dgcBusy) return; dgcBusy = true
   try {
-    const r = await api('daangn-connect', { step: 'poll', session_id: DGC.sid })
-    if (r.status === 'success') { dgcStop(false); DGC.msg = ''; try { S.me = await api('summary') } catch (_) {} ; paintDgConn(); toast('당근이 연결되었습니다'); return }
+    const r = await dapi('daangn-connect', { step: 'poll', session_id: DGC.sid })
+    if (r.status === 'success') { dgcStop(false); DGC.msg = ''; try { S.dg = await dapi('summary') } catch (_) {} ; paintDgConn(); toast('당근이 연결되었습니다'); return }
     if (r.status === 'mfa_pending') { if (DGC.state !== 'mfa') { DGC.state = 'mfa'; paintDgConn() } return }
     if (r.qr_image && r.qr_image !== DGC.qr) { DGC.qr = r.qr_image; paintDgConn() }
     if (r.status && r.status !== 'pending') { dgcStop(false); DGC.msg = r.error || ('연결 실패: ' + r.status); paintDgConn() }
@@ -2060,8 +2175,61 @@ async function dgcPoll() {
 }
 function dgcStop(cancel) {
   clearInterval(DGC.timer); DGC.timer = null
-  if (cancel && DGC.sid) api('daangn-connect', { step: 'cancel', session_id: DGC.sid }).catch(() => {})
+  if (cancel && DGC.sid) dapi('daangn-connect', { step: 'cancel', session_id: DGC.sid }).catch(() => {})
   DGC.sid = ''; DGC.state = ''; DGC.qr = ''; if (cancel) { DGC.msg = ''; paintDgConn() }
+}
+async function dgcStart() {
+  DGC.msg = 'QR 을 준비하는 중… (10초 안팎)'; DGC.state = 'qr'; DGC.qr = ''; paintDgConn()
+  try {
+    const r = await dapi('daangn-connect', { step: 'start' })
+    if (!r.session_id) throw new Error(r.error || 'QR 시작 실패')
+    DGC.sid = r.session_id; DGC.qr = r.qr_image || ''; DGC.msg = ''; paintDgConn()
+    clearInterval(DGC.timer); DGC.timer = setInterval(dgcPoll, 2500)
+  } catch (e) { DGC.state = ''; DGC.msg = e.message === '401' ? '' : 'QR 준비 실패: ' + e.message; paintDgConn() }
+}
+function paintDgConn() {
+  const boxes = [...document.querySelectorAll('.dgconn')]
+  const d = (S.dg && S.dg.daangn) || {}, g = S.dg && S.dg.guard
+  const hc = document.getElementById('hconn'); if (hc) hc.innerHTML = !dgMine() ? '' : d.connected ? `<span style="color:#c2410c">🥕 ${esc(d.name || d.phone || '연결됨')}</span>` : `<span style="color:var(--dim)">🥕 당근 미연결</span>`
+  boxes.forEach(box => {
+    if (!dgMine()) { box.style.display = 'none'; box.innerHTML = ''; return }
+    box.style.display = ''
+    if (DGC.state === 'qr' || DGC.state === 'mfa') {
+      box.innerHTML = `<div style="font-weight:800">🥕 당근 연결 <span style="font-weight:400;color:var(--dim);font-size:12px">당근 앱 → 나의 당근 → 오른쪽 위 QR 아이콘으로 아래 QR 을 찍어주세요 (2분 안에)</span></div>
+        <div style="display:flex;gap:16px;align-items:flex-start;margin-top:8px;flex-wrap:wrap">
+          ${DGC.qr ? `<img src="data:image/png;base64,${DGC.qr}" alt="당근 로그인 QR" style="width:200px;height:200px;border:1px solid var(--line);border-radius:8px;background:#fff">` : ''}
+          <div style="flex:1;min-width:200px"><div>${esc(DGC.msg || '앱에서 QR 을 찍으면 자동으로 연결됩니다…')}</div>
+          ${DGC.state === 'mfa' ? '<div style="color:#b45309;margin-top:6px">당근 앱에 뜬 추가 인증(2단계)을 승인해 주세요.</div>' : ''}
+          <div class="row-acts" style="margin-top:10px"><button class="btn" data-dgc="cancel">취소</button></div></div></div>`
+      return
+    }
+    const guardTxt = g && g.on ? `<span style="color:var(--dim);font-size:12px" title="자동 등록 안전장치(라이선스 어드민 사용자 관리): 하루 상한과 등록 사이 불규칙 간격">· 오늘 ${g.today}/${g.daily || '∞'}건 · 간격 ${g.min}~${g.max}초</span>` : ''
+    box.innerHTML = d.connected
+      ? `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="color:#c2410c">🥕 당근 연결됨</b><span>${esc([d.name, d.phone ? phone10(d.phone) : '', d.broker].filter(Boolean).join(' · '))}</span><span style="color:var(--dim);font-size:12px">${esc(dt(d.connected_at))} 연결</span>${guardTxt}<div class="grow"></div><button class="btn" data-dgc="re">다시 연결</button><button class="btn no" data-dgc="off">연결 해제</button></div>${DGC.msg ? `<div class="hint" style="margin:6px 0 0;color:var(--warn)">${esc(DGC.msg)}</div>` : ''}`
+      : `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>🥕 당근이 연결되어 있지 않습니다</b><span style="color:var(--dim);font-size:12.5px">본인 당근 계정으로 QR 로그인하면 그 계정으로 광고가 올라갑니다 (당근 쪽에서 로그아웃되면 다시 연결). 한 번 연결하면 이 로그인으로 계속 씁니다.</span>${guardTxt}<div class="grow"></div><button class="btn b" data-dgc="start" style="background:#ff6f0f;border-color:#ff6f0f">당근 연결 (QR)</button></div>${DGC.msg ? `<div class="hint" style="margin:6px 0 0;color:var(--warn)">${esc(DGC.msg)}</div>` : ''}`
+  })
+  document.querySelectorAll('.dgconn [data-dgc]').forEach(b => b.onclick = async () => {
+    const k = b.dataset.dgc
+    if (k === 'cancel') return dgcStop(true)
+    if (k === 'start' || k === 're') return dgcStart()
+    if (k === 'off') { if (!confirm('당근 연결을 해제할까요? 다시 QR 로 연결할 수 있습니다.')) return; try { await dapi('daangn-disconnect', {}); S.dg.daangn = { connected: false }; DGC.msg = ''; paintDgConn(); toast('연결을 해제했습니다') } catch (e) { toast(e.message) } }
+  })
+}
+/* ── 🥕 당근 광고 탭: 연결 패널 + 내 당근 업로드 기록 (라이선스 서버) ── */
+async function paintDaangnTab() {
+  const body = document.getElementById('body'); if (!body) return
+  body.innerHTML = `
+    <div class="paste dgconn" style="border-color:#fed7aa;background:#fff7ed;margin-top:16px"></div>
+    <div class="hint" style="margin-top:10px">매물은 <b>매물 올리기</b> 탭에서 정리한 뒤 <b>🥕 당근</b> 버튼(단건·일괄)으로 올립니다 — 연결된 <b>본인 당근 계정</b>으로 올라가고, 하루 상한·간격(안전장치)은 라이선스 어드민이 정한 값을 따릅니다.</div>
+    <h2>내 당근 업로드 기록 <span class="c" id="dgu_c"></span></h2>
+    <div class="card scroll" id="dgu_list"><div class="empty">불러오는 중…</div></div>`
+  paintDgConn()
+  try {
+    const j = await dapi('uploads?days=60'); const rows = j.rows || []
+    const c = document.getElementById('dgu_c'); if (c) c.textContent = `최근 60일 ${rows.length}건`
+    const list = document.getElementById('dgu_list'); if (!list) return
+    list.innerHTML = rows.length ? `<table><thead><tr><th>일시</th><th>주소 · 호수</th><th>거래</th><th>금액</th><th>결과</th><th>당근 매물번호</th></tr></thead><tbody>${rows.map(r => `<tr style="${r.closed ? 'opacity:.5' : ''}"><td class="nowrap">${esc(dt(r.at))}</td><td>${esc(r.addr)} ${esc(r.ho || '')}</td><td>${esc(r.deal || '')}</td><td>${esc(r.price || '')}</td><td>${r.daangn && r.daangn.no ? '<span class="pill active">등록</span>' : `<span class="pill rejected" title="${esc((r.daangn && r.daangn.fail) || '')}">실패</span>`}</td><td>${r.daangn && r.daangn.url ? `<a href="${esc(r.daangn.url)}" target="_blank" rel="noopener">${esc(r.daangn.no)}</a>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">아직 올린 매물이 없습니다.</div>'
+  } catch (e) { const list = document.getElementById('dgu_list'); if (list) list.innerHTML = `<div class="err">${esc(e.message)}</div>` }
 }
 
 
@@ -2254,7 +2422,244 @@ function paintFill() {
   }
 }
 
-const BUILD = '2026-10-09 12:17 당근'
+/* ── 손님 브리핑 탭 (기능 brief): brief_admin.html 의 briefMount 를 토큰으로 그 자리에 그린다. 다른 탭에 갔다 와도 입력 중인 내용이 남게 DOM 을 보관 */
+function paintBrief() {
+  S.painted = 'brief'
+  const body = document.getElementById('body'); if (!body) return
+  if (!S.briefEl) { S.briefEl = document.createElement('div'); S.briefEl.id = 'brief_root'; body.innerHTML = ''; body.appendChild(S.briefEl); briefMount(S.briefEl, { api: String(CONFIG.API_BASE).replace(/\/$/, '') + '/', token: token() }) }
+  else if (!body.contains(S.briefEl)) { body.innerHTML = ''; body.appendChild(S.briefEl) }
+}
+
+/*BRIEF_JS_START*/
+const BRIEF_MARKUP = "<div class=\"bf-head\"><h1>🧾 손님 브리핑</h1><div class=\"bf-hint\">링크든 글이든 엑셀 줄이든 넣으면 사진·주소·금액·역 도보를 손님용 카드로 정리하고, 손님에게 보낼 링크를 만듭니다. 손님은 번호를 누르면 사진과 내용이 펼쳐지고, O/X 를 골라 제출하면 아래 목록에 <b style=\"color:#b91c1c\">제출완료</b>로 뜹니다.</div></div>\n\n<div class=\"bf-box\" id=\"bf_box\">\n  <div class=\"bf-grid3\">\n    <label class=\"bf-lb\">손님 이름·호칭 <span style=\"color:var(--danger)\">*</span><input id=\"br_customer\" placeholder=\"예: 김민수 고객\" autocomplete=\"off\"></label>\n    <label class=\"bf-lb\">담당자 이름<input id=\"br_sname\" placeholder=\"예: 홍길동 공인중개사\"></label>\n    <label class=\"bf-lb\">담당자 연락처 (손님 페이지 '전화' 버튼)<input id=\"br_sphone\" placeholder=\"010-0000-0000\" inputmode=\"tel\"></label>\n  </div>\n  <textarea id=\"br_memo\" rows=\"2\" placeholder=\"손님께 보일 인사말·안내 (선택) — 예: 요청하신 역삼동 원룸 3곳입니다. 편하신 시간에 연락 주세요.\" style=\"margin-top:10px\"></textarea>\n  <label style=\"display:flex;align-items:center;gap:6px;margin-top:8px;font-size:13px;color:var(--text);cursor:pointer\"><input type=\"checkbox\" id=\"br_wm\" checked style=\"width:auto;margin:0\"> 사진 가운데 워터마크 가리기 <span class=\"bf-hint\">(네이버·당근·온하우스 사진의 한가운데를 손님 페이지에서 흐리게 가립니다. 직접 올린 사진은 그대로)</span></label>\n  <div id=\"br_resp\"></div>\n  <h2 style=\"margin-top:16px\">매물 담기 <span id=\"br_cnt\" class=\"bf-hint\" style=\"font-weight:400\">0 / 10</span></h2>\n  <textarea id=\"br_in\" rows=\"4\" placeholder=\"한 줄에 매물 하나 — 링크(네이버부동산·당근·온하우스·그 밖의 사이트), 글(주소 금액 층…), 수집기 엑셀 줄 모두 됩니다. 여러 줄이면 한 번에 정리합니다. (링크만 붙여넣으면 바로 정리)\"></textarea>\n  <div class=\"bf-acts\"><button class=\"btn btn-primary\" id=\"br_add\">정리해서 담기</button><label class=\"btn\" style=\"margin:0;cursor:pointer\">엑셀·CSV 파일로 담기<input type=\"file\" id=\"br_file\" accept=\".xlsx,.xls,.csv\" style=\"display:none\"></label><button class=\"btn\" id=\"br_blank\" title=\"링크 없이 직접 적고 사진을 올릴 매물\">빈 매물 추가</button><span class=\"bf-msg\" id=\"br_msg\"></span></div>\n  <div id=\"br_items\"></div>\n  <div class=\"bf-acts\" style=\"margin-top:14px\"><button class=\"btn btn-primary\" id=\"br_make\" style=\"padding:11px 20px;font-size:14px\">🔗 손님 링크 만들기</button><button class=\"btn\" id=\"br_new\">새로 시작</button></div>\n  <div id=\"br_out\"></div>\n</div>\n\n<div class=\"bf-box\"><h2>내 손님 링크 <span id=\"br_lcnt\" class=\"bf-hint\" style=\"font-weight:400\"></span> <span class=\"bf-hint\" style=\"font-weight:400\">— 링크는 <span id=\"br_maxtxt\">5</span>개까지. 안 쓰는 링크는 지워서 자리를 비우세요. 손님이 O/X 를 제출하면 '손님 응답' 칸에 뜹니다(1분마다 새로 확인).</span></h2><div id=\"br_list\" class=\"bf-scroll\"><div class=\"bf-hint\">불러오는 중…</div></div></div>"
+function briefMount(root, cfg) {
+root.innerHTML = BRIEF_MARKUP
+const API = String(cfg.api || '/admin/brief/api/')                       // 어드민은 기본 인증(브라우저가 붙임), 포털은 토큰 헤더
+const HDR = cfg.token ? { 'x-intranet-token': cfg.token } : {}
+const PARSE_BULK = 'https://daangn-parse.808hyukkim.workers.dev/bulk'   // 정리 워커 (링크·글·엑셀 줄 → 매물 칸)
+const $ = id => document.getElementById(id)
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))
+let toastT; const toast = m => { document.querySelectorAll('.bf-toast').forEach(n => n.remove()); const d = document.createElement('div'); d.className = 'bf-toast'; d.textContent = m; document.body.appendChild(d); clearTimeout(toastT); toastT = setTimeout(() => d.remove(), 2800) }
+const dt = s => { if (!s) return ''; const d = new Date(s), p = v => String(v).padStart(2, '0'); return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}` }
+const ago = s => { if (!s) return ''; const m = Math.floor((Date.now() - new Date(s)) / 60000); if (m < 1) return '방금'; if (m < 60) return m + '분 전'; if (m < 1440) return Math.floor(m / 60) + '시간 전'; return Math.floor(m / 1440) + '일 전' }
+const firstUrl = s => (String(s || '').match(/https?:\/\/[^\s"'<>]+/) || [])[0] || ''
+async function api(path, body, raw) {
+  const r = await fetch(API + path, raw ? { method: 'POST', headers: HDR, body: raw } : { method: body ? 'POST' : 'GET', headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...HDR }, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' })
+  let j = {}; try { j = await r.json() } catch (_) {}
+  if (!r.ok) { const e = new Error(j.error || ('요청 실패 (' + r.status + ')')); e.code = j.code || ''; throw e }
+  return j
+}
+const BR = { items: [], customer: '', memo: '', staff_name: '', staff_phone: '', id: '', url: '', response: null, wm: true, busy: false, list: null, max: 5, maxItems: 10, stQ: 0 }
+try { const v = JSON.parse(localStorage.getItem('brief_staff_v1') || 'null'); if (v) { BR.staff_name = v.name || ''; BR.staff_phone = v.phone || '' } } catch (_) {}
+const brHas = v => v !== null && v !== undefined && v !== ''
+const brMan = n => { if (!brHas(n)) return ''; n = Number(String(n).replace(/,/g, '')); if (!Number.isFinite(n)) return ''; const e = Math.floor(n / 10000), r = Math.round(n % 10000); return e ? `${e}억${r ? ' ' + r.toLocaleString('ko-KR') : ''}` : n.toLocaleString('ko-KR') }
+const brPrice = g => { const d = g.deal_type || ''
+  if (d === '매매') return brHas(g.sale_price) ? `매매 ${brMan(g.sale_price)}` : ''
+  if (d === '전세') return brHas(g.deposit) ? `전세 ${brMan(g.deposit)}` : ''
+  if (brHas(g.deposit) || brHas(g.monthly_rent)) return `${d || '월세'} ${brMan(g.deposit) || '0'} / ${brMan(g.monthly_rent) || '0'}`
+  return '' }
+const brLot = s => { const m = String(s || '').match(/([가-힣]+(?:동|리|가))\s*(산\s*)?(\d{1,4}(?:-\d{1,4})?)(?![\d-])/); return m ? m[1] + ' ' + (m[2] ? '산' : '') + m[3] : '' }
+const BR_SPEC = ['deal_type', 'deposit', 'monthly_rent', 'sale_price', 'manage_prc', 'area_exclusive', 'area_supply', 'floor_no', 'total_floors', 'room_count', 'bathroom_count', 'direction', 'available_date', 'is_parking', 'is_pet', 'property_type', 'bd_nm', 'ho_nm', 'dong_nm', 'road_addr']
+const blankItem = () => ({ title: '', addr: '', price: '', station: '', stState: 'none', memo: '', photos: [], spec: {}, src: '', lat: null, lng: null })
+function brItemFrom(g, input) {
+  g = g || {}; const spec = {}; BR_SPEC.forEach(k => { if (brHas(g[k])) spec[k] = g[k] })
+  const addr = String(g.address_q || g.road_addr || g.jibun_addr || '').trim()
+  const title = [brLot(addr) || g.bd_nm || addr, g.ho_nm, g.property_type].filter(Boolean).join(' ') || String(g.headline || '').slice(0, 40) || '매물'
+  const lat = Number(g.lat) || null, lng = Number(g.lng) || null
+  return { title: title.slice(0, 80), addr: addr || String(g.bd_nm || ''), price: brPrice(g), station: '', stState: (addr || g.bd_nm || (lat && lng)) ? 'todo' : 'none', memo: '', photos: (Array.isArray(g.photos) ? g.photos : []).filter(u => /^https?:\/\//.test(String(u))).slice(0, 30), spec, src: String(g.source_url || firstUrl(input || '') || ''), lat, lng }
+}
+/* 역 도보: 서버 brief-station — 매물 좌표(네이버)가 있으면 좌표로, 없으면 지번/건물명으로 주소를 확정해서 가장 가까운 지하철역. 2개씩 */
+async function brStations() {
+  if (BR.stQ >= 2) return
+  const it = BR.items.find(x => x.stState === 'todo'); if (!it) return
+  it.stState = 'busy'; BR.stQ++; brPaintStation(it)
+  try { const r = await api('brief-station', { address: it.addr, bd_nm: (it.spec || {}).bd_nm || '', lat: it.lat, lng: it.lng }); if (it.stState === 'busy') { it.station = it.station || r.station || ''; it.stState = r.station ? 'ok' : 'none' } }
+  catch (e) { if (it.stState === 'busy') it.stState = 'fail' }
+  finally { BR.stQ--; brPaintStation(it); brStations() }
+  brStations()
+}
+function brPaintStation(it) {
+  const i = BR.items.indexOf(it); if (i < 0) return
+  const inp = document.querySelector(`#br_items [data-i="${i}"] input[data-k="station"]`); if (!inp) return
+  if (document.activeElement !== inp) inp.value = it.station || ''
+  inp.placeholder = it.stState === 'busy' ? '가까운 역을 찾는 중…' : it.stState === 'fail' ? '역 정보를 못 찾음 — 직접 적어도 됩니다' : it.stState === 'none' && !it.station ? '못 찾음 — 예: 강남역 도보 5분' : '예: 강남역 도보 5분'
+}
+const oxOf = n => { const r = BR.response; if (!r) return ''; if ((r.picks || []).includes(n)) return '<span class="bf-ox o">손님 O</span>'; if ((r.rejects || []).includes(n)) return '<span class="bf-ox x">손님 X</span>'; return '' }
+const brPhotosHtml = it => (it.photos.length ? it.photos.map((u, k) => `<span class="bf-th ${u.startsWith('/b/p/') ? 'own' : ''}"><img src="${esc(u)}" referrerpolicy="no-referrer" loading="lazy" alt=""><button type="button" data-rm="${k}" title="이 사진 빼기">×</button></span>`).join('') : '<span class="bf-hint">사진 없음</span>')
+  + `<label class="bf-drop" title="사진을 여기에 끌어다 놓거나 눌러서 고르세요 (여러 장 가능, 1280px 로 줄여 올립니다)">📷 사진 올리기 <small>(끌어다 놓기 · 여러 장)</small><input type="file" accept="image/*" multiple data-up="1"></label>`
+  + `<span class="bf-hint" style="margin-left:4px" data-phmsg>사진 ${it.photos.length}장 · 첫 사진이 대표</span>`
+function brBindPhotos(card, it) {
+  const ph = card.querySelector('.bf-ph'); if (!ph) return
+  ph.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { it.photos.splice(Number(b.dataset.rm), 1); ph.innerHTML = brPhotosHtml(it); brBindPhotos(card, it) })
+  ph.querySelectorAll('img').forEach(im => im.onerror = () => { if (im.dataset.fb || !/^https?:/.test(im.src)) return; im.dataset.fb = '1'; im.src = '/b/img?u=' + encodeURIComponent(im.src) })
+  const up = ph.querySelector('[data-up]'); if (up) up.onchange = () => { brUpload(card, it, [...up.files]); up.value = '' }
+  const over = e => { e.preventDefault(); card.classList.add('drag') }, leave = () => card.classList.remove('drag')
+  card.ondragover = over; card.ondragenter = over; card.ondragleave = leave
+  card.ondrop = e => { e.preventDefault(); leave(); const files = [...(e.dataTransfer && e.dataTransfer.files || [])].filter(f => /^image\//.test(f.type)); if (files.length) brUpload(card, it, files); else toast('사진 파일만 올릴 수 있습니다') }
+}
+/** 사진 줄이기(최대 1280px, JPEG) → 서버 brief-photo → /b/p/<id> 를 사진 목록에 추가 */
+const shrink = file => new Promise((ok, bad) => {
+  const im = new Image(); const url = URL.createObjectURL(file)
+  im.onload = () => { URL.revokeObjectURL(url); const s = Math.min(1, 1280 / Math.max(im.naturalWidth, im.naturalHeight)); const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(im.naturalWidth * s)); c.height = Math.max(1, Math.round(im.naturalHeight * s))
+    const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(im, 0, 0, c.width, c.height)
+    c.toBlob(b => b ? ok(b) : bad(new Error('변환 실패')), 'image/jpeg', 0.85) }
+  im.onerror = () => { URL.revokeObjectURL(url); bad(new Error('사진을 읽지 못했습니다: ' + file.name)) }
+  im.src = url
+})
+async function brUpload(card, it, files) {
+  files = files.filter(f => /^image\//.test(f.type)); if (!files.length) return
+  const room = 30 - it.photos.length; if (room <= 0) return toast('사진은 매물마다 30장까지입니다')
+  files = files.slice(0, room)
+  const msg = () => card.querySelector('[data-phmsg]'); let n = 0, fail = 0
+  for (const f of files) {
+    n++; const m = msg(); if (m) m.textContent = `사진 올리는 중… ${n}/${files.length}`
+    try { let b = await shrink(f); if (b.size > 1000000) { b = await new Promise((ok) => { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = Math.round(im.width * 0.7); c.height = Math.round(im.height * 0.7); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); c.toBlob(ok, 'image/jpeg', 0.75) }; im.src = URL.createObjectURL(b) }) }
+      const fd = new FormData(); fd.append('file', b, 'photo.jpg'); const j = await api('brief-photo', null, fd); it.photos.push(j.url) }
+    catch (e) { fail++; toast('사진 올리기 실패: ' + e.message) }
+  }
+  const ph = card.querySelector('.bf-ph'); ph.innerHTML = brPhotosHtml(it); brBindPhotos(card, it)
+  toast(`사진 ${n - fail}장을 올렸습니다${fail ? ` (실패 ${fail})` : ''}`)
+}
+function paintBrItems() {
+  const box = $('br_items'); $('br_cnt').textContent = `${BR.items.length} / ${BR.maxItems}`
+  if (!BR.items.length) { box.innerHTML = '<div class="bf-hint" style="margin-top:8px">아직 담긴 매물이 없습니다. 위 칸에 링크나 글을 넣고 [정리해서 담기]를 누르거나, [빈 매물 추가]로 직접 적고 사진을 올리세요.</div>'; return }
+  box.innerHTML = BR.items.map((it, i) => `
+    <div class="bf-card" data-i="${i}">
+      <div class="top"><span class="bf-no">${i + 1}</span>${oxOf(i + 1)}<input data-k="title" value="${esc(it.title)}" placeholder="손님께 보일 제목 (예: 역삼동 606 501호 원룸)" style="flex:1;min-width:160px;width:auto">
+        <span class="bf-acts" style="margin:0"><button class="btn btn-sm" data-mv="-1" ${i === 0 ? 'disabled' : ''} title="위로">↑</button><button class="btn btn-sm" data-mv="1" ${i === BR.items.length - 1 ? 'disabled' : ''} title="아래로">↓</button><button class="btn btn-sm btn-danger" data-del="1">삭제</button></span></div>
+      <div class="bf-g3">
+        <label class="bf-lb">📍 주소<input data-k="addr" value="${esc(it.addr)}" placeholder="손님께 보일 주소"></label>
+        <label class="bf-lb">💰 금액<input data-k="price" value="${esc(it.price)}" placeholder="예: 월세 1,000 / 65"></label>
+        <label class="bf-lb">🚇 역 도보<input data-k="station" value="${esc(it.station)}" placeholder="예: 강남역 도보 5분"></label>
+      </div>
+      <input data-k="memo" value="${esc(it.memo)}" placeholder="담당자 한마디 (손님께 보임, 선택) — 예: 채광 좋고 관리 잘 된 집입니다" style="margin-top:8px">
+      <div class="bf-ph">${brPhotosHtml(it)}</div>
+      <div class="bf-hint" style="margin-top:4px">${it.src ? `원문: <a href="${esc(it.src)}" target="_blank" rel="noopener">${esc(it.src.slice(0, 70))}${it.src.length > 70 ? '…' : ''}</a> <span style="color:#c9a3b5">(손님에겐 안 보임)</span>` : '원문 링크 없음(직접 적은 매물)'}${it.lat && it.lng ? ' · 좌표 있음(역은 좌표 기준)' : ''}</div>
+    </div>`).join('')
+  box.querySelectorAll('.bf-card').forEach(card => {
+    const i = Number(card.dataset.i), it = BR.items[i]
+    card.querySelectorAll('input[data-k]').forEach(inp => inp.oninput = () => { it[inp.dataset.k] = inp.value; if (inp.dataset.k === 'station' && inp.value) it.stState = 'ok' })
+    card.querySelector('input[data-k="addr"]').onchange = () => { if (it.addr && !it.station && !(it.lat && it.lng)) { it.stState = 'todo'; brStations() } }   // 주소를 적으면 역을 다시 찾는다
+    card.querySelectorAll('[data-mv]').forEach(b => b.onclick = () => { const j = i + Number(b.dataset.mv); if (j < 0 || j >= BR.items.length) return; BR.items.splice(i, 1); BR.items.splice(j, 0, it); paintBrItems() })
+    card.querySelector('[data-del]').onclick = () => { if (!confirm(`${i + 1}번 매물을 목록에서 뺄까요?`)) return; BR.items.splice(i, 1); paintBrItems() }
+    brBindPhotos(card, it)
+  })
+  BR.items.forEach(brPaintStation)
+}
+function brSetMsg(t, warn) { const m = $('br_msg'); m.textContent = t || ''; m.className = 'bf-msg' + (warn ? ' warn' : '') }
+/* 링크·글·엑셀 줄(여러 줄) 또는 파일 → 정리 워커 /bulk → 카드로 담기 */
+async function brAdd(text, file) {
+  if (BR.busy) return
+  const lines = String(text || '').split('\n').map(l => l.trim()).filter(Boolean)
+  if (!file && !lines.length) return toast('링크나 글을 넣어주세요')
+  if (BR.maxItems - BR.items.length <= 0) return toast(`매물은 링크 하나에 ${BR.maxItems}개까지입니다. 지우고 넣어주세요.`)
+  BR.busy = true; $('br_add').disabled = true
+  brSetMsg(file ? '파일을 읽고 정리하는 중… (링크가 많으면 1분쯤)' : lines.length > 1 ? `${lines.length}줄을 정리하는 중…` : '정리하는 중…')
+  const errs = []; let gots = []
+  try {
+    let r
+    if (file) { const fd = new FormData(); fd.append('file', file, file.name); fd.append('photos', '1'); r = await fetch(PARSE_BULK, { method: 'POST', body: fd }) }
+    else r = await fetch(PARSE_BULK, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ lines, photos: true }) })
+    const j = await r.json().catch(() => null)
+    if (!r.ok || !j) throw new Error((j && j.error) || `정리 서버 응답 ${r.status}`)
+    gots = (j.items || []).map(it => ({ ok: it.ok, got: it.got, input: it.input, error: it.error }))
+  } catch (e) { BR.busy = false; $('br_add').disabled = false; brSetMsg('정리 실패: ' + e.message, true); return }
+  let added = 0, skipped = 0
+  for (const g of gots) {
+    if (!g.ok || !g.got) { errs.push((g.input || '').slice(0, 40) + ' — ' + (g.error || '정리 못함')); continue }
+    if (BR.items.length >= BR.maxItems) { skipped++; continue }
+    BR.items.push(brItemFrom(g.got, g.input)); added++
+  }
+  BR.busy = false; $('br_add').disabled = false
+  paintBrItems(); brStations()
+  brSetMsg(`${added}건 담았습니다.` + (skipped ? ` ${skipped}건은 ${BR.maxItems}개 제한으로 못 담았습니다.` : '') + (errs.length ? ` 못 읽은 줄 ${errs.length}: ${errs.join(' / ').slice(0, 300)}` : ''), !!(skipped || errs.length))
+  if (added) $('br_in').value = ''
+}
+async function brLoadList(quiet) {
+  try { const j = await api('brief-list'); BR.list = j.rows || []; BR.max = j.max || BR.max; BR.maxItems = j.max_items || BR.maxItems; $('br_maxtxt').textContent = BR.max
+    if (BR.id) { const cur = BR.list.find(r => r.id === BR.id); if (cur && JSON.stringify(cur.response) !== JSON.stringify(BR.response)) { BR.response = cur.response; brPaintResp(); paintBrItems(); if (cur.response) toast(`'${cur.customer}' 손님이 O/X 를 제출했습니다!`) } } }
+  catch (e) { BR.list = BR.list || []; if (!quiet) brSetMsg(e.message, true) }
+  paintBrList()
+}
+const respText = r => r ? `O ${r.picks.length ? r.picks.map(n => n + '번').join('·') : '없음'} / X ${r.rejects.length ? r.rejects.map(n => n + '번').join('·') : '없음'}` : ''
+function paintBrList() {
+  const box = $('br_list'), rows = BR.list || []
+  $('br_lcnt').textContent = `${rows.length} / ${BR.max}`
+  box.innerHTML = rows.length ? `<table class="bf-table"><thead><tr><th>손님</th><th>매물</th><th>손님 응답</th><th>손님 조회</th><th>마지막 수정</th><th>링크</th><th></th></tr></thead><tbody>${rows.map(r => `<tr data-id="${esc(r.id)}" class="${r.id === BR.id ? 'cur' : ''} ${r.response ? 'sub' : ''}">
+      <td style="font-weight:700;white-space:nowrap">${esc(r.customer)}${r.id === BR.id ? '<span class="bf-pill">편집 중</span>' : ''}</td><td>${r.count}건</td>
+      <td>${r.response ? `<span class="bf-done">제출완료 !!!!!</span><div style="font-size:12.5px">${esc(respText(r.response))} <span class="bf-hint">(${esc(ago(r.response.at))})</span></div>` : '<span class="bf-hint">아직 없음</span>'}</td>
+      <td>${r.views ? `${r.views}회 <span class="bf-hint">(${esc(ago(r.last_view_at))})</span>` : '<span class="bf-hint">아직 안 봄</span>'}</td><td style="white-space:nowrap">${esc(dt(r.updated_at))}</td>
+      <td><a href="${esc(r.url)}" target="_blank" rel="noopener" style="word-break:break-all">${esc(r.url.replace(/^https?:\/\//, ''))}</a></td>
+      <td style="white-space:nowrap"><span class="bf-acts" style="margin:0"><button class="btn btn-sm" data-copy="${esc(r.url)}">복사</button><button class="btn btn-sm" data-edit="${esc(r.id)}">수정</button><button class="btn btn-sm btn-danger" data-rm="${esc(r.id)}">삭제</button></span></td></tr>`).join('')}</tbody></table>`
+    : '<div class="bf-hint">아직 만든 링크가 없습니다.</div>'
+  box.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => brCopy(b.dataset.copy))
+  box.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => brEdit(b.dataset.edit))
+  box.querySelectorAll('[data-rm]').forEach(b => b.onclick = async () => {
+    const r = rows.find(x => x.id === b.dataset.rm); if (!confirm(`'${r ? r.customer : ''}' 링크를 지울까요? 손님이 열어 둔 링크도 더는 열리지 않습니다.`)) return
+    try { await api('brief-delete', { id: b.dataset.rm }); if (BR.id === b.dataset.rm) { BR.id = ''; BR.url = ''; BR.response = null; brPaintOut(); brPaintResp() } toast('지웠습니다'); brLoadList() } catch (e) { toast(e.message) }
+  })
+}
+async function brCopy(u) { try { await navigator.clipboard.writeText(u); toast('링크를 복사했습니다 — 카톡 등에 붙여넣으세요') } catch (_) { prompt('아래 링크를 복사하세요', u) } }
+async function brEdit(id) {
+  if (BR.items.length && BR.id !== id && !confirm('지금 편집 중인 목록을 버리고 이 링크를 불러올까요?')) return
+  try {
+    const j = await api('brief-get?id=' + encodeURIComponent(id))
+    BR.id = j.id; BR.url = j.url; BR.customer = j.customer; BR.memo = j.memo || ''; BR.response = j.response || null; BR.wm = !(j.opts && j.opts.wm === false); if (j.staff_name) BR.staff_name = j.staff_name; if (j.staff_phone) BR.staff_phone = j.staff_phone
+    BR.items = (j.items || []).map(it => ({ title: it.title || '', addr: it.addr || '', price: it.price || '', station: it.station || '', stState: it.station ? 'ok' : ((it.addr || (it.lat && it.lng)) ? 'todo' : 'none'), memo: it.memo || '', photos: Array.isArray(it.photos) ? it.photos.slice() : [], spec: it.spec || {}, src: it.src || '', lat: it.lat || null, lng: it.lng || null }))
+    brPaintHead(); brPaintResp(); paintBrItems(); brPaintOut(); paintBrList(); brStations()
+    $('bf_box').scrollIntoView({ behavior: 'smooth', block: 'start' })
+    toast(`'${j.customer}' 링크를 불러왔습니다. 고친 뒤 [이 링크 갱신]을 누르세요.`)
+  } catch (e) { toast(e.message) }
+}
+function brPaintHead() { $('br_customer').value = BR.customer || ''; $('br_memo').value = BR.memo || ''; $('br_sname').value = BR.staff_name || ''; $('br_sphone').value = BR.staff_phone || ''; $('br_wm').checked = BR.wm !== false }
+function brPaintResp() { const r = BR.response; $('br_resp').innerHTML = r ? `<div class="bf-resp"><b class="done">제출완료 !!!!!</b> ${esc(BR.customer)} 손님이 ${esc(dt(r.at))} 에 골랐습니다 — <b>${esc(respText(r))}</b><div class="bf-hint">아래 카드의 '손님 O / 손님 X' 표시가 그 응답입니다.</div></div>` : '' }
+function brPaintOut() {
+  const out = $('br_out'); $('br_make').textContent = BR.id ? '🔗 이 링크 갱신' : '🔗 손님 링크 만들기'
+  out.innerHTML = BR.url ? `<div class="bf-out"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="color:var(--accent-dark)">손님 링크</b><a class="link" href="${esc(BR.url)}" target="_blank" rel="noopener">${esc(BR.url)}</a>
+      <span class="bf-acts" style="margin:0"><button class="btn btn-sm btn-primary" id="br_copy">복사</button><a class="btn btn-sm" href="${esc(BR.url)}" target="_blank" rel="noopener">열어보기</a>${navigator.share ? '<button class="btn btn-sm" id="br_share">공유</button>' : ''}</span></div>
+      <div class="bf-hint" style="margin-top:4px">손님에게 이 주소를 보내면 됩니다. 매물을 고치고 [이 링크 갱신]을 누르면 같은 주소에서 바뀐 내용이 보입니다.</div></div>` : ''
+  const c = $('br_copy'); if (c) c.onclick = () => brCopy(BR.url)
+  const sh = $('br_share'); if (sh) sh.onclick = () => navigator.share({ title: `${BR.customer}님 추천 매물`, url: BR.url }).catch(() => {})
+}
+async function brMake() {
+  if (BR.busy) return
+  BR.customer = $('br_customer').value
+  if (!String(BR.customer).trim()) { toast('손님 이름(호칭)을 넣어주세요'); $('br_customer').focus(); return }
+  if (!BR.items.length) return toast('담긴 매물이 없습니다')
+  if (!BR.id && BR.list && BR.list.length >= BR.max) return toast(`손님 링크는 ${BR.max}개까지입니다. 아래 목록에서 안 쓰는 링크를 지워주세요.`)
+  $('br_make').disabled = true
+  try { localStorage.setItem('brief_staff_v1', JSON.stringify({ name: BR.staff_name, phone: BR.staff_phone })) } catch (_) {}
+  try {
+    const j = await api('brief-save', { id: BR.id || undefined, customer: BR.customer, memo: BR.memo, staff_name: BR.staff_name, staff_phone: BR.staff_phone, opts: { wm: BR.wm !== false }, items: BR.items.map(it => ({ title: it.title, addr: it.addr, price: it.price, station: it.station, memo: it.memo, photos: it.photos, spec: it.spec, src: it.src, lat: it.lat, lng: it.lng })) })
+    BR.id = j.id; BR.url = j.url; brPaintOut(); toast(j.updated ? '링크 내용을 갱신했습니다' : '손님 링크를 만들었습니다'); brLoadList()
+    $('br_out').scrollIntoView({ behavior: 'smooth', block: 'center' })
+  } catch (e) { toast(e.message) }
+  finally { $('br_make').disabled = false }
+}
+function brReset(ask) {
+  if (ask && (BR.items.length || BR.customer) && !confirm('지금 목록을 비우고 새 손님 브리핑을 시작할까요? (만든 링크는 아래 목록에 남습니다)')) return
+  BR.items = []; BR.customer = ''; BR.memo = ''; BR.id = ''; BR.url = ''; BR.response = null; BR.wm = true
+  brPaintHead(); brPaintResp(); paintBrItems(); brPaintOut(); paintBrList(); brSetMsg('')
+}
+brPaintHead(); paintBrItems(); brPaintOut()
+$('br_customer').oninput = () => { BR.customer = $('br_customer').value }
+$('br_memo').oninput = () => { BR.memo = $('br_memo').value }
+$('br_wm').onchange = () => { BR.wm = $('br_wm').checked }
+$('br_sname').oninput = () => { BR.staff_name = $('br_sname').value }
+$('br_sphone').oninput = () => { BR.staff_phone = $('br_sphone').value }
+$('br_add').onclick = () => brAdd($('br_in').value, null)
+$('br_blank').onclick = () => { if (BR.items.length >= BR.maxItems) return toast(`매물은 ${BR.maxItems}개까지입니다`); BR.items.push(blankItem()); paintBrItems(); const last = document.querySelector(`#br_items [data-i="${BR.items.length - 1}"] input[data-k="title"]`); if (last) last.focus() }
+$('br_in').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); brAdd($('br_in').value, null) } })
+$('br_in').addEventListener('paste', e => { const t = (e.clipboardData || window.clipboardData).getData('text') || ''; const lines = t.split('\n').map(l => l.trim()).filter(Boolean)
+  if (lines.length && lines.every(l => /^https?:\/\/\S+$/.test(l))) { e.preventDefault(); $('br_in').value = t; brAdd(t, null) } })
+$('br_file').onchange = () => { const f = $('br_file').files[0]; if (f) brAdd('', f); $('br_file').value = '' }
+$('br_make').onclick = brMake
+$('br_new').onclick = () => brReset(true)
+brLoadList()
+if (!root._brTimer) root._brTimer = setInterval(() => { if (!document.hidden && document.body.contains(root)) brLoadList(true) }, 60000)   // 손님 제출을 1분마다 확인
+}
+/*BRIEF_JS_END*/
+const BUILD = '2026-10-10 16:46 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()

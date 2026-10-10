@@ -144,6 +144,7 @@ class ScheduleMixin:
             "detail_uses": s.get("detail_uses", []),
             "writer_types": s.get("writer_types") or ["BROKER", "DIRECT_USER"],
             "dedupe_same": bool(s.get("dedupe_same", True)),
+            "sort_views": bool(s.get("sort_views", False)),
             "site_name": "당근",
             "region_for_file": region_for_file,
             "timestamp": ts,
@@ -245,6 +246,7 @@ class ScheduleMixin:
             "detail_keywords": _parse_keywords_csv(self.dg_detail_filter.text()),
             "detail_uses": self.dg_use_group.selected() if hasattr(self, "dg_use_group") else [],
             "dedupe_same": self.dg_dedupe.isChecked() if hasattr(self, "dg_dedupe") else True,
+            "sort_views": self.dg_sort_views.isChecked() if hasattr(self, "dg_sort_views") else False,
             "writer_types": [
                 w for w, cb in (("BROKER", getattr(self, "chk_dg_broker", None)), ("DIRECT_USER", getattr(self, "chk_dg_direct", None)))
                 if cb is None or cb.isChecked()

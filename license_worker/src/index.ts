@@ -7,7 +7,7 @@ import { listings } from "./listings";
 import { staffdb } from "./staffdb";
 import { naverad } from "./naverad";
 import { hosu } from "./hosu";
-import { daangn } from "./daangn";   // 당근 광고자동화 (2026-10-08)
+import { daangn, ensure as ensureDaangn, loadGuard, parseUserGuard, mergeGuard, checkSources } from "./daangn";   // 당근 광고자동화 (2026-10-08) + 안전장치 설정(사용자 관리, 2026-10-09)
 import { brief } from "./brief";     // 손님 브리핑 /b/<id> (2026-10-09)
 import { layout } from "./layout";
 
@@ -32,7 +32,7 @@ const DURATION_PRESETS: Record<string, [string, number | null]> = {
 };
 
 // 계정별 기능: 수집기(crawl) / 사진950(photo). 둘 다 체크면 둘 다, 하나만 체크면 그것만 쓸 수 있다 (2026-10-02)
-const FEATURES: [string, string][] = [["crawl", "매물 수집"], ["photo", "사진950"], ["db", "DB 조회"], ["daangn", "당근 광고"]];   // db = 직원용 /db 지번 조회 (2026-10-08)
+const FEATURES: [string, string][] = [["crawl", "매물 수집"], ["photo", "사진950"], ["db", "DB 조회"], ["daangn", "당근 광고"], ["brief", "손님 브리핑"]];   // db = 직원용 /db 지번 조회 (2026-10-08)
 let featuresReady = false;
 async function ensureFeatures(db: D1Database) {
   if (featuresReady) return;
@@ -124,6 +124,8 @@ function userStatus(u: any): [string, string] {
 
 // ---------------------------------------------------------------- admin auth
 
+// 어드민 로그아웃 (2026-10-10): 기본 인증은 브라우저가 기억하므로, 같은 realm 으로 401 을 한 번 돌려주면 브라우저가 저장한 로그인을 버린다 (로그인창이 뜨면 취소)
+app.get("/admin/logout", (c) => c.html(layout("로그아웃", html`<div class="form-box"><h1>로그아웃되었습니다</h1><p class="muted">브라우저 로그인창이 떠 있으면 <b>취소</b>를 누르세요. 다시 들어가려면 <a href="/admin/dashboard">사용자 관리</a>를 열고 아이디·비밀번호를 넣으면 됩니다.</p><p style="margin-top:14px"><a class="btn" href="/daangn">직원 포털로</a></p></div>`), 401, { "WWW-Authenticate": 'Basic realm="Secure Area"', "Cache-Control": "no-store" }));
 app.use("/admin/*", async (c, next) => {
   const auth = basicAuth({ username: c.env.ADMIN_USER, password: c.env.ADMIN_PASSWORD });
   return auth(c, next);
@@ -139,10 +141,11 @@ app.route("/", brief);      // 손님 브리핑 공개 페이지 /b/<id> (src/br
 
 // ---------------------------------------------------------------- dashboard
 
-app.get("/", (c) => c.redirect("/admin/dashboard"));
+app.get("/", (c) => c.redirect("/daangn"));   // 사이트 하나: 직원·고객은 포털(아이디/비번), 관리자는 상단 메뉴 → 사용자 관리 (2026-10-10)
 
 app.get("/admin/dashboard", async (c) => {
   await ensureFeatures(c.env.DB);
+  await ensureDaangn(c.env.DB); const guard = await loadGuard(c.env.DB);   // 당근 자동 등록 안전장치(공통값 + 계정별 칸)
   const q = c.req.query("q")?.trim() ?? "";
   const { results } = q
     ? await c.env.DB.prepare("SELECT * FROM users WHERE username LIKE ? ORDER BY created_at DESC")
@@ -167,6 +170,10 @@ app.get("/admin/dashboard", async (c) => {
       <td class="mono">${u.username}</td>
       <td><span class="badge ${cls}">${label}</span></td>
       <td><form method="post" action="/admin/users/${u.id}/features" class="feat-form">${featureBoxes}</form></td>
+      <td>${feats.includes("daangn") ? html`<form method="post" action="/admin/daangn/guard-user" class="inline-form" style="gap:3px;flex-wrap:wrap"><input type="hidden" name="username" value="${u.username}">
+        <input name="daily" type="number" min="0" max="500" placeholder="${guard.daily}" value="${parseUserGuard(u.daangn_guard)?.daily ?? ""}" class="pw-input" style="width:54px" title="이 계정의 하루 상한(건, 0=없음). 비우면 공통값">건
+        <input name="min" type="number" min="0" max="3600" placeholder="${guard.min}" value="${parseUserGuard(u.daangn_guard)?.min ?? ""}" class="pw-input" style="width:54px" title="간격 최소(초)">~<input name="max" type="number" min="0" max="3600" placeholder="${guard.max}" value="${parseUserGuard(u.daangn_guard)?.max ?? ""}" class="pw-input" style="width:54px" title="간격 최대(초)">초
+        <button class="btn btn-sm">저장</button>${parseUserGuard(u.daangn_guard) ? html`<button class="btn btn-sm" name="clear" value="1" title="이 계정의 개별 설정을 지우고 공통값을 따릅니다">공통으로</button><span class="badge status-soon">개별</span>` : html`<span class="small muted">공통</span>`}</form>` : html`<span class="small muted">-</span>`}</td>
       <td class="mono">${u.expires_at ?? "무제한"}</td>
       <td class="mono small">${u.no_lock ? html`<span class="badge status-unlimited" title="어느 기기에서나 로그인 가능">기기잠금 해제</span>` : (u.mac_address ?? "-")}</td>
       <td>${u.memo ?? ""}</td>
@@ -209,8 +216,19 @@ app.get("/admin/dashboard", async (c) => {
       <input type="text" name="q" placeholder="아이디 검색" value="${q}">
       <button type="submit" class="btn">검색</button>
     </form>
+    <div class="form-box" style="max-width:none;margin:0 0 16px;padding:14px 18px">
+      <div style="font-weight:700;color:var(--accent-dark);margin-bottom:6px">🛡 당근 자동 등록 안전장치 — 공통값 <span class="small muted">(계정마다 다르게 하려면 아래 표의 "당근 하루 상한·간격" 칸에 적으세요. 비워 두면 이 공통값을 씁니다)</span></div>
+      <form method="post" action="/admin/daangn/guard" class="inline-form" style="gap:14px;flex-wrap:wrap">
+        <label class="feat"><input type="checkbox" name="on" ${guard.on ? "checked" : ""}> 켜기</label>
+        <label class="feat">하루 상한 <input name="daily" type="number" min="0" max="500" value="${guard.daily}" class="pw-input" style="width:66px"> 건 <span class="muted">(0 = 없음)</span></label>
+        <label class="feat">등록 간격 최소 <input name="min" type="number" min="0" max="3600" value="${guard.min}" class="pw-input" style="width:66px"> 초</label>
+        <label class="feat">최대 <input name="max" type="number" min="0" max="3600" value="${guard.max}" class="pw-input" style="width:66px"> 초 <span class="muted">(이 사이에서 매번 무작위)</span></label>
+        <button class="btn btn-sm btn-primary">공통값 저장</button>
+      </form>
+      <p class="small muted" style="margin:6px 0 0">상한은 계정마다 따로 세고 한국 시간 0시에 초기화됩니다(성공한 등록만). 상한에 닿으면 직원 화면에 "내일 다시", 간격 중이면 남은 초를 세고 자동으로 올립니다. 오늘 건수는 <a href="/admin/daangn">당근 광고</a> 페이지에서 봅니다.</p>
+    </div>
     <table class="user-table">
-      <thead><tr><th>아이디</th><th>상태</th><th>기능</th><th>만료일</th><th>기기(MAC)</th><th>메모</th><th>생성일</th><th>연장</th><th>관리</th></tr></thead>
+      <thead><tr><th>아이디</th><th>상태</th><th>기능</th><th>당근 하루 상한·간격 <span class="small muted">(비우면 공통)</span></th><th>만료일</th><th>기기(MAC)</th><th>메모</th><th>생성일</th><th>연장</th><th>관리</th></tr></thead>
       <tbody>${rows.length ? rows : html`<tr><td colspan="9" class="empty">등록된 사용자가 없습니다.</td></tr>`}</tbody>
     </table>
   `;
@@ -446,4 +464,5 @@ app.get("/admin/logs", async (c) => {
 
 app.get("/healthz", (c) => c.json({ ok: true }));
 
-export default app;
+// cron(wrangler.toml [triggers]): 업로드 기록 원문 자동 확인 — 10분마다 40건씩, 오늘 아직 안 본 것만 (2026-10-10)
+export default { fetch: app.fetch, scheduled(_event: any, env: any, ctx: any) { ctx.waitUntil(checkSources(env, { limit: 40 })); } };

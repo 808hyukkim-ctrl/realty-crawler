@@ -643,6 +643,10 @@ class DaangnRealtyCrawler():
                 wt_raw, wt_ko, sub_ko = self._writer_info(store, article)
                 result: Dict[str, Any] = {
                     "제목": article.get("addressInfo") or "",
+                    # 조회수·관심·채팅 — 당근 매물 페이지가 그대로 내려주는 숫자 (2026-10-10, 조회수 많은 순 정렬용)
+                    "조회수": article.get("viewCount"),
+                    "관심": article.get("watchCount"),
+                    "채팅": article.get("chatRoomCount"),
                     "상세_내용": article.get("content") or "",
                     "주소": article.get("publicAddress") or article.get("address") or "",
                     "지번주소": article.get("publicJibunAddress") or "",
