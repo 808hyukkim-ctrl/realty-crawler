@@ -53,7 +53,7 @@ from app_main_common import (
     contains_any_keyword as _contains_any_keyword,
     daangn_detail_values,
     date_preset_to_range as _date_preset_to_range,
-    sort_newest_first, sort_rows_newest_first_by_index,
+    sort_newest_first, sort_rows_newest_first_by_index, parse_any_datetime,
     DATE_PRESETS as _DATE_PRESETS,
     description_text_from_naver_row,
     naver_detail_values,
@@ -307,7 +307,6 @@ class PeterpanWorker(QObject):
             ts = self.params.get("timestamp", datetime.now().strftime("%y%m%d_%H%M%S"))
             out_dir = self.params.get("out_dir", os.getcwd())
             out_path = os.path.join(out_dir, f"{site}_{region}_{len(all_rows)}건_{ts}.xlsx")
-            all_rows = sort_rows_newest_first_by_index(all_rows, 4)   # 네이버: 등록/확인일(5번째 열) 최신순 (2026-10-11)
             crawler.save_rows_to_excel(all_rows, out_path)
             prefix = "중단 저장 완료" if stopped else "저장 완료"
             self.finished.emit(f"{prefix}: {out_path} ({len(all_rows)}건)")
@@ -511,7 +510,7 @@ def daangn_excel_row(row: dict) -> dict:
 NAVER_SAME_KEY_COLUMNS = ["세부주소", "매물명", "아파트동", "호수", "해당층", "전용/연", "거래방식", "매매/전세금", "월세"]
 
 NAVER_EXCEL_COLUMNS = [
-    "매물번호", "세부주소", "호수", "종류", "거래방식", "매물명", "아파트동",
+    "매물번호", "등록/확인일", "세부주소", "호수", "종류", "거래방식", "매물명", "아파트동",
     "공급/계약/대지", "전용/연", "해당층", "전체층", "매매/전세금", "월세", "관리비",
     "방수", "화장실수", "입주가능일", "간략설명", "설명", "사용승인일",
     "중개사무소", "중개사명", "중개사주소", "중개사전화", "중개사휴대폰",
@@ -685,6 +684,8 @@ class NaverWorker(QObject):
                 df = df[cols]
                 if self.params.get("dedupe_same", True):
                     df = df.drop_duplicates(subset=[c for c in NAVER_SAME_KEY_COLUMNS if c in df.columns], keep="first")
+            if "등록/확인일" in df.columns:   # 등록일 최신순 (2026-10-11) — 네이버는 날짜만 있고 시각은 없다
+                df = df.assign(_srt=df["등록/확인일"].map(parse_any_datetime)).sort_values("_srt", ascending=False, na_position="last", kind="stable").drop(columns="_srt")
             df = df.map(lambda x: ILLEGAL_CHARACTERS_RE.sub(r"", x) if isinstance(x, str) else x)
             df.to_excel(out_path, index=False)
             self._apply_excel_hyperlinks(out_path)
