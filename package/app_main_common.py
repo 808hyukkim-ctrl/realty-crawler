@@ -201,6 +201,55 @@ def date_preset_to_range(preset: Any) -> tuple[Optional[str], Optional[str]]:
     return (today - timedelta(days=days)).strftime("%Y%m%d"), today.strftime("%Y%m%d")
 
 
+def parse_any_datetime(text: Any):
+    """'2026-10-09 12:30[:00]' · '2026.10.09' · '26.10.09' · '20261009' · '26/10/09' → datetime (정렬용). 못 읽으면 None"""
+    s = str(text or "").strip()
+    if not s:
+        return None
+    from datetime import datetime as _dt
+    m = re.search(r"(\d{4})[./-](\d{1,2})[./-](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?", s)
+    if m:
+        try:
+            return _dt(int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4) or 0), int(m.group(5) or 0), int(m.group(6) or 0))
+        except Exception:
+            return None
+    m = re.search(r"(?<!\d)(\d{2})[./-](\d{1,2})[./-](\d{1,2})(?!\d)", s)
+    if m:
+        try:
+            return _dt(2000 + int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except Exception:
+            return None
+    m = re.search(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)", s)
+    if m:
+        try:
+            return _dt(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except Exception:
+            return None
+    return None
+
+
+def sort_newest_first(rows, keys):
+    """dict 행 목록을 keys 중 처음 값이 있는 날짜로 최신순 정렬 (날짜 없는 행은 뒤로, 같은 날짜는 원래 순서)"""
+    def k(item):
+        i, r = item
+        d = None
+        for key in keys:
+            d = parse_any_datetime((r or {}).get(key)) if isinstance(r, dict) else None
+            if d:
+                break
+        return (0, -d.timestamp(), i) if d else (1, 0, i)
+    return [r for _, r in sorted(enumerate(rows), key=k)]
+
+
+def sort_rows_newest_first_by_index(rows, idx):
+    """list 행 목록(네이버)을 idx 열의 날짜로 최신순 정렬"""
+    def k(item):
+        i, r = item
+        d = parse_any_datetime(r[idx]) if isinstance(r, (list, tuple)) and len(r) > idx else None
+        return (0, -d.timestamp(), i) if d else (1, 0, i)
+    return [r for _, r in sorted(enumerate(rows), key=k)]
+
+
 def parse_date_ymd(text: Any):
     s = str(text or "").strip()
     if not s:

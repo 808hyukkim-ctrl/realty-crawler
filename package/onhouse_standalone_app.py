@@ -48,6 +48,7 @@ from PySide6.QtWidgets import (
 
 import auto_send
 from app_main_common import (
+    sort_newest_first,
     APP_STYLESHEET, DetailFilters, MultiSelectCombo, RangeInput, contains_any_keyword, parse_keywords_csv, wrap_in_scroll,
     split_excel_by_category,
 )
@@ -572,6 +573,7 @@ class Worker(QObject):
             out_path = os.path.join(
                 out_dir, f"{'온하우스공동' if self.p.get('mode') == 'share' else '온하우스'}_{self.p['region_label']}{period_part}_{len(all_rows)}건_{ts}.xlsx"
             )
+            all_rows = sort_newest_first(all_rows, ["등록일", "확인일"])   # 등록일(없으면 확인일) 최신순 (2026-10-11)
             crawler.crawl_details_to_excel(rows=all_rows, output_path=out_path)
             sheets = split_excel_by_category(out_path)
             if sheets:

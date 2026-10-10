@@ -53,6 +53,7 @@ from app_main_common import (
     contains_any_keyword as _contains_any_keyword,
     daangn_detail_values,
     date_preset_to_range as _date_preset_to_range,
+    sort_newest_first, sort_rows_newest_first_by_index,
     DATE_PRESETS as _DATE_PRESETS,
     description_text_from_naver_row,
     naver_detail_values,
@@ -182,6 +183,7 @@ class DaangnWorker(QObject):
                     site = self.params.get("site_name", "사이트")
                     region = self.params.get("region_for_file", "전체_전체_전체")
                     out = os.path.join(out_dir, f"{site}_{region}_{len(all_results)}건_{ts}.xlsx")
+                all_results = sort_newest_first(all_results, ["등록일시"])   # 기본: 등록일 최신순 (2026-10-11)
                 if self.params.get("sort_views"):   # 조회수 많은 순 (같으면 관심 → 채팅 순)
                     all_results.sort(key=lambda r: (-_to_int(r.get("조회수")), -_to_int(r.get("관심")), -_to_int(r.get("채팅"))))
                     self.status.emit("당근: 조회수 많은 순으로 정렬했습니다")
@@ -305,6 +307,7 @@ class PeterpanWorker(QObject):
             ts = self.params.get("timestamp", datetime.now().strftime("%y%m%d_%H%M%S"))
             out_dir = self.params.get("out_dir", os.getcwd())
             out_path = os.path.join(out_dir, f"{site}_{region}_{len(all_rows)}건_{ts}.xlsx")
+            all_rows = sort_rows_newest_first_by_index(all_rows, 4)   # 네이버: 등록/확인일(5번째 열) 최신순 (2026-10-11)
             crawler.save_rows_to_excel(all_rows, out_path)
             prefix = "중단 저장 완료" if stopped else "저장 완료"
             self.finished.emit(f"{prefix}: {out_path} ({len(all_rows)}건)")
@@ -434,6 +437,7 @@ class OnhouseWorker(QObject):
             ts = self.params.get("timestamp", datetime.now().strftime("%y%m%d_%H%M%S"))
             out_dir = self.params.get("out_dir", os.getcwd())
             out_path = os.path.join(out_dir, f"{site}_{region}_{len(all_rows)}건_{ts}.xlsx")
+            all_rows = sort_newest_first(all_rows, ["등록일", "확인일"])   # 온하우스: 등록일(없으면 확인일) 최신순 (2026-10-11)
             crawler.crawl_details_to_excel(rows=all_rows, output_path=out_path)
             sheets = split_excel_by_category(out_path)
             if sheets:
