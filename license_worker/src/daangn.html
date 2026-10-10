@@ -400,7 +400,7 @@ function renderGate(err) {
   el.innerHTML = `
     <div class="wrap"><div class="gate">
       <div class="brand" style="font-size:20px">당근 <span>광고자동화</span></div>
-      <p style="margin-top:6px">매물수집기 계정(아이디·비밀번호)으로 로그인하세요. 수집기와 같은 아이디·비밀번호입니다. 탭은 관리자가 켜 준 기능만 보입니다.</p>
+      <p style="margin-top:6px">매물수집기 계정(아이디·비밀번호)으로 로그인하세요. 수집기와 같은 아이디·비밀번호입니다. 탭은 관리자가 켜 준 기능만 보이고, 관리자 아이디로 들어오면 관리 화면으로 갑니다.</p>
       ${err ? `<div class="err">${esc(err)}</div>` : ''}
       <input id="lg_id" placeholder="아이디" autocomplete="username" spellcheck="false" style="margin-bottom:8px">
       <input id="lg_pw" type="password" placeholder="비밀번호" autocomplete="current-password">
@@ -414,6 +414,7 @@ function renderGate(err) {
     try {
       const res = await fetch(CONFIG.API_BASE + '/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: u, password: p }), cache: 'no-store' })
       let j = {}; try { j = await res.json() } catch (_) {}
+      if (res.ok && j.admin && j.redirect) { location.href = j.redirect; return }   // 관리자 아이디 → 관리 화면 (로그인창 하나)
       if (!res.ok || !j.token) throw new Error(j.error || ('로그인 실패 (' + res.status + ')'))
       setToken(j.token); boot()
     } catch (e) { renderGate(e.message); const i2 = document.getElementById('lg_id'); if (i2) i2.value = u }
@@ -2222,7 +2223,7 @@ function paintCreate() {
 /* 새 버전 감지: 열어 둔 화면이 옛 버전이면 띠를 띄운다 (배포 때 BUILD 도장이 바뀜 — 배포_인트라넷.sh) */
 
 /* ── 당근 연결 (QR 로그인) — 라이선스 서버(dapi)가 엔진에 QR 세션을 열고, 성공하면 사용자별 당근 세션을 서버에 보관. 권한(dgMine) 있는 사람에게만 보인다 ── */
-const DGC = { sid: '', timer: null, qr: '', state: '', msg: '' }
+const DGC = { sid: '', timer: null, qr: '', state: '', msg: '', phone: '', hint: '' }
 let dgcBusy = false
 async function dgcPoll() {
   if (!DGC.sid) return dgcStop(false)
@@ -2241,6 +2242,28 @@ function dgcStop(cancel) {
   if (cancel && DGC.sid) dapi('daangn-connect', { step: 'cancel', session_id: DGC.sid }).catch(() => {})
   DGC.sid = ''; DGC.state = ''; DGC.qr = ''; if (cancel) { DGC.msg = ''; paintDgConn() }
 }
+/* 휴대폰 번호 → 인증번호 → (QR 과 같은) poll 로 로그인 완료 확인 */
+async function dgcPhoneStart() {
+  const inp = document.getElementById('dgc_phone'); const phone = String((inp && inp.value) || '').replace(/[^0-9]/g, ''); DGC.phone = phone
+  if (!/^01[016789][0-9]{7,8}$/.test(phone)) { DGC.msg = '휴대폰 번호를 숫자만 넣어주세요 (예: 01012345678)'; paintDgConn(); return }
+  DGC.msg = '당근에 번호를 보내는 중… (10초 안팎)'; paintDgConn()
+  try {
+    const r = await dapi('daangn-connect', { step: 'phone', phone })
+    if (!r.session_id) throw new Error(r.error || '시작 실패')
+    DGC.sid = r.session_id; DGC.state = 'code'; DGC.hint = r.hint || ''; DGC.msg = ''; paintDgConn(); const c = document.getElementById('dgc_code'); if (c) c.focus()
+  } catch (e) { DGC.msg = e.message === '401' ? '' : e.message; paintDgConn() }
+}
+async function dgcCodeGo() {
+  const inp = document.getElementById('dgc_code'); const code = String((inp && inp.value) || '').replace(/[^0-9]/g, '')
+  if (!/^[0-9]{4,8}$/.test(code)) { DGC.msg = '인증번호를 숫자만 넣어주세요'; paintDgConn(); return }
+  DGC.msg = '확인 중…'; paintDgConn()
+  try {
+    const r = await dapi('daangn-connect', { step: 'code', session_id: DGC.sid, code })
+    if (r.error) throw new Error(r.error)
+    DGC.state = 'mfa'; DGC.msg = '로그인 확인 중… 당근 앱에 추가 인증이 뜨면 승인해 주세요'; paintDgConn()
+    clearInterval(DGC.timer); DGC.timer = setInterval(dgcPoll, 2500); dgcPoll()
+  } catch (e) { DGC.msg = e.message === '401' ? '' : e.message; paintDgConn() }
+}
 async function dgcStart() {
   DGC.msg = 'QR 을 준비하는 중… (10초 안팎)'; DGC.state = 'qr'; DGC.qr = ''; paintDgConn()
   try {
@@ -2257,6 +2280,16 @@ function paintDgConn() {
   boxes.forEach(box => {
     if (!dgMine()) { box.style.display = 'none'; box.innerHTML = ''; return }
     box.style.display = ''
+    if (DGC.state === 'phone') {   // 휴대폰 번호 입력
+      box.innerHTML = `<div style="font-weight:800">🥕 휴대폰 번호로 당근 연결 <span style="font-weight:400;color:var(--dim);font-size:12px">당근에 가입한 휴대폰 번호를 넣으면 문자로 인증번호가 옵니다</span></div>
+        <div class="row-acts" style="margin-top:8px;align-items:center"><input id="dgc_phone" inputmode="tel" placeholder="01012345678" value="${esc(DGC.phone)}" style="width:180px;font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px"><button class="btn b" data-dgc="phone_go" style="background:#ff6f0f;border-color:#ff6f0f">인증번호 받기</button><button class="btn" data-dgc="cancel">취소</button><span class="hint" style="margin:0">${esc(DGC.msg || '')}</span></div>`
+      return
+    }
+    if (DGC.state === 'code') {   // 문자 인증번호 입력
+      box.innerHTML = `<div style="font-weight:800">🥕 인증번호 입력 <span style="font-weight:400;color:var(--dim);font-size:12px">${esc(DGC.hint || '문자로 받은 인증번호를 넣어주세요')}</span></div>
+        <div class="row-acts" style="margin-top:8px;align-items:center"><input id="dgc_code" inputmode="numeric" placeholder="인증번호" style="width:140px;font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px"><button class="btn b" data-dgc="code_go" style="background:#ff6f0f;border-color:#ff6f0f">확인</button><button class="btn" data-dgc="cancel">취소</button><span class="hint" style="margin:0">${esc(DGC.msg || '')}</span></div>`
+      return
+    }
     if (DGC.state === 'qr' || DGC.state === 'mfa') {
       box.innerHTML = `<div style="font-weight:800">🥕 당근 연결 <span style="font-weight:400;color:var(--dim);font-size:12px">당근 앱 → 나의 당근 → 오른쪽 위 QR 아이콘으로 아래 QR 을 찍어주세요 (2분 안에)</span></div>
         <div style="display:flex;gap:16px;align-items:flex-start;margin-top:8px;flex-wrap:wrap">
@@ -2268,13 +2301,16 @@ function paintDgConn() {
     }
     const guardTxt = g && g.on ? `<span style="color:var(--dim);font-size:12px" title="자동 등록 안전장치(라이선스 어드민 사용자 관리): 하루 상한과 등록 사이 불규칙 간격">· 오늘 ${g.today}/${g.daily || '∞'}건 · 간격 ${g.min}~${g.max}초</span>` : ''
     box.innerHTML = d.connected
-      ? `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="color:#c2410c">🥕 당근 연결됨</b><span>${esc([d.name, d.phone ? phone10(d.phone) : '', d.broker].filter(Boolean).join(' · '))}</span><span style="color:var(--dim);font-size:12px">${esc(dt(d.connected_at))} 연결</span>${guardTxt}<div class="grow"></div><button class="btn" data-dgc="re">다시 연결</button><button class="btn no" data-dgc="off">연결 해제</button></div>${DGC.msg ? `<div class="hint" style="margin:6px 0 0;color:var(--warn)">${esc(DGC.msg)}</div>` : ''}`
-      : `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>🥕 당근이 연결되어 있지 않습니다</b><span style="color:var(--dim);font-size:12.5px">본인 당근 계정으로 QR 로그인하면 그 계정으로 광고가 올라갑니다 (당근 쪽에서 로그아웃되면 다시 연결). 한 번 연결하면 이 로그인으로 계속 씁니다.</span>${guardTxt}<div class="grow"></div><button class="btn b" data-dgc="start" style="background:#ff6f0f;border-color:#ff6f0f">당근 연결 (QR)</button></div>${DGC.msg ? `<div class="hint" style="margin:6px 0 0;color:var(--warn)">${esc(DGC.msg)}</div>` : ''}`
+      ? `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="color:#c2410c">🥕 당근 연결됨</b><span>${esc([d.name, d.phone ? phone10(d.phone) : '', d.broker].filter(Boolean).join(' · '))}</span><span style="color:var(--dim);font-size:12px">${esc(dt(d.connected_at))} 연결</span>${guardTxt}<div class="grow"></div><button class="btn" data-dgc="re">다시 연결 (QR)</button><button class="btn" data-dgc="phone" title="휴대폰 번호 문자 인증으로 다시 연결">휴대폰 번호로</button><button class="btn no" data-dgc="off">연결 해제</button></div>${DGC.msg ? `<div class="hint" style="margin:6px 0 0;color:var(--warn)">${esc(DGC.msg)}</div>` : ''}`
+      : `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>🥕 당근이 연결되어 있지 않습니다</b><span style="color:var(--dim);font-size:12.5px">본인 당근 계정으로 QR 로그인하면 그 계정으로 광고가 올라갑니다 (당근 쪽에서 로그아웃되면 다시 연결). 한 번 연결하면 이 로그인으로 계속 씁니다.</span>${guardTxt}<div class="grow"></div><button class="btn b" data-dgc="start" style="background:#ff6f0f;border-color:#ff6f0f">당근 연결 (QR)</button><button class="btn" data-dgc="phone" style="border-color:#fed7aa;color:#c2410c" title="QR 대신 당근에 가입한 휴대폰 번호로 문자 인증 로그인">휴대폰 번호로 연결</button></div>${DGC.msg ? `<div class="hint" style="margin:6px 0 0;color:var(--warn)">${esc(DGC.msg)}</div>` : ''}`
   })
   document.querySelectorAll('.dgconn [data-dgc]').forEach(b => b.onclick = async () => {
     const k = b.dataset.dgc
     if (k === 'cancel') return dgcStop(true)
     if (k === 'start' || k === 're') return dgcStart()
+    if (k === 'phone') { DGC.state = 'phone'; DGC.msg = ''; paintDgConn(); const i = document.getElementById('dgc_phone'); if (i) i.focus(); return }
+    if (k === 'phone_go') return dgcPhoneStart()
+    if (k === 'code_go') return dgcCodeGo()
     if (k === 'off') { if (!confirm('당근 연결을 해제할까요? 다시 QR 로 연결할 수 있습니다.')) return; try { await dapi('daangn-disconnect', {}); S.dg.daangn = { connected: false }; DGC.msg = ''; paintDgConn(); toast('연결을 해제했습니다') } catch (e) { toast(e.message) } }
   })
 }
@@ -2913,7 +2949,7 @@ function naMount(){
 if(!(window.NA_CFG&&NA_CFG.deferred)) naMount();
 /*NA_JS_END*/
 const NA_MARKUP = "<div class=\"page-head\"><h1>네이버 광고정리</h1><span class=\"small muted\">위: 링크 넣으면 광고용 정보 자동 정리 · 아래: 지번으로 우리 DB + 지금 네이버에 걸린 매물 찾기 (줄을 누르면 그 매물이 바로 정리됩니다)</span></div>\n<div class=\"na-stack\">\n  <section class=\"panel green\">\n    <h2>⚡ 링크 자동 정리</h2>\n    <textarea id=\"na_links\" rows=\"4\" placeholder=\"아무 링크나 넣어주세요. 정리해드릴게요!  여러 개면 줄바꿈·쉼표·공백으로 구분&#10;https://new.land.naver.com/houses?articleNo=2653867465\"></textarea>\n    <div class=\"na-bar\"><button class=\"btn btn-primary\" id=\"na_go\">자동 정리</button><button class=\"btn\" id=\"na_clip\">📋 클립보드에서</button><span class=\"small muted\" id=\"na_msg\"></span></div>\n    <div class=\"na-bar\" id=\"na_tools\" style=\"display:none\"><button class=\"btn btn-primary\" id=\"na_save\">체크한 줄 DB에 저장</button><button class=\"btn\" id=\"na_dgbulk\" style=\"display:none\" title=\"체크한 줄의 링크를 당근 올리기 탭의 '여러 매물 한 번에' 목록에 넣습니다\">🥕 체크한 줄 당근 일괄 목록으로</button><button class=\"btn\" id=\"na_clear\" title=\"정리한 목록을 비웁니다 (DB 에 저장한 것은 그대로)\">목록 지우기</button><button class=\"btn\" id=\"na_xl\">엑셀 다운로드</button><button class=\"btn\" id=\"na_copyall\">전체 광고문구 복사</button><label class=\"small\"><input type=\"checkbox\" id=\"na_all\" checked> 전체 선택</label></div>\n    <div id=\"na_out\" class=\"na-out\"></div>\n  </section>\n  <section class=\"panel pink\">\n    <h2><span class=\"nlogo\">N</span>🔍 지번으로 매물 찾기</h2>\n    <div class=\"na-bar\"><input type=\"text\" id=\"na_q\" placeholder=\"예: 양재동 17-27 (구 이름을 붙이면 더 정확: 서초구 양재동 17-27)\" style=\"flex:1;min-width:240px\"><button class=\"btn btn-primary\" id=\"na_find\">찾기</button><label class=\"small\" style=\"display:flex;align-items:center;gap:5px;margin:0;white-space:nowrap\" title=\"같은 매물(종류·거래·금액·층·면적이 같은 것)을 여러 부동산이 올렸으면 한 줄로 묶어 'N곳' 으로 보여줍니다\"><input type=\"checkbox\" id=\"na_group\" checked style=\"width:16px;height:16px;margin:0\"> 중복매물 묶기</label></div>\n    <div class=\"small muted\" id=\"na_fmsg\">우리 DB 에 쌓인 줄은 바로, 네이버는 그 지번 자리(60m 안)의 매물을 모아 지번을 확인합니다 (5~15초). 줄을 누르면 오른쪽에 바로 정리됩니다.</div>\n    <div class=\"na-split\">\n      <div id=\"na_fout\" class=\"na-out\"></div>\n      <div class=\"na-pick\"><div id=\"na_pick\"><div class=\"small muted\" style=\"padding:14px\">← 결과 줄을 누르면 그 매물의 광고 정보가 여기에 정리됩니다 (위 링크 자동 정리와는 별개)</div></div><div id=\"na_bldg\" class=\"na-bldg\"></div></div>\n    </div>\n  </section>\n</div>"
-const BUILD = '2026-10-10 23:45 당근'
+const BUILD = '2026-10-11 00:24 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()

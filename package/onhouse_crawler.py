@@ -19,14 +19,30 @@ def is_login_wall(html: str) -> bool:
     return len(h) < 600 and ("로그인후 이용" in h or "login=true" in h)
 
 
+def is_short_term_row(row: dict) -> bool:
+    """상세에 '단기' 거래(단기 금액 칸·태그)가 있는 매물인가 — 온하우스 목록 필터(shortTermYn)는 결과가 안 줄어 상세로 거른다 (2026-10-11)"""
+    try:
+        if any(str(k).startswith("단기") for k in row.keys()):
+            return True
+        return any("단기" in str(row.get(k, "")) for k in ("월세_태그", "매물종류", "거래유형"))
+    except Exception:
+        return False
+
+
 class OnhouseCrawler:
     LOGIN_URL = "https://www.onhouse.com/index.php/dataFunction/login"
     SEARCH_URL = "https://www.onhouse.com/index.php/dataFunction/rentMapList"
     SEARCH_PAGE_URL = "https://www.onhouse.com/index.php/dataFunction/rentMapList/page"
     DETAIL_URL = "https://www.onhouse.com/index/rent_view"
 
-    def __init__(self, id: str = "", pwd: str = "", verbose: bool = True):
+    def __init__(self, id: str = "", pwd: str = "", verbose: bool = True, mode: str = "rent"):
         self.host = "https://www.onhouse.com"
+        # mode: rent(일반 매물, rent_map) | share(공동중개, share_map) — 2026-10-11
+        self.mode = "share" if str(mode or "").lower() in ("share", "공동중개", "joint") else "rent"
+        if self.mode == "share":
+            self.SEARCH_URL = f"{self.host}/index.php/shareDataFunction/shareMapList"
+            self.SEARCH_PAGE_URL = f"{self.host}/index.php/shareDataFunction/shareMapList/page"
+            self.DETAIL_URL = f"{self.host}/share/share_view"
         self.session = curl_req.Session()
         self.timeout_sec = 20
         self.session.headers.update({
@@ -107,7 +123,7 @@ class OnhouseCrawler:
         for m in re.finditer(r'listItem_(\d+)', html):
             ids.add(m.group(1))
         # rent_view/3328524
-        for m in re.finditer(r'rent_view/(\d+)', html):
+        for m in re.finditer(r'(?:rent_view|share_view)/(\d+)', html):
             ids.add(m.group(1))
         # openListItemInfo('3328524'
         for m in re.finditer(r"openListItemInfo\s*\(\s*['\"]?(\d+)", html):
@@ -213,6 +229,9 @@ class OnhouseCrawler:
             "zerooption": "",
             "view_type": "hori",
         }
+        if self.mode == "share":   # 공동중개 목록은 키가 조금 다르다 (share_map 의 기본 filter 객체 기준)
+            payload.update({"pageType": "block", "blockNumber": "", "order1": "INS_DATE|DESC"})
+            payload.pop("status", None)
         payload.update(kwargs)
         if is_cancelled and is_cancelled():
             return []
@@ -380,6 +399,25 @@ class OnhouseCrawler:
             addr_title = title_area.find("h6", class_="addr_title")
             if addr_title:
                 out["전체주소"] = addr_title.get_text(strip=True)
+            hp = title_area.find("div", class_="title_hp")   # 공동중개 상세: 올린 중개사무소·전화·대표자·주소 (2026-10-11)
+            if hp:
+                tip = hp.find("span", class_="tooltiptext")
+                tip_txt = tip.get_text("\n", strip=True) if tip else ""
+                if tip:
+                    tip.extract()
+                phone_el = hp.find("span")
+                phone = phone_el.get_text(strip=True) if phone_el else ""
+                if phone_el:
+                    phone_el.extract()
+                out["중개사무소"] = hp.get_text(" ", strip=True)
+                if phone:
+                    out["중개사전화"] = phone
+                m = re.search(r"대표자\s*[:：]\s*(.+)", tip_txt)
+                out["대표자"] = m.group(1).strip() if m else ""
+                m = re.search(r"주소\s*[:：]\s*(.+)", tip_txt)
+                out["중개사주소"] = m.group(1).strip() if m else ""
+        if self.mode == "share":
+            out["구분"] = "공동중개"
 
         # bodyTop: bodyBox (거래유형/가격, 전용면적, 입주가능일, 해당층/전체층, 확인일/등록일)
         body_top = soup.find("div", class_="bodyTop")

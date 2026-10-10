@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { html } from "hono/html";
 import { basicAuth } from "hono/basic-auth";
+import { getCookie, deleteCookie } from "hono/cookie";
+import { adminSessionValid, adminSessionDelete } from "./daangn";   // 포털 로그인창으로 들어온 관리자 세션 (2026-10-11)
 import { photos } from "./photos";
 import { telegram } from "./telegram";
 import { listings } from "./listings";
@@ -125,8 +127,17 @@ function userStatus(u: any): [string, string] {
 // ---------------------------------------------------------------- admin auth
 
 // 어드민 로그아웃 (2026-10-10): 기본 인증은 브라우저가 기억하므로, 같은 realm 으로 401 을 한 번 돌려주면 브라우저가 저장한 로그인을 버린다 (로그인창이 뜨면 취소)
-app.get("/admin/logout", (c) => c.html(layout("로그아웃", html`<div class="form-box"><h1>로그아웃되었습니다</h1><p class="muted">브라우저 로그인창이 떠 있으면 <b>취소</b>를 누르세요. 다시 들어가려면 <a href="/admin/dashboard">사용자 관리</a>를 열고 아이디·비밀번호를 넣으면 됩니다.</p><p style="margin-top:14px"><a class="btn" href="/daangn">직원 포털로</a></p></div>`), 401, { "WWW-Authenticate": 'Basic realm="Secure Area"', "Cache-Control": "no-store" }));
+app.get("/admin/logout", async (c) => {
+  const tok = getCookie(c, "adm"); if (tok) { await adminSessionDelete(c.env.DB, tok); deleteCookie(c, "adm", { path: "/" }); }
+  const body = layout("로그아웃", html`<div class="form-box"><h1>로그아웃되었습니다</h1><p class="muted">다시 들어가려면 <a href="/daangn">로그인 화면</a>에서 관리자 아이디·비밀번호를 넣으세요.${c.req.header("authorization") ? html` (브라우저 로그인창이 떠 있으면 <b>취소</b>)` : ""}</p><p style="margin-top:14px"><a class="btn btn-primary" href="/daangn">로그인 화면으로</a></p></div>`);
+  // 기본 인증으로 들어온 경우는 같은 realm 401 로 브라우저가 기억한 로그인을 버리게 한다
+  if (c.req.header("authorization")) return c.html(body, 401, { "WWW-Authenticate": 'Basic realm="Secure Area"', "Cache-Control": "no-store" });
+  return c.html(body, 200, { "Cache-Control": "no-store" });
+});
 app.use("/admin/*", async (c, next) => {
+  // 포털 로그인창에서 관리자 아이디로 들어오면 쿠키 세션(adm) — 있으면 통과, 없으면 기존 기본 인증(curl·스크립트)
+  const tok = getCookie(c, "adm");
+  if (tok && (await adminSessionValid(c.env.DB, tok))) return next();
   const auth = basicAuth({ username: c.env.ADMIN_USER, password: c.env.ADMIN_PASSWORD });
   return auth(c, next);
 });

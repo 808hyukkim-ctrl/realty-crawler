@@ -51,7 +51,7 @@ from app_main_common import (
     APP_STYLESHEET, DetailFilters, MultiSelectCombo, RangeInput, contains_any_keyword, parse_keywords_csv, wrap_in_scroll,
     split_excel_by_category,
 )
-from onhouse_crawler import OnhouseCrawler, OnhouseLoginError
+from onhouse_crawler import OnhouseCrawler, OnhouseLoginError, is_short_term_row
 from schedule_manager import DAY_NAMES, ScheduleManager, ScheduledJob
 
 DAY_LABELS = {"mon": "월", "tue": "화", "wed": "수", "thu": "목", "fri": "금", "sat": "토", "sun": "일"}
@@ -294,7 +294,9 @@ class Worker(QObject):
     @Slot()
     def run(self):
         try:
-            crawler = ListCapturingCrawler(id=self.p["uid"], pwd=self.p["pwd"], verbose=False)
+            crawler = ListCapturingCrawler(id=self.p["uid"], pwd=self.p["pwd"], verbose=False, mode=self.p.get("mode", "rent"))
+            if self.p.get("mode") == "share":
+                self.log.emit("공동중개 매물을 수집합니다 (온하우스 공동중개 메뉴, 확인일 대신 등록일)")
             self.status.emit("온하우스 로그인 중...")
             crawler.login()
 
@@ -367,7 +369,7 @@ class Worker(QObject):
                         page=page,
                         fetch_details=False,
                         is_cancelled=lambda: self._cancel,
-                        **{**({"order1": "R.INS_DATE|DESC"} if by_reg else {}), **pass_extra},
+                        **{**({"order1": "R.INS_DATE|DESC"} if by_reg else {}), **({"shortTermYn": "Y"} if self.p.get("short_term") else {}), **pass_extra},
                     ) or []
                     if not ids:
                         if page == 0:
@@ -514,6 +516,9 @@ class Worker(QObject):
                             self.log.emit(f"  {hid} 상세 내용이 비어 있어 건너뜀")
                             self._sleep_between()
                             continue
+                        if self.p.get("short_term") and not row.get("오류") and not is_short_term_row(row):
+                            self._sleep_between()
+                            continue   # 단기만: 상세에 단기 거래가 없는 매물은 뺀다
                         all_rows.append(row)
                         addr = row.get("전체주소") or row.get("주소_호실") or ""
                         price = next(
@@ -565,7 +570,7 @@ class Worker(QObject):
             period = self.p.get("period_label") or ""
             period_part = f"_{safe_filename_part(period)}" if period and period != "전체" else ""
             out_path = os.path.join(
-                out_dir, f"온하우스_{self.p['region_label']}{period_part}_{len(all_rows)}건_{ts}.xlsx"
+                out_dir, f"{'온하우스공동' if self.p.get('mode') == 'share' else '온하우스'}_{self.p['region_label']}{period_part}_{len(all_rows)}건_{ts}.xlsx"
             )
             crawler.crawl_details_to_excel(rows=all_rows, output_path=out_path)
             sheets = split_excel_by_category(out_path)
@@ -908,6 +913,19 @@ class MainWindow(QMainWindow):
         for c in (self.chk_month, self.chk_jeonse, self.chk_buy):
             tr.addWidget(c)
             c.toggled.connect(lambda _checked=False: self._refresh_trade_controls())
+        self.chk_short = QCheckBox("단기만")
+        self.chk_short.setToolTip("월세 목록을 읽어 상세에 '단기' 거래가 있는 매물만 저장합니다 (온하우스 목록 필터는 단기를 못 걸러서 상세로 거릅니다)")
+        tr.addWidget(self.chk_short)
+        tr.addSpacing(14)
+        tr.addWidget(QLabel("구분"))
+        self.cb_mode = QComboBox()
+        self.cb_mode.addItems(["일반 매물", "공동중개"])
+        self.cb_mode.setToolTip("공동중개: 온하우스 '공동중개' 메뉴(share_map)의 매물을 긁습니다 — 올린 중개사무소·전화·대표자·주소 열이 같이 나옵니다. 확인일 대신 등록일만 있습니다")
+        tr.addWidget(self.cb_mode)
+        self.lbl_mode_note = QLabel("공동중개는 등록일 기준만")
+        self.lbl_mode_note.setStyleSheet("color:#8a7f99;font-size:11px")
+        self.lbl_mode_note.setToolTip("공동중개 매물에는 확인일이 없어 기간 필터는 등록일로만 적용됩니다 (자동으로 등록일 기준)")
+        tr.addWidget(self.lbl_mode_note)
         tr.addStretch(1)
         v.addWidget(trade_box)
 
@@ -1334,6 +1352,8 @@ class MainWindow(QMainWindow):
             "gun": self.cb_gun.checked_labels(),
             "dong": self.cb_dong.checked_labels(),
             "trade": [k for k, cb in self.trade_checks.items() if cb.isChecked()],
+            "short_term": self.chk_short.isChecked(),
+            "mode": "share" if self.cb_mode.currentIndex() == 1 else "rent",
             "kinds": [k for k, cb in self.room_checks.items() if cb.isChecked()],
             "structs": [k for k, cb in self.struct_checks.items() if cb.isChecked()],
             "floors_srv": [k for k, cb in self.floor_checks.items() if cb.isChecked()],
@@ -1369,6 +1389,8 @@ class MainWindow(QMainWindow):
         self.cb_dong.set_checked_labels(s.get("dong") or [])
         for k, cb in self.trade_checks.items():
             cb.setChecked(k in (s.get("trade") or []))
+        self.chk_short.setChecked(bool(s.get("short_term")))
+        self.cb_mode.setCurrentIndex(1 if s.get("mode") == "share" else 0)
         kinds = s.get("kinds")
         if kinds is None and s.get("room") and s.get("room") != "전체":   # 옛 예약(방유형 드롭다운) 호환
             kinds = [k for k in ROOM_KINDS if k in str(s.get("room")).replace("오피", "오피스텔")]
@@ -1582,6 +1604,8 @@ class MainWindow(QMainWindow):
                 self._append_log("예약 실행 실패: 아이디/비밀번호 없음")
             return
         trade_types = [k for k in TRADE_TYPES if self.trade_checks[k].isChecked()]
+        if self.chk_short.isChecked() and "월세" not in trade_types:   # 단기는 월세 목록에서 상세로 거른다
+            trade_types.append("월세")
         if not trade_types:
             if not auto:
                 QMessageBox.warning(self, "오류", "거래유형(월세/전세/매매)을 하나 이상 선택하세요.")
@@ -1624,6 +1648,8 @@ class MainWindow(QMainWindow):
             "regions": regions,
             "bbox": self.bbox,
             "trade_types": trade_types,
+            "short_term": self.chk_short.isChecked(),
+            "mode": "share" if self.cb_mode.currentIndex() == 1 else "rent",
             "room_type": "all",
             "passes": passes,
             "post_rooms": self._range_or_none(self.sl_rooms),
@@ -1637,7 +1663,7 @@ class MainWindow(QMainWindow):
             "max_pages": self.sp_max_pages.value(),
             "date_from": date_from,
             "date_to": date_to,
-            "date_by": "reg" if by_reg else "chk",
+            "date_by": "reg" if (by_reg or self.cb_mode.currentIndex() == 1) else "chk",   # 공동중개는 등록일만
             "period_label": period_label,
             "out_dir": self.out_dir,
             "region_label": self._region_label(),

@@ -15,7 +15,7 @@ export function layout(title: string, body: unknown) {
 <body>
 <header class="topbar">
   <div class="brand">🌸 전국부동산매물수집기 · 관리</div>
-  <nav class="nav"><a href="/admin/brief">🧾 손님 브리핑</a><a href="/admin/listings">매물·임대인 DB</a><a href="/admin/naverad">네이버 광고정리</a><a href="/admin/hosu">호수 추정</a><a href="/admin/logs">활동 기록</a><a href="/admin/telegram">텔레그램 봇</a><a href="/admin/photos">사진 950</a><a href="/admin/daangn">당근 광고</a><span class="navsp"></span><a href="/admin/dashboard">사용자 관리</a><a href="/admin/logout" title="브라우저가 기억한 관리자 로그인을 지웁니다">로그아웃</a></nav>
+  <nav class="nav"><a href="/admin/brief">🧾 손님 브리핑</a><a href="/admin/listings">매물·임대인 DB</a><a href="/admin/naverad">네이버 광고정리</a><a href="/admin/hosu">호수 추정</a><a href="/admin/logs">활동 기록</a><a href="/admin/telegram">텔레그램 봇</a><a href="/admin/photos">사진 950</a><a href="/admin/daangn">당근 광고</a><span class="navsp"></span><a href="/daangn" title="직원이 보는 화면(권한 탭)">직원 포털</a><a href="/admin/dashboard">사용자 관리</a><a href="/admin/logout" title="브라우저가 기억한 관리자 로그인을 지웁니다">로그아웃</a></nav>
 </header>
 <main class="container">${body}</main>
 </body>

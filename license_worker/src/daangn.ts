@@ -9,6 +9,7 @@
 import { Hono } from "hono";
 import { html } from "hono/html";
 import { cors } from "hono/cors";
+import { setCookie } from "hono/cookie";
 import DAANGN_HTML from "./daangn.html";
 import { layout } from "./layout";
 import { verifyPassword } from "./auth";
@@ -42,6 +43,7 @@ export async function ensure(db: D1Database) {
   try { await db.prepare("ALTER TABLE users ADD COLUMN daangn_guard TEXT").run(); } catch { /* 이미 있음 */ }   // 계정별 안전장치 {daily,min,max} (비면 공통 설정)
   await db.prepare(`CREATE TABLE IF NOT EXISTS user_prefs (username TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (username, key))`).run();   // 계정별 설정(자주 쓰는 문구 등)
   await db.prepare(`CREATE TABLE IF NOT EXISTS intranet_users (label TEXT PRIMARY KEY, first_at TEXT NOT NULL, last_at TEXT NOT NULL, daangn INTEGER NOT NULL DEFAULT 0)`).run();   // 라운지 인트라넷 토큰 라벨별 당근 권한 (어드민 사용자 관리에서 체크)
+  await db.prepare(`CREATE TABLE IF NOT EXISTS admin_sessions (token TEXT PRIMARY KEY, created_at TEXT NOT NULL, last_at TEXT NOT NULL)`).run();   // 포털 로그인창으로 들어온 관리자 쿠키 세션 (2026-10-11)
   // index.ts 의 activity_log 와 같은 정의 (먼저 만들어져 있어도 무해)
   await db.prepare("CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, username TEXT NOT NULL, app TEXT NOT NULL, action TEXT NOT NULL, detail TEXT, count INTEGER, mac TEXT)").run();
   await db.prepare("CREATE INDEX IF NOT EXISTS activity_log_at ON activity_log(at DESC)").run();
@@ -174,6 +176,16 @@ async function userOf(c: any): Promise<Me | null> {
   if (Date.now() - new Date(row.last_at).getTime() > 3600e3) c.env.DB.prepare("UPDATE daangn_web_sessions SET last_at = ? WHERE token = ?").bind(nowIso(), tok).run().catch(() => {});
   return { username: row.username, features };
 }
+// ---------------------------------------------------------------- 관리자 세션 (포털 로그인창 공용, 14일)
+export async function adminSessionValid(db: D1Database, token: string): Promise<boolean> {
+  await ensure(db);
+  const r: any = await db.prepare("SELECT last_at FROM admin_sessions WHERE token = ?").bind(token).first();
+  if (!r) return false;
+  if (Date.now() - new Date(r.last_at).getTime() > 14 * 86400e3) { await db.prepare("DELETE FROM admin_sessions WHERE token = ?").bind(token).run(); return false; }
+  if (Date.now() - new Date(r.last_at).getTime() > 3600e3) db.prepare("UPDATE admin_sessions SET last_at = ? WHERE token = ?").bind(nowIso(), token).run().catch(() => {});
+  return true;
+}
+export async function adminSessionDelete(db: D1Database, token: string) { await ensure(db); await db.prepare("DELETE FROM admin_sessions WHERE token = ?").bind(token).run().catch(() => {}); }
 const randomToken = () => { const a = new Uint8Array(24); crypto.getRandomValues(a); return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join(""); };
 
 // ---------------------------------------------------------------- 화면
@@ -187,6 +199,14 @@ daangn.post("/daangn/api/login", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const username = str(body.username), password = String(body.password ?? "");
   if (!username || !password) return json(c, { error: "아이디와 비밀번호를 입력하세요." }, 400);
+  // 관리자 아이디/비번이면 관리 화면으로 (쿠키 세션) — 로그인창 하나 (2026-10-11)
+  if (c.env.ADMIN_USER && c.env.ADMIN_PASSWORD && username === String(c.env.ADMIN_USER) && password === String(c.env.ADMIN_PASSWORD)) {
+    const tok = randomToken();
+    await c.env.DB.prepare("INSERT INTO admin_sessions (token, created_at, last_at) VALUES (?, ?, ?)").bind(tok, nowIso(), nowIso()).run();
+    setCookie(c, "adm", tok, { path: "/", httpOnly: true, secure: new URL(c.req.url).protocol === "https:", sameSite: "Lax", maxAge: 14 * 86400 });
+    await addLog(c.env.DB, username, "daangn", "로그인", "관리자 (웹 포털 로그인창)", null);
+    return json(c, { ok: true, admin: true, redirect: "/admin/dashboard" });
+  }
   const row: any = await c.env.DB.prepare("SELECT * FROM users WHERE username = ?").bind(username).first();
   if (!row || !(await verifyPassword(password, row.password_hash))) {   // 실패도 활동 기록에 남겨 원인(없는 아이디/비번 틀림)을 어드민에서 볼 수 있게 (2026-10-09)
     await addLog(c.env.DB, username.slice(0, 40), "daangn", "로그인 실패", row ? "비밀번호 틀림 (웹 포털)" : "없는 아이디 (웹 포털)", null);
@@ -297,6 +317,8 @@ async function apiHandler(c: any) {
     const body = await c.req.json().catch(() => ({}));
     const step = str(body.step);
     if (step === "start") { const r = await engineJson(c, "/qr/start", { uid: me.username }); return json(c, r.data, r.status); }
+    if (step === "phone") { const r = await engineJson(c, "/phone/start", { uid: me.username, phone: str(body.phone) }); if (r.status === 404) return json(c, { error: "엔진이 아직 휴대폰 로그인을 지원하지 않습니다(업데이트 전). QR 로 연결해 주세요." }, 400); return json(c, r.data, r.status); }   // 휴대폰 번호 → 문자 인증번호 (2026-10-11)
+    if (step === "code") { const r = await engineJson(c, "/phone/code", { session_id: str(body.session_id), code: str(body.code) }); return json(c, r.data, r.status); }
     if (step === "cancel") { const r = await engineJson(c, "/qr/poll", { session_id: str(body.session_id), cancel: true }); return json(c, r.data, r.status); }
     const r = await engineJson(c, "/qr/poll", { session_id: str(body.session_id) });
     if (r.status === 200 && r.data?.status === "success" && r.data?.session) {

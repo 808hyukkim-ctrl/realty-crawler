@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
 import auto_send
 from daangn_realty_crawler import DaangnRealtyCrawler
 from peterpan_crawler import PeterpanCrawler
-from onhouse_crawler import OnhouseCrawler, OnhouseLoginError
+from onhouse_crawler import OnhouseCrawler, OnhouseLoginError, is_short_term_row
 from naver_crawler import NaverCrawler
 from app_main_common import (
     DetailFilters,
@@ -330,8 +330,8 @@ class OnhouseWorker(QObject):
     @Slot()
     def run(self):
         try:
-            crawler = OnhouseCrawler(id=self.params["uid"], pwd=self.params["pwd"])
-            self.status.emit("온하우스 로그인 중...")
+            crawler = OnhouseCrawler(id=self.params["uid"], pwd=self.params["pwd"], mode=self.params.get("mode", "rent"))
+            self.status.emit("온하우스 로그인 중..." + (" (공동중개)" if self.params.get("mode") == "share" else ""))
             crawler.login()
             login_lost = ""
             region_names = self.params["regions"]
@@ -376,6 +376,7 @@ class OnhouseWorker(QObject):
                         min_area=self.params.get("area_min"),
                         max_area=self.params.get("area_max"),
                         is_cancelled=lambda: self._cancel,
+                        **({"shortTermYn": "Y"} if self.params.get("short_term") else {}),
                     )
                     page_ids = page_ids or []
                     if not page_ids:
@@ -406,6 +407,8 @@ class OnhouseWorker(QObject):
                             row = {"매물ID": hid_s, "URL": f"{crawler.DETAIL_URL}/{hid_s}", "오류": str(e)}
                         if not row.get("오류") and not (row.get("전체주소") or row.get("주소_호실") or row.get("물건번호")):
                             continue   # 상세가 비어 있는 행은 저장하지 않는다
+                        if self.params.get("short_term") and not row.get("오류") and not is_short_term_row(row):
+                            continue   # 단기만: 상세에 단기 거래가 없는 매물은 뺀다
                         all_rows.append(row)
                         self.row_ready.emit(MainWindow.item_to_display_row(row))
                     if stopped:
@@ -1362,10 +1365,23 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self.oh_trade_month = QCheckBox("월세")
         self.oh_trade_buy = QCheckBox("매매")
         self.oh_trade_buy.setChecked(True)
+        self.oh_trade_short = QCheckBox("단기만")
+        self.oh_trade_short.setToolTip("월세 목록을 읽어 상세에 '단기' 거래가 있는 매물만 저장합니다 (온하우스 목록 필터는 단기를 못 걸러서 상세로 거릅니다)")
+        self.oh_mode = QComboBox()
+        self.oh_mode.addItems(["일반 매물", "공동중개"])
+        self.oh_mode.setToolTip("공동중개: 온하우스 '공동중개' 메뉴(share_map)의 매물을 긁습니다 — 올린 중개사무소·전화·대표자·주소 열이 같이 나옵니다")
         self.oh_room_type = QComboBox()
         self.oh_room_type.addItems(["전체", "주택", "오피", "주택/오피", "사무실", "상가", "사무실/상가", "분양사무실"])
         tr.addWidget(self.oh_trade_month)
         tr.addWidget(self.oh_trade_buy)
+        tr.addWidget(self.oh_trade_short)
+        tr.addSpacing(16)
+        tr.addWidget(QLabel("구분"))
+        tr.addWidget(self.oh_mode)
+        _oh_mode_note = QLabel("공동중개는 등록일 기준만")
+        _oh_mode_note.setStyleSheet("color:#8a7f99;font-size:11px")
+        _oh_mode_note.setToolTip("공동중개 매물에는 확인일이 없어 등록일로만 기간을 볼 수 있습니다")
+        tr.addWidget(_oh_mode_note)
         tr.addSpacing(16)
         tr.addWidget(QLabel("방유형"))
         tr.addWidget(self.oh_room_type)
@@ -2037,6 +2053,8 @@ class MainWindow(QMainWindow, ScheduleMixin):
             trade_types.append("월세")
         if self.oh_trade_buy.isChecked():
             trade_types.append("매매")
+        if self.oh_trade_short.isChecked() and "월세" not in trade_types:   # 단기는 월세 목록에서 상세로 거른다
+            trade_types.append("월세")
         if not trade_types:
             QMessageBox.warning(self, "오류", "거래유형(월세/매매)을 하나 이상 선택하세요.")
             return
@@ -2087,7 +2105,9 @@ class MainWindow(QMainWindow, ScheduleMixin):
             "month_max": month_max,
             "area_min": area_min,
             "area_max": area_max,
-            "site_name": "온하우스",
+            "site_name": "온하우스공동" if self.oh_mode.currentIndex() == 1 else "온하우스",
+            "mode": "share" if self.oh_mode.currentIndex() == 1 else "rent",
+            "short_term": self.oh_trade_short.isChecked(),
             "region_for_file": region_for_file,
             "timestamp": ts,
             "out_dir": out_dir,
