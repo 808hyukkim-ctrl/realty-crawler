@@ -317,6 +317,10 @@ async function apiHandler(c: any) {
 
   // ---- 당근 (기능 daangn)
   if (!hasDaangn) return json(c, { error: "이 계정에는 '당근 광고' 이용권이 없습니다." }, 403);
+  if (action === "daangn-geocode") {   // 지번 → 좌표 (일괄 목록의 당근 글 같은 건물 판정용, 2026-10-11)
+    if (q("q").length < 2) return json(c, { ok: false, error: "주소가 짧습니다" }, 400);
+    const r = await engineJson(c, "/geocode?q=" + encodeURIComponent(q("q")), undefined, "GET"); return json(c, r.data, r.status === 404 ? 200 : r.status);
+  }
   if (action === "address") {
     if (q("q").length < 2) return json(c, { error: "검색어는 2글자 이상." }, 400);
     const r = await engineJson(c, "/address?q=" + encodeURIComponent(q("q")), undefined, "GET"); return json(c, r.data, r.status);
@@ -506,8 +510,10 @@ async function officeDaangnList(c: any, force: boolean): Promise<{ rows: any[] |
 export function overlapGroups(rows: any[]) {
   const num = (v: unknown) => { const n = parseFloat(String(v ?? "")); return Number.isFinite(n) && n > 0 ? n : null; };
   const nb = (v: unknown) => str(v).replace(/\s+/g, "").toLowerCase();
+  const dist = (a: any, b: any) => { const la = Number(a.lat), lo = Number(a.lon), lb = Number(b.lat), lob = Number(b.lon); if (!la || !lo || !lb || !lob || a.hide || b.hide) return null; const dy = (la - lb) * 111320, dx = (lo - lob) * 111320 * Math.cos((la * Math.PI) / 180); return Math.sqrt(dx * dx + dy * dy); };
   const same = (a: any, b: any) => {
     if (!a.dong || a.dong !== b.dong || !a.floor || a.floor !== b.floor) return false;
+    const d = dist(a, b); if (d !== null && d > 70) return false;   // 좌표가 둘 다 있고 70m 넘으면 다른 건물
     const x = num(a.area), y = num(b.area);
     if (x !== null && y !== null) return Math.abs(x - y) <= 1;
     return !!(a.building && b.building && nb(a.building) === nb(b.building));
