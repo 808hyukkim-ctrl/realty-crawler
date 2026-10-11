@@ -408,6 +408,11 @@ async function apiHandler(c: any) {
     return json(c, d.ok ? { ok: true, url: d.url ?? null, articleId: d.articleNo ?? d.articleId ?? null, articleNo: d.articleNo ?? null, direct: true, variant: d.variant } : { ...d, code: d.code === "no_session" ? "no_cookies" : d.code }, r.status === 200 ? 200 : r.status);
   }
 
+  if (action === "daangn-office-list") {   // 사무실 전원 살아 있는 당근 광고 — 포털 일괄 목록 지번 대조용 (2026-10-11)
+    const { results } = await db.prepare("SELECT id, username, key, addr, ho, deal, price, article_no, url, created_at, data FROM daangn_uploads WHERE status = 'ok' AND closed = 0 AND article_no != '' ORDER BY id DESC LIMIT 3000").all();
+    const rows = (results ?? []).map((r: any) => { let f: any = {}, sm: any = {}; try { const d = JSON.parse(String(r.data || "{}")); f = d.fields || {}; sm = d.summary || {}; } catch { /* */ } return { id: r.id, by: r.username, key: r.key, addr: r.addr, ho: r.ho, deal: r.deal, price: r.price, article_no: String(r.article_no), url: r.url, at: r.created_at, area: f.area_exclusive ?? null, floor: f.floor_no ?? null, rooms: f.room_count ?? null, kind: sm.salesType || "" }; });
+    return json(c, { ok: true, rows, at: nowIso() });
+  }
   if (action === "uploads") {
     const days = Math.min(400, Math.max(1, parseInt(q("days") || "30", 10) || 30));
     const since = new Date(Date.now() - days * 86400e3).toISOString();
