@@ -23,6 +23,12 @@
   .bf-th{position:relative;width:64px;height:64px}
   .bf-th img{width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border);background:#f3f4f6}
   .bf-th button{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:1px solid #f5c9db;background:#fff;color:var(--danger);font-weight:900;line-height:1;padding:0;cursor:pointer}
+  .bf-th{cursor:grab} .bf-th.dragging{opacity:.4} .bf-th.over img{outline:3px solid var(--accent);outline-offset:-3px}
+  .bf-th.first::before{content:"대표";position:absolute;left:0;top:0;background:var(--accent);color:#fff;font-size:10px;padding:1px 5px;border-radius:8px 0 6px 0;z-index:1}
+  .bf-th .bf-mv{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;opacity:0;transition:opacity .15s}
+  .bf-th:hover .bf-mv{opacity:1}
+  .bf-th .bf-mv button{position:static;width:22px;height:20px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,.95);color:var(--accent-dark);font-size:14px;line-height:1;font-weight:900}
+  .bf-th .bf-mv button[disabled]{opacity:.3;cursor:default}
   .bf-th.own::after{content:"올림";position:absolute;left:0;bottom:0;background:rgba(214,58,120,.85);color:#fff;font-size:10px;padding:1px 5px;border-radius:0 6px 0 8px}
   .bf-drop{display:flex;align-items:center;gap:8px;border:1.5px dashed #f5c9db;border-radius:9px;padding:7px 10px;font-size:12.5px;color:var(--muted);background:#fff;cursor:pointer}
   .bf-drop:hover{border-color:var(--accent);color:var(--accent-dark)}
@@ -107,12 +113,23 @@ function brPaintStation(it) {
   inp.placeholder = it.stState === 'busy' ? '가까운 역을 찾는 중…' : it.stState === 'fail' ? '역 정보를 못 찾음 — 직접 적어도 됩니다' : it.stState === 'none' && !it.station ? '못 찾음 — 예: 강남역 도보 5분' : '예: 강남역 도보 5분'
 }
 const oxOf = n => { const r = BR.response; if (!r) return ''; if ((r.picks || []).includes(n)) return '<span class="bf-ox o">손님 O</span>'; if ((r.rejects || []).includes(n)) return '<span class="bf-ox x">손님 X</span>'; return '' }
-const brPhotosHtml = it => (it.photos.length ? it.photos.map((u, k) => `<span class="bf-th ${u.startsWith('/b/p/') ? 'own' : ''}"><img src="${esc(u)}" referrerpolicy="no-referrer" loading="lazy" alt=""><button type="button" data-rm="${k}" title="이 사진 빼기">×</button></span>`).join('') : '<span class="bf-hint">사진 없음</span>')
+const brPhotosHtml = it => (it.photos.length ? it.photos.map((u, k) => `<span class="bf-th ${u.startsWith('/b/p/') ? 'own' : ''} ${k === 0 ? 'first' : ''}" draggable="true" data-i="${k}" title="끌어서 순서를 바꿀 수 있습니다"><img src="${esc(u)}" referrerpolicy="no-referrer" loading="lazy" alt=""><button type="button" data-rm="${k}" title="이 사진 빼기">×</button><span class="bf-mv"><button type="button" data-pmv="-1" data-i="${k}" title="앞으로" ${k === 0 ? 'disabled' : ''}>‹</button><button type="button" data-pmv="1" data-i="${k}" title="뒤로" ${k === it.photos.length - 1 ? 'disabled' : ''}>›</button></span></span>`).join('') : '<span class="bf-hint">사진 없음</span>')
   + `<label class="bf-drop" title="사진을 여기에 끌어다 놓거나 눌러서 고르세요 (여러 장 가능, 1280px 로 줄여 올립니다)">📷 사진 올리기 <small>(끌어다 놓기 · 여러 장)</small><input type="file" accept="image/*" multiple data-up="1"></label>`
   + `<span class="bf-hint" style="margin-left:4px" data-phmsg>사진 ${it.photos.length}장 · 첫 사진이 대표</span>`
 function brBindPhotos(card, it) {
   const ph = card.querySelector('.bf-ph'); if (!ph) return
-  ph.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { it.photos.splice(Number(b.dataset.rm), 1); ph.innerHTML = brPhotosHtml(it); brBindPhotos(card, it) })
+  const repaint = () => { ph.innerHTML = brPhotosHtml(it); brBindPhotos(card, it) }
+  const move = (from, to) => { if (from === to || from < 0 || to < 0 || from >= it.photos.length || to >= it.photos.length) return; const [x] = it.photos.splice(from, 1); it.photos.splice(to, 0, x); repaint() }
+  ph.querySelectorAll('[data-rm]').forEach(b => b.onclick = e => { e.stopPropagation(); it.photos.splice(Number(b.dataset.rm), 1); repaint() })
+  ph.querySelectorAll('[data-pmv]').forEach(b => b.onclick = e => { e.stopPropagation(); const i = Number(b.dataset.i); move(i, i + Number(b.dataset.pmv)) })
+  // 끌어서 순서 바꾸기
+  ph.querySelectorAll('.bf-th').forEach(th => {
+    th.addEventListener('dragstart', e => { ph._drag = Number(th.dataset.i); th.classList.add('dragging'); try { e.dataTransfer.setData('text/plain', String(ph._drag)); e.dataTransfer.effectAllowed = 'move' } catch (_) {} })
+    th.addEventListener('dragend', () => th.classList.remove('dragging'))
+    th.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); th.classList.add('over') })
+    th.addEventListener('dragleave', () => th.classList.remove('over'))
+    th.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); th.classList.remove('over'); const from = ph._drag; ph._drag = undefined; if (from === undefined) return; move(from, Number(th.dataset.i)) })
+  })
   ph.querySelectorAll('img').forEach(im => im.onerror = () => { if (im.dataset.fb || !/^https?:/.test(im.src)) return; im.dataset.fb = '1'; im.src = '/b/img?u=' + encodeURIComponent(im.src) })
   const up = ph.querySelector('[data-up]'); if (up) up.onchange = () => { brUpload(card, it, [...up.files]); up.value = '' }
   const over = e => { e.preventDefault(); card.classList.add('drag') }, leave = () => card.classList.remove('drag')
