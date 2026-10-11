@@ -91,7 +91,9 @@ const normKey = (road: unknown, dong: unknown, ho: unknown) => [road, dong, ho].
 const floorOf = (v: unknown) => { const t = str(v); if (!t) return null; const n = Number(t.replace(/층$/, "")); return Number.isFinite(n) ? n : null; };
 // 같은 주소·동·호수로 올린 살아 있는 글. 호수가 없는 매물은 기록의 층(fields.floor_no)이 다르면 다른 매물로 본다 (2026-10-11)
 async function findLivePrev(db: D1Database, username: string, key: string, floor: unknown) {
-  const { results } = await db.prepare("SELECT article_no, url, created_at, data FROM daangn_uploads WHERE username = ? AND key = ? AND status = 'ok' AND closed = 0 AND article_no != '' ORDER BY id DESC LIMIT 20").bind(username, key).all();
+  // 계정 구분 없이 사무실 전체 — 당근은 한 중개사무소를 하나로 보므로 다른 직원이 올린 글도 중복 (2026-10-11)
+  const { results } = await db.prepare("SELECT username, article_no, url, created_at, data FROM daangn_uploads WHERE key = ? AND status = 'ok' AND closed = 0 AND article_no != '' ORDER BY id DESC LIMIT 20").bind(key).all();
+  void username;
   const hoEmpty = key.endsWith("|"); const f = floorOf(floor);
   for (const r of (results || []) as any[]) {
     if (hoEmpty && f !== null) { let rf: number | null = null; try { rf = floorOf(JSON.parse(String(r.data || "{}"))?.fields?.floor_no); } catch { rf = null; } if (rf !== null && rf !== f) continue; }
@@ -360,8 +362,8 @@ async function apiHandler(c: any) {
       let ours: any = null;
       const dk = dupKey(it.road_addr, it.dong_nm, it.ho_nm, it.floor_no); const same = seen.has(dk) ? seen.get(dk) : null; if (!seen.has(dk)) seen.set(dk, i);
       const prev: any = await findLivePrev(db, me.username, normKey(it.road_addr, it.dong_nm, it.ho_nm), it.floor_no);
-      if (prev) ours = { articleNo: String(prev.article_no), url: prev.url || "", at: prev.created_at };
-      out.push({ i, fullAddress: e.fullAddress || "", dup: e.dup || null, partial: e.partial || 0, writable: e.writable ?? null, reason: e.reason || "", error: e.error || "", ours, same });
+      if (prev) ours = { articleNo: String(prev.article_no), url: prev.url || "", at: prev.created_at, by: String(prev.username || ""), mine: prev.username === me.username };
+      out.push({ i, fullAddress: e.fullAddress || "", dup: e.dup || null, office: e.office || null, partial: e.partial || 0, writable: e.writable ?? null, reason: e.reason || "", error: e.error || "", ours, same });
     }
     await addLog(db, me.username, "daangn", "당근 중복 확인", `${items.length}건 중 당근 중복 ${out.filter((x) => x.dup).length}건 · 내 기록 ${out.filter((x) => x.ours).length}건 · 목록 안 겹침 ${out.filter((x) => x.same !== null).length}건`, out.filter((x) => x.dup || x.ours || x.same !== null).length);
     return json(c, { items: out });
@@ -389,7 +391,8 @@ async function apiHandler(c: any) {
     if (prev && body.force_duplicate !== true) {
       const chk = await engineJson(c, "/check", { session: sess.blob, articleNo: String(prev.article_no) });
       if (chk.data?.exists !== false) {
-        return json(c, { ok: false, code: "daangn_dup", error: `당근에 이미 올라간 매물입니다 (당근 매물번호 ${prev.article_no}${kstWhen(prev.created_at) ? ", " + kstWhen(prev.created_at) + " 올림" : ""}) — 건너뜁니다${key.endsWith("|") ? " · 호수가 없는 매물은 같은 건물·같은 층이면 같은 매물로 봅니다. 다른 호실이면 호수(또는 층)를 적고 다시 올려 주세요" : ""}`, articleNo: String(prev.article_no), articleId: String(prev.article_no), url: prev.url || "" }, 409);
+        const who = prev.username && prev.username !== me.username ? `우리 사무실 ${prev.username}님이 이미 올린 매물입니다` : "당근에 이미 올라간 매물입니다";
+        return json(c, { ok: false, code: "daangn_dup", error: `${who} (당근 매물번호 ${prev.article_no}${kstWhen(prev.created_at) ? ", " + kstWhen(prev.created_at) + " 올림" : ""}) — 건너뜁니다${prev.username !== me.username ? " · 당근은 한 중개사무소를 하나로 봐서 직원이 달라도 같은 매물이면 제재" : ""}${key.endsWith("|") ? " · 호수가 없는 매물은 같은 건물·같은 층이면 같은 매물로 봅니다. 다른 호실이면 호수(또는 층)를 적고 다시 올려 주세요" : ""}`, articleNo: String(prev.article_no), articleId: String(prev.article_no), url: prev.url || "" }, 409);
       }
     }
     const listing = { ...body }; delete (listing as any).force; delete (listing as any).daangn_only;
