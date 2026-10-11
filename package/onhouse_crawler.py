@@ -167,10 +167,16 @@ class OnhouseCrawler:
             page: 조회할 페이지 (0부터)
             fetch_details: True면 해당 페이지 ID 수집 후 즉시 detail 크롤링, List[Dict] 반환
         """
+        # 거래유형: 호출부가 "'월세'" 처럼 따옴표를 이미 붙여 보내도 겹치지 않게 정리 — 공동중개(shareMapList)는 "''월세''" 꼴이면 500 (2026-10-11)
+        def _q(t):
+            t = str(t or "").strip().strip("'\"").strip()
+            return f"'{t}'" if t and t.lower() != "all" else t
         if isinstance(trade_type, list):
-            trade_type_str = ",".join(f"'{t}'" for t in trade_type) if trade_type else "all"
+            parts = [_q(t) for t in trade_type if str(t or "").strip()]
+            trade_type_str = ",".join(parts) if parts else "all"
         else:
-            trade_type_str = trade_type
+            raw = str(trade_type or "").strip()
+            trade_type_str = "all" if (not raw or raw.lower() == "all") else ",".join(_q(t) for t in raw.split(",") if t.strip())
 
         # roomType: all이면 그대로, 한글이면 '주택' 형식으로
         room_type_str = room_type if (room_type or "").lower() == "all" else f"'{room_type}'"
