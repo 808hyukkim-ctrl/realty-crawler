@@ -88,6 +88,20 @@ async function guardBump(db: D1Database, username: string, g: Guard): Promise<nu
 const str = (v: unknown) => (v === null || v === undefined ? "" : String(v).trim());
 const json = (c: any, body: unknown, status = 200) => c.json(body, status);
 const normKey = (road: unknown, dong: unknown, ho: unknown) => [road, dong, ho].map((v) => str(v).replace(/\s+/g, "").replace(/호$/, "").replace(/동$/, "").toLowerCase()).join("|");
+const floorOf = (v: unknown) => { const t = str(v); if (!t) return null; const n = Number(t.replace(/층$/, "")); return Number.isFinite(n) ? n : null; };
+// 같은 주소·동·호수로 올린 살아 있는 글. 호수가 없는 매물은 기록의 층(fields.floor_no)이 다르면 다른 매물로 본다 (2026-10-11)
+async function findLivePrev(db: D1Database, username: string, key: string, floor: unknown) {
+  const { results } = await db.prepare("SELECT article_no, url, created_at, data FROM daangn_uploads WHERE username = ? AND key = ? AND status = 'ok' AND closed = 0 AND article_no != '' ORDER BY id DESC LIMIT 20").bind(username, key).all();
+  const hoEmpty = key.endsWith("|"); const f = floorOf(floor);
+  for (const r of (results || []) as any[]) {
+    if (hoEmpty && f !== null) { let rf: number | null = null; try { rf = floorOf(JSON.parse(String(r.data || "{}"))?.fields?.floor_no); } catch { rf = null; } if (rf !== null && rf !== f) continue; }
+    return r;
+  }
+  return null;
+}
+// 미리 확인·올리기에서 "같은 매물" 열쇠: 주소|동|호수, 호수가 없으면 층으로 구분
+const dupKey = (road: unknown, dong: unknown, ho: unknown, floor: unknown) => { const k = normKey(road, dong, ho); const f = floorOf(floor); return k.endsWith("|") && f !== null ? k + "f" + f : k; };
+const kstWhen = (iso: unknown) => { const t = Date.parse(str(iso)); return Number.isFinite(t) ? new Date(t + 9 * 3600e3).toISOString().slice(5, 16).replace("T", " ") : ""; };
 const featsOf = (s: unknown) => String(s ?? "").split(",").map((x) => x.trim()).filter(Boolean);
 export async function addLog(db: D1Database, username: string, app: string, action: string, detail: string, count: number | null) {
   try { await db.prepare("INSERT INTO activity_log (at, username, app, action, detail, count, mac) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(nowIso(), username, app, action, detail.slice(0, 500), count, "web").run(); } catch { /* 기록 실패는 기능을 막지 않는다 */ }
@@ -340,14 +354,16 @@ async function apiHandler(c: any) {
     if (r.status === 404) r = { status: 200, data: { items: items.map((_: any, i: number) => ({ i, error: "엔진 업데이트 전이라 당근 쪽 확인은 못 했습니다(내 기록만 대조)" })) } };   // 엔진에 아직 /precheck 가 없으면 우리 기록만
     if (r.status !== 200) { if (r.data?.code === "no_session") await db.prepare("DELETE FROM daangn_sessions WHERE username = ?").bind(me.username).run(); return json(c, { ok: false, code: r.data?.code === "no_session" ? "no_cookies" : "engine", error: r.data?.error || "엔진 응답 " + r.status }, r.status); }
     const out: any[] = [];
+    const seen = new Map<string, number>();   // 같은 목록 안에서 겹치는 줄 (2026-10-11)
     for (const it of items) {
       const i = items.indexOf(it); const e = (r.data?.items || []).find((x: any) => x.i === i) || {};
       let ours: any = null;
-      const prev: any = await db.prepare("SELECT article_no, url, created_at FROM daangn_uploads WHERE username = ? AND key = ? AND status = 'ok' AND closed = 0 AND article_no != '' ORDER BY id DESC LIMIT 1").bind(me.username, normKey(it.road_addr, it.dong_nm, it.ho_nm)).first();
+      const dk = dupKey(it.road_addr, it.dong_nm, it.ho_nm, it.floor_no); const same = seen.has(dk) ? seen.get(dk) : null; if (!seen.has(dk)) seen.set(dk, i);
+      const prev: any = await findLivePrev(db, me.username, normKey(it.road_addr, it.dong_nm, it.ho_nm), it.floor_no);
       if (prev) ours = { articleNo: String(prev.article_no), url: prev.url || "", at: prev.created_at };
-      out.push({ i, fullAddress: e.fullAddress || "", dup: e.dup || null, partial: e.partial || 0, writable: e.writable ?? null, reason: e.reason || "", error: e.error || "", ours });
+      out.push({ i, fullAddress: e.fullAddress || "", dup: e.dup || null, partial: e.partial || 0, writable: e.writable ?? null, reason: e.reason || "", error: e.error || "", ours, same });
     }
-    await addLog(db, me.username, "daangn", "당근 중복 확인", `${items.length}건 중 중복 ${out.filter((x) => x.dup).length}건`, out.filter((x) => x.dup).length);
+    await addLog(db, me.username, "daangn", "당근 중복 확인", `${items.length}건 중 당근 중복 ${out.filter((x) => x.dup).length}건 · 내 기록 ${out.filter((x) => x.ours).length}건 · 목록 안 겹침 ${out.filter((x) => x.same !== null).length}건`, out.filter((x) => x.dup || x.ours || x.same !== null).length);
     return json(c, { items: out });
   }
   if (action === "daangn-disconnect") { await db.prepare("DELETE FROM daangn_sessions WHERE username = ?").bind(me.username).run(); return json(c, { ok: true }); }
@@ -369,11 +385,11 @@ async function apiHandler(c: any) {
       price: str(body.deal_type) === "매매" ? str(body.sale_price) : [body.deposit, body.monthly_rent].filter((v) => v !== null && v !== undefined && v !== "").join(" / "),
       phone: str(body.owner_phone), role: str(body.contact_role) || "landlord", source: str(body.source_url) };
     // 우리 기록의 중복: 같은 주소·동·호수로 올린 글이 아직 살아 있으면 건너뜀
-    const prev: any = await db.prepare("SELECT article_no, url FROM daangn_uploads WHERE username = ? AND key = ? AND status = 'ok' AND closed = 0 AND article_no != '' ORDER BY id DESC LIMIT 1").bind(me.username, key).first();
+    const prev: any = await findLivePrev(db, me.username, key, body.floor_no);
     if (prev && body.force_duplicate !== true) {
       const chk = await engineJson(c, "/check", { session: sess.blob, articleNo: String(prev.article_no) });
       if (chk.data?.exists !== false) {
-        return json(c, { ok: false, code: "daangn_dup", error: `당근에 이미 올라간 매물입니다 (당근 매물번호 ${prev.article_no}) — 건너뜁니다`, articleNo: String(prev.article_no), articleId: String(prev.article_no), url: prev.url || "" }, 409);
+        return json(c, { ok: false, code: "daangn_dup", error: `당근에 이미 올라간 매물입니다 (당근 매물번호 ${prev.article_no}${kstWhen(prev.created_at) ? ", " + kstWhen(prev.created_at) + " 올림" : ""}) — 건너뜁니다${key.endsWith("|") ? " · 호수가 없는 매물은 같은 건물·같은 층이면 같은 매물로 봅니다. 다른 호실이면 호수(또는 층)를 적고 다시 올려 주세요" : ""}`, articleNo: String(prev.article_no), articleId: String(prev.article_no), url: prev.url || "" }, 409);
       }
     }
     const listing = { ...body }; delete (listing as any).force; delete (listing as any).daangn_only;
