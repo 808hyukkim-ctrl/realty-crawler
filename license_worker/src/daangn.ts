@@ -342,6 +342,7 @@ async function apiHandler(c: any) {
       await db.prepare("INSERT INTO daangn_sessions (username, blob, phone, name, broker, connected_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(username) DO UPDATE SET blob = excluded.blob, phone = excluded.phone, name = excluded.name, broker = excluded.broker, connected_at = excluded.connected_at")
         .bind(me.username, String(r.data.session), str(v.phone), str(v.name), str(v.broker), nowIso()).run();
       await addLog(db, me.username, "daangn", "당근 연결", [v.name, v.phone, v.broker].filter(Boolean).join(" · "), null);
+      if (/^\d+$/.test(str(v.bizProfileId))) { await setSetting(db, "daangn_biz_profile_id", str(v.bizProfileId)); if (str(v.office)) await setSetting(db, "daangn_office_name", str(v.office)); }   // 우리 중개사무소 당근 id (공개 글 목록용, 2026-10-11)
       return json(c, { status: "success", viewer: v });
     }
     return json(c, r.data, r.status);
@@ -355,6 +356,7 @@ async function apiHandler(c: any) {
     let r = await engineJson(c, "/precheck", { session: sess.blob, items });
     if (r.status === 404) r = { status: 200, data: { items: items.map((_: any, i: number) => ({ i, error: "엔진 업데이트 전이라 당근 쪽 확인은 못 했습니다(내 기록만 대조)" })) } };   // 엔진에 아직 /precheck 가 없으면 우리 기록만
     if (r.status !== 200) { if (r.data?.code === "no_session") await db.prepare("DELETE FROM daangn_sessions WHERE username = ?").bind(me.username).run(); return json(c, { ok: false, code: r.data?.code === "no_session" ? "no_cookies" : "engine", error: r.data?.error || "엔진 응답 " + r.status }, r.status); }
+    if (/^\d+$/.test(str(r.data?.bizProfileId))) { await setSetting(db, "daangn_biz_profile_id", str(r.data.bizProfileId)); if (str(r.data?.office)) await setSetting(db, "daangn_office_name", str(r.data.office)); }
     const out: any[] = [];
     const seen = new Map<string, number>();   // 같은 목록 안에서 겹치는 줄 (2026-10-11)
     for (const it of items) {
@@ -411,7 +413,8 @@ async function apiHandler(c: any) {
   if (action === "daangn-office-list") {   // 사무실 전원 살아 있는 당근 광고 — 포털 일괄 목록 지번 대조용 (2026-10-11)
     const { results } = await db.prepare("SELECT id, username, key, addr, ho, deal, price, article_no, url, created_at, data FROM daangn_uploads WHERE status = 'ok' AND closed = 0 AND article_no != '' ORDER BY id DESC LIMIT 3000").all();
     const rows = (results ?? []).map((r: any) => { let f: any = {}, sm: any = {}; try { const d = JSON.parse(String(r.data || "{}")); f = d.fields || {}; sm = d.summary || {}; } catch { /* */ } return { id: r.id, by: r.username, key: r.key, addr: r.addr, ho: r.ho, deal: r.deal, price: r.price, article_no: String(r.article_no), url: r.url, at: r.created_at, area: f.area_exclusive ?? null, floor: f.floor_no ?? null, rooms: f.room_count ?? null, kind: sm.salesType || "" }; });
-    return json(c, { ok: true, rows, at: nowIso() });
+    const o = await officeDaangnList(c, false);
+    return json(c, { ok: true, rows, daangn: o.rows, daangn_at: o.at, daangn_err: o.err, office: o.office, at: nowIso() });
   }
   if (action === "uploads") {
     const days = Math.min(400, Math.max(1, parseInt(q("days") || "30", 10) || 30));
@@ -485,6 +488,16 @@ daangn.post("/admin/daangn/guard-user", async (c) => {   // 계정별 안전장�
   await c.env.DB.prepare("UPDATE users SET daangn_guard = ? WHERE username = ?").bind(val, username).run();
   return c.redirect("/admin/dashboard");
 });
+// 당근에 올라와 있는 우리 중개사무소 글 전체(당근 기준, 앱에서 직접 올린 것 포함) — 엔진이 공개 목록을 읽어 준다 (2026-10-11)
+async function officeDaangnList(c: any, force: boolean): Promise<{ rows: any[] | null; at: string; err: string; office: string; bizId: string }> {
+  const db: D1Database = c.env.DB; const bizId = await getSetting(db, "daangn_biz_profile_id"); const office = await getSetting(db, "daangn_office_name");
+  if (!bizId) return { rows: null, at: "", err: "중개사무소 당근 id 를 아직 모릅니다 — 포털에서 [당근 연결(QR)] 또는 [당근 중복 미리 확인]을 한 번 하면 기억합니다.", office, bizId: "" };
+  try {
+    const r = await engine(c, `/office-articles?bizProfileId=${encodeURIComponent(bizId)}${force ? "&force=1" : ""}`, { method: "GET" }); const j: any = await r.json().catch(() => ({}));
+    if (!r.ok || !j?.ok) return { rows: null, at: "", err: str(j?.error) || `엔진 응답 ${r.status}`, office, bizId };
+    return { rows: j.rows || [], at: str(j.at), err: "", office, bizId };
+  } catch (e) { return { rows: null, at: "", err: e instanceof Error ? e.message : String(e), office, bizId }; }
+}
 // 어드민 리스트업용 업로드 조회 — live: 살아 있는 것(성공·나감 아님) 전부, 아니면 최근 100건(직원별 300건) (2026-10-11)
 async function adminUploadRows(db: D1Database, pickUser: string, live: boolean) {
   const cols = "username, created_at, addr, ho, deal, price, phone, source, status, article_no, url, reason, closed, closed_at, src_state, src_checked_at";
@@ -515,6 +528,9 @@ daangn.get("/admin/daangn", async (c) => {
   const recent: any[] = await adminUploadRows(c.env.DB, pickUser, live);
   const liveN: any = await c.env.DB.prepare("SELECT COUNT(*) n FROM daangn_uploads WHERE status = 'ok' AND closed = 0").first();
   const qs = (o: Record<string, string>) => { const p = new URLSearchParams(); if (o.user) p.set("user", o.user); if (o.live) p.set("live", o.live); const t = p.toString(); return t ? "?" + t : ""; };
+  const wantDg = String(c.req.query("daangn") ?? "") === "1"; const od = wantDg ? await officeDaangnList(c, String(c.req.query("refresh") ?? "") === "1") : null;
+  const { results: liveAll } = wantDg ? await c.env.DB.prepare("SELECT username, article_no, addr, ho FROM daangn_uploads WHERE status = 'ok' AND article_no != ''").all() : { results: [] as any[] };
+  const byNo = new Map<string, any>((liveAll ?? []).map((r: any) => [String(r.article_no), r]));
   const dt = (s: unknown) => (s ? new Date(String(s)).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }) : "");
   const guard = await loadGuard(c.env.DB);
   const { results: todays } = await c.env.DB.prepare("SELECT username, COUNT(*) n FROM daangn_uploads WHERE status = 'ok' AND created_at >= ? GROUP BY username").bind(kstDayStart()).all();
@@ -537,6 +553,13 @@ daangn.get("/admin/daangn", async (c) => {
       <td class="small">${[u.name, u.phone, u.broker].filter(Boolean).join(" · ")}</td>
       <td>${todayMap.get(String(u.username)) ?? 0}${guard.on && mergeGuard(guard, parseUserGuard(u.daangn_guard)).daily ? html`<span class="muted">/${mergeGuard(guard, parseUserGuard(u.daangn_guard)).daily}</span>` : ""}${parseUserGuard(u.daangn_guard) ? html` <span class="badge status-soon">개별</span>` : ""}</td><td>${u.ok_n}</td><td>${u.fail_n}</td><td class="small muted">${dt(u.last_at)}</td></tr>`)}
     </tbody></table>
+    <h2>🏢 당근에 올라와 있는 우리 사무소 글 전체 <span class="small muted">(당근 기준 · 직원이 앱에서 직접 올린 것 포함)</span></h2>
+    ${!wantDg ? html`<p class="small" style="margin:0 0 16px"><a href="/admin/daangn?daangn=1"><b>당근에서 지금 읽어 오기</b></a> <span class="muted">— 우리 중개사무소 공개 페이지의 글 전부(30건씩 넘기며)를 읽어 우리 기록과 맞춰 봅니다</span></p>`
+      : od && od.rows ? html`<p class="small" style="margin:0 0 6px">${od.office ? html`<b>${od.office}</b> · ` : ""}${od.rows.length}건 · 읽은 시각 ${dt(od.at)} · <a href="/admin/daangn?daangn=1&refresh=1">다시 읽기</a> · 우리 기록에 없는 글 <b>${od.rows.filter((x: any) => !byNo.has(x.no)).length}건</b>(앱에서 직접 올림) · <a href="https://realty.daangn.com/biz-profiles/${od.bizId}" target="_blank" rel="noopener">당근 사무소 페이지</a></p>
+      <table><thead><tr><th>당근 매물번호</th><th>올린 사람(당근)</th><th>동 · 건물명</th><th>종류 · 층 · 면적</th><th>거래 · 금액</th><th>우리 기록</th></tr></thead><tbody>
+      ${od.rows.map((x: any) => { const m = byNo.get(x.no); return html`<tr style="${m ? "" : "background:#fff7ed"}"><td><a href="${x.url}" target="_blank" rel="noopener">${x.no}</a></td><td>${x.writer}</td><td>${[x.dong, x.building].filter(Boolean).join(" · ")}</td><td class="small">${[x.kind, x.floor ? x.floor + (x.topFloor ? "/" + x.topFloor : "") + "층" : "", x.area ? x.area + "㎡" : ""].filter(Boolean).join(" · ")}</td><td>${x.deal} ${x.price}</td><td class="small">${m ? html`<a href="/admin/daangn?user=${m.username}">${m.username}</a> · ${m.addr} ${m.ho ?? ""}` : html`<b style="color:#c2410c">직접 올림 (기록 없음)</b>`}</td></tr>`; })}
+      </tbody></table>`
+      : html`<p class="small" style="margin:0 0 16px;color:#b42318">읽지 못함: ${od?.err ?? ""}</p>`}
     <h2>${live ? html`살아 있는 당근 광고 전체 — ${pickUser ? html`<b>${pickUser}</b> ` : "직원 전원 "}${recent.length}건` : pickUser ? html`<b>${pickUser}</b> 의 업로드 내역 (최근 300건)` : "최근 등록 100건 (전체)"}</h2>
     <p class="small" style="margin:0 0 8px">${live ? html`<a href="/admin/daangn${qs({ user: pickUser })}">최근 등록만 보기</a>` : html`<a href="/admin/daangn${qs({ user: pickUser, live: "1" })}"><b>살아 있는 당근 광고 전체 보기 (${Number(liveN?.n ?? 0)}건)</b></a>`} · <a href="/admin/daangn/csv${qs({ user: pickUser, live: live ? "1" : "" })}">📥 이 목록 CSV 내려받기</a> <span class="muted">(엑셀로 열림 · 주소·호수·당근 매물번호·링크·원문 상태·직원)</span></p>
     <form method="get" action="/admin/daangn" class="search-form" style="margin:0 0 10px">${live ? html`<input type="hidden" name="live" value="1">` : ""}<select name="user" onchange="this.form.submit()"><option value="">전체 직원</option>${(users ?? []).map((u: any) => html`<option value="${u.username}" ${u.username === pickUser ? "selected" : ""}>${u.username}${u.ok_n ? ` (${u.ok_n}건)` : ""}</option>`)}</select> <span class="small muted">직원을 고르면 그 사람이 어디에(당근 매물번호·링크) 무엇을 올렸는지만 보입니다. 직원 본인은 포털 '업로드 기록' 탭에서 자기 것만 봅니다.</span></form>
