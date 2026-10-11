@@ -9,7 +9,7 @@ import { listings } from "./listings";
 import { staffdb } from "./staffdb";
 import { naverad } from "./naverad";
 import { hosu } from "./hosu";
-import { daangn, ensure as ensureDaangn, loadGuard, parseUserGuard, mergeGuard, checkSources } from "./daangn";   // 당근 광고자동화 (2026-10-08) + 안전장치 설정(사용자 관리, 2026-10-09)
+import { daangn, ensure as ensureDaangn, loadGuard, parseUserGuard, mergeGuard, checkSources, scanOfficeOverlaps } from "./daangn";   // 당근 광고자동화 (2026-10-08) + 안전장치 설정(사용자 관리, 2026-10-09)
 import { brief } from "./brief";     // 손님 브리핑 /b/<id> (2026-10-09)
 import { layout } from "./layout";
 
@@ -476,4 +476,8 @@ app.get("/admin/logs", async (c) => {
 app.get("/healthz", (c) => c.json({ ok: true }));
 
 // cron(wrangler.toml [triggers]): 업로드 기록 원문 자동 확인 — 10분마다 40건씩, 오늘 아직 안 본 것만 (2026-10-10)
-export default { fetch: app.fetch, scheduled(_event: any, env: any, ctx: any) { ctx.waitUntil(checkSources(env, { limit: 40 })); } };
+// + 매일 KST 11:00 회차(UTC 02:00~02:09)에 사무소 당근 글 겹침 검사 한 번 (2026-10-11)
+export default { fetch: app.fetch, scheduled(event: any, env: any, ctx: any) {
+  ctx.waitUntil(checkSources(env, { limit: 40 }));
+  const d = new Date(Number(event?.scheduledTime) || Date.now()); if (d.getUTCHours() === 2 && d.getUTCMinutes() < 10) ctx.waitUntil(scanOfficeOverlaps(env).catch(() => null));
+} };

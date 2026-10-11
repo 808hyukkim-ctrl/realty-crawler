@@ -475,6 +475,10 @@ daangn.post("/admin/intranet-users/daangn", async (c) => {   // 라운지 인트
   if (label) { await c.env.DB.prepare("UPDATE intranet_users SET daangn = ? WHERE label = ?").bind(on ? 1 : 0, label).run(); LOUNGE_CACHE.clear(); }
   return c.redirect("/admin/dashboard#intranet");
 });
+daangn.post("/admin/daangn/office-scan", async (c) => {   // 사무소 당근 글 겹침 검사 지금 실행
+  await ensure(c.env.DB); const r = await scanOfficeOverlaps(c.env, { by: "admin" });
+  return c.redirect("/admin/daangn?scan=" + encodeURIComponent(r.err ? "실패: " + r.err : `${r.count}건 검사 · 겹쳐 보이는 묶음 ${r.groups.length}`) + "#overlap");
+});
 daangn.post("/admin/daangn/src-check", async (c) => {   // 모든 직원 업로드 기록의 원문을 지금 확인 (40건)
   await ensure(c.env.DB); const r = await checkSources(c.env, { limit: 40, force: true });
   return c.redirect("/admin/daangn?src=" + encodeURIComponent(`${r.checked}건 확인 · 내려감 ${r.gone} · 확인못함 ${r.unknown}`));
@@ -497,6 +501,42 @@ async function officeDaangnList(c: any, force: boolean): Promise<{ rows: any[] |
     if (!r.ok || !j?.ok) return { rows: null, at: "", err: str(j?.error) || `엔진 응답 ${r.status}`, office, bizId };
     return { rows: j.rows || [], at: str(j.at), err: "", office, bizId };
   } catch (e) { return { rows: null, at: "", err: e instanceof Error ? e.message : String(e), office, bizId }; }
+}
+// 사무소 당근 글끼리 겹쳐 보이는 묶음 — 같은 동·층 + (면적 ±1㎡ 또는 같은 건물명) (2026-10-11). 매일 KST 11시 cron + 어드민 [지금 검사]
+export function overlapGroups(rows: any[]) {
+  const num = (v: unknown) => { const n = parseFloat(String(v ?? "")); return Number.isFinite(n) && n > 0 ? n : null; };
+  const nb = (v: unknown) => str(v).replace(/\s+/g, "").toLowerCase();
+  const same = (a: any, b: any) => {
+    if (!a.dong || a.dong !== b.dong || !a.floor || a.floor !== b.floor) return false;
+    const x = num(a.area), y = num(b.area);
+    if (x !== null && y !== null) return Math.abs(x - y) <= 1;
+    return !!(a.building && b.building && nb(a.building) === nb(b.building));
+  };
+  const used = new Set<number>(); const groups: any[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    if (used.has(i)) continue; const g = [i];
+    for (let j = i + 1; j < rows.length; j++) if (!used.has(j) && same(rows[i], rows[j])) g.push(j);
+    if (g.length < 2) continue; g.forEach((k) => used.add(k));
+    const items = g.map((k) => rows[k]);
+    groups.push({ dong: rows[i].dong, floor: rows[i].floor, area: rows[i].area, building: items.map((x) => x.building).find(Boolean) || "", sameWriter: new Set(items.map((x) => x.writerId)).size === 1, items });
+  }
+  return groups;
+}
+export async function scanOfficeOverlaps(env: any, opts: { by?: string } = {}) {
+  const db: D1Database = env.DB; const bizId = await getSetting(db, "daangn_biz_profile_id");
+  const out: any = { at: nowIso(), by: opts.by || "cron", count: 0, groups: [] as any[], err: "" };
+  if (!bizId) { out.err = "중개사무소 당근 id 없음"; await setSetting(db, "office_overlap_last", JSON.stringify(out)); return out; }
+  try {
+    const r = await engine({ env }, `/office-articles?bizProfileId=${encodeURIComponent(bizId)}&force=1`, { method: "GET" }); const j: any = await r.json().catch(() => ({}));
+    if (!r.ok || !j?.ok) throw new Error(str(j?.error) || `엔진 응답 ${r.status}`);
+    const rows: any[] = j.rows || []; out.count = rows.length;
+    const { results } = await db.prepare("SELECT username, article_no, addr, ho FROM daangn_uploads WHERE status = 'ok' AND article_no != ''").all();
+    const byNo = new Map<string, any>((results ?? []).map((x: any) => [String(x.article_no), x]));
+    out.groups = overlapGroups(rows).slice(0, 60).map((g) => ({ ...g, items: g.items.map((x: any) => { const m = byNo.get(String(x.no)); return { no: x.no, url: x.url, writer: x.writer, kind: x.kind, deal: x.deal, price: x.price, area: x.area, building: x.building, ours: m ? { by: m.username, addr: m.addr, ho: m.ho } : null }; }) }));
+  } catch (e) { out.err = e instanceof Error ? e.message : String(e); }
+  await setSetting(db, "office_overlap_last", JSON.stringify(out));
+  if (out.groups.length) await addLog(db, "@system", "daangn", "사무소 겹침 검사", `${out.count}건 중 겹쳐 보이는 묶음 ${out.groups.length}`, out.groups.length);
+  return out;
 }
 // 어드민 리스트업용 업로드 조회 — live: 살아 있는 것(성공·나감 아님) 전부, 아니면 최근 100건(직원별 300건) (2026-10-11)
 async function adminUploadRows(db: D1Database, pickUser: string, live: boolean) {
@@ -528,6 +568,8 @@ daangn.get("/admin/daangn", async (c) => {
   const recent: any[] = await adminUploadRows(c.env.DB, pickUser, live);
   const liveN: any = await c.env.DB.prepare("SELECT COUNT(*) n FROM daangn_uploads WHERE status = 'ok' AND closed = 0").first();
   const qs = (o: Record<string, string>) => { const p = new URLSearchParams(); if (o.user) p.set("user", o.user); if (o.live) p.set("live", o.live); const t = p.toString(); return t ? "?" + t : ""; };
+  let ov: any = null; try { ov = JSON.parse((await getSetting(c.env.DB, "office_overlap_last")) || "null"); } catch { /* */ }
+  const scanMsg = String(c.req.query("scan") ?? "").trim();
   const wantDg = String(c.req.query("daangn") ?? "") === "1"; const od = wantDg ? await officeDaangnList(c, String(c.req.query("refresh") ?? "") === "1") : null;
   const { results: liveAll } = wantDg ? await c.env.DB.prepare("SELECT username, article_no, addr, ho FROM daangn_uploads WHERE status = 'ok' AND article_no != ''").all() : { results: [] as any[] };
   const byNo = new Map<string, any>((liveAll ?? []).map((r: any) => [String(r.article_no), r]));
@@ -553,6 +595,11 @@ daangn.get("/admin/daangn", async (c) => {
       <td class="small">${[u.name, u.phone, u.broker].filter(Boolean).join(" · ")}</td>
       <td>${todayMap.get(String(u.username)) ?? 0}${guard.on && mergeGuard(guard, parseUserGuard(u.daangn_guard)).daily ? html`<span class="muted">/${mergeGuard(guard, parseUserGuard(u.daangn_guard)).daily}</span>` : ""}${parseUserGuard(u.daangn_guard) ? html` <span class="badge status-soon">개별</span>` : ""}</td><td>${u.ok_n}</td><td>${u.fail_n}</td><td class="small muted">${dt(u.last_at)}</td></tr>`)}
     </tbody></table>
+    <h2 id="overlap">⚠️ 사무소 글끼리 겹쳐 보이는 매물 <span class="small muted">(당근 기준 · 매일 오전 11시 자동 검사)</span></h2>
+    <form method="post" action="/admin/daangn/office-scan" class="inline-form" style="margin:0 0 8px"><button type="submit" class="btn">🔎 지금 검사</button> <span class="small muted">${scanMsg ? html`<b>${scanMsg}</b> · ` : ""}${ov ? html`마지막 검사 ${dt(ov.at)} (${ov.by === "admin" ? "관리자" : "자동"}) · 글 ${ov.count ?? 0}건 · 겹쳐 보이는 묶음 <b>${(ov.groups || []).length}</b>${ov.err ? html` · <span style="color:#b42318">${ov.err}</span>` : ""}` : "아직 검사한 적 없음"} — 같은 동·층에 면적(±1㎡)이나 건물명이 같은 글을 묶습니다. 주소가 없어 '겹쳐 보임'까지만 — 같은 호실이면 하나를 내려 주세요.</span></form>
+    ${ov && (ov.groups || []).length ? html`<table style="margin:0 0 16px"><thead><tr><th>묶음</th><th>글</th></tr></thead><tbody>
+      ${(ov.groups as any[]).map((g: any, i: number) => html`<tr style="${g.sameWriter ? "" : "background:#fff7ed"}"><td class="small"><b>${i + 1}</b> · ${g.dong} ${g.floor}층${g.area ? " · " + g.area + "㎡" : ""}${g.building ? " · " + g.building : ""}<br><span class="muted">${g.items.length}건 · ${g.sameWriter ? "같은 사람" : "<b>다른 사람끼리</b>"}</span></td><td class="small">${(g.items as any[]).map((x: any) => html`<div><a href="${x.url}" target="_blank" rel="noopener">${x.no}</a> · ${x.writer} · ${x.kind} ${x.area ? x.area + "㎡" : ""} · ${x.deal} ${x.price} · ${x.ours ? html`${x.ours.by} ${x.ours.addr} ${x.ours.ho ?? ""}` : html`<b style="color:#c2410c">직접 올림</b>`}</div>`)}</td></tr>`)}
+    </tbody></table>` : ""}
     <h2>🏢 당근에 올라와 있는 우리 사무소 글 전체 <span class="small muted">(당근 기준 · 직원이 앱에서 직접 올린 것 포함)</span></h2>
     ${!wantDg ? html`<p class="small" style="margin:0 0 16px"><a href="/admin/daangn?daangn=1"><b>당근에서 지금 읽어 오기</b></a> <span class="muted">— 우리 중개사무소 공개 페이지의 글 전부(30건씩 넘기며)를 읽어 우리 기록과 맞춰 봅니다</span></p>`
       : od && od.rows ? html`<p class="small" style="margin:0 0 6px">${od.office ? html`<b>${od.office}</b> · ` : ""}${od.rows.length}건 · 읽은 시각 ${dt(od.at)} · <a href="/admin/daangn?daangn=1&refresh=1">다시 읽기</a> · 우리 기록에 없는 글 <b>${od.rows.filter((x: any) => !byNo.has(x.no)).length}건</b>(앱에서 직접 올림) · <a href="https://realty.daangn.com/biz-profiles/${od.bizId}" target="_blank" rel="noopener">당근 사무소 페이지</a></p>
