@@ -239,6 +239,15 @@ class OnhouseCrawler:
             payload.update({"pageType": "block", "blockNumber": "", "order1": "INS_DATE|DESC"})
             payload.pop("status", None)
         payload.update(kwargs)
+        if self.mode == "share":
+            # 공동중개 목록 서버는 정렬 키에 'R.' 접두어(rent_map 용)가 붙으면 500 — 등록일 정렬은 'INS_DATE|DESC' 만 받는다 (2026-10-11 저녁 확인)
+            o1 = str(payload.get("order1") or "")
+            if o1.startswith("R."):
+                o1 = o1[2:]
+            if "CHK_DATE" in o1:   # 공동중개엔 확인일이 없다 → 등록일로
+                o1 = "INS_DATE|DESC"
+            payload["order1"] = o1 or "INS_DATE|DESC"
+            payload.pop("status", None)
         if is_cancelled and is_cancelled():
             return []
 
