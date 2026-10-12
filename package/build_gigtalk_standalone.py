@@ -18,7 +18,7 @@ import time
 from datetime import datetime
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
-SOURCE_FILES = ("gigtalk_app.py", "gigtalk_crawler.py", "auto_send.py")
+SOURCE_FILES = ("gigtalk_app.py", "gigtalk_crawler.py", "daangn_jobs_crawler.py", "auto_send.py")
 ENTRY = "gigtalk_app.py"
 EXE_NAME = "긱톡게시글수집기"
 OBF_DIR = os.path.join(PROJECT_DIR, "dist_obf_gigtalk")

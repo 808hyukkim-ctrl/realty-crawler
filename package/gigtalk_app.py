@@ -41,11 +41,16 @@ from PySide6.QtWidgets import (
 
 import auto_send
 import gigtalk_crawler as gk
+import daangn_jobs_crawler as dj
 
-APP_TITLE = "긱톡 게시글 수집기"
+APP_TITLE = "긱톡 · 당근알바 수집기"
 SETTINGS_FILE = "gigtalk_settings.json"
 SEEN_FILE = "gigtalk_seen.json"
 SEND_FILE = "send_config.json"
+DJ_SETTINGS_FILE = "daangn_jobs_settings.json"
+DJ_SEEN_FILE = "daangn_jobs_seen.json"
+DJ_REGIONS_FILE = "daangn_jobs_regions.json"
+DJ_DEFAULT_KEYWORDS = "재택, 투잡, 부업"
 MEETS_FILE = "gigtalk_meets.json"
 CATS_FILE = "gigtalk_categories.json"
 
@@ -233,6 +238,88 @@ class Worker(QObject):
             self.failed.emit(str(e))
 
 
+class DaangnWorker(QObject):
+    log = Signal(str)
+    progress = Signal(int, int)
+    finished = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, p: Dict[str, Any]):
+        super().__init__()
+        self.p = p
+        self._stop = False
+
+    def stop(self) -> None:
+        self._stop = True
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            p = self.p
+            cli = dj.DaangnJobsClient(self.log.emit, delay=(0.3, 0.8) if p.get("polite", True) else (0.05, 0.2))
+            # 고른 시군구의 동 목록 (캐시 없으면 받아서 저장)
+            cache = read_json(os.path.join(p["base_dir"], DJ_REGIONS_FILE)) or {}
+            dongs_cache: Dict[str, List[Dict[str, Any]]] = cache.get("dongs") or {}
+            region_ids: List[int] = []
+            names: Dict[int, str] = {}
+            dong_filter = [w for w in p.get("dong_words") or [] if w]
+            for gu in p["gus"]:
+                key = str(gu["_id"])
+                if key not in dongs_cache:
+                    self.log.emit(f"{gu['name']} 동 목록 받는 중...")
+                    dongs_cache[key] = cli.region_children(int(gu["_id"]))
+                    cache["dongs"] = dongs_cache
+                    write_json(os.path.join(p["base_dir"], DJ_REGIONS_FILE), cache)
+                for d in dongs_cache[key]:
+                    if dong_filter and not any(w in (d.get("name") or "") for w in dong_filter):
+                        continue
+                    if d["_id"] not in names:
+                        region_ids.append(int(d["_id"]))
+                        names[int(d["_id"])] = f"{gu['name']} {d.get('name', '')}"
+            if self._stop:
+                self.finished.emit("중지했습니다.")
+                return
+            if not region_ids:
+                self.failed.emit("검색할 동이 없습니다. 시도와 시군구를 고르세요." + (" (동 이름 조건에 맞는 동이 없음)" if dong_filter else ""))
+                return
+            self.log.emit(f"동 {len(region_ids)}개 × 검색어 {len(p['keywords']) or 1}개 검색 (각 동은 이웃 동까지 포함해 검색되고 중복은 뺍니다)")
+
+            seen_path = os.path.join(p["base_dir"], DJ_SEEN_FILE)
+            seen = gk.load_seen(seen_path) if p["skip_seen"] else {}
+            rows = dj.collect(
+                cli, region_ids, p["keywords"], p["start"], p["end"], max_count=p["max_count"],
+                short_term=p["short_term"], with_detail=p["with_detail"],
+                include_words=p["include_words"], exclude_words=p["exclude_words"],
+                skip_closed=p["skip_closed"], seen_ids=set(seen.keys()),
+                stop=lambda: self._stop, log=self.log.emit, progress=self.progress.emit, region_names=names,
+            )
+            if self._stop:
+                self.log.emit("중지했습니다." + (f" (지금까지 {len(rows)}건은 저장합니다)" if rows else ""))
+            self.log.emit(f"조건에 맞는 공고 {len(rows)}건 (등록일 {p['start']} ~ {p['end']}" + (f", 이미 받은 {len(seen)}건 제외" if p["skip_seen"] else "") + ")")
+            if not rows:
+                self.finished.emit("새로 받을 공고가 없습니다.")
+                return
+            scope = p.get("scope_label") or "전체"
+            out_dir = os.path.join(p["base_dir"], "data")
+            fname = f"당근알바_{scope}_{len(rows)}건_{datetime.now():%y%m%d_%H%M%S}.xlsx"
+            fname = "".join(ch for ch in fname if ch not in '\\/:*?"<>|')
+            out_path = dj.save_excel(rows, os.path.join(out_dir, fname))
+            self.log.emit(f"저장: {out_path}")
+            if p["skip_seen"]:
+                for r in rows:
+                    if r.get("_id"):
+                        seen[str(r["_id"])] = (r.get("등록일시") or "")[:10] or date.today().isoformat()
+                gk.save_seen(seen_path, seen)
+                self.log.emit(f"  받은 공고 기록: 총 {len(seen)}건")
+            cfg = p.get("send") or {}
+            if cfg.get("mail_on") or cfg.get("tg_on"):
+                self.log.emit("자동 전송 중...")
+                auto_send.deliver(cfg, out_path, f"[당근알바] {scope} {len(rows)}건 / 등록일 {p['start']} ~ {p['end']}", self.log.emit)
+            self.finished.emit(f"완료: {len(rows)}건 — {out_path}")
+        except Exception as e:  # noqa: BLE001
+            self.failed.emit(str(e))
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -246,6 +333,10 @@ class MainWindow(QMainWindow):
         self._batch = False
         self.meets: List[Dict[str, Any]] = []
         self.cat_map: Dict[str, Tuple[int, int, str]] = {}  # 라벨 → (카테고리 id, 커뮤니티 id, type)
+        self.dj_worker: Optional[DaangnWorker] = None
+        self.dj_thread: Optional[QThread] = None
+        self.dj_regions: Dict[str, Any] = {}
+        self._batch_queue: List[str] = []
         self._build_ui()
         self._apply_style()
         self._load_lists()
@@ -259,7 +350,7 @@ class MainWindow(QMainWindow):
         outer = QVBoxLayout(w)
         title = QLabel(APP_TITLE)
         title.setObjectName("appTitle")
-        subtitle = QLabel("긱톡(gigtalk.co.kr)의 긱잡·노하우·서비스 글을 커뮤니티/카테고리/기간/검색어로 골라 엑셀로 만듭니다")
+        subtitle = QLabel("긱톡(gigtalk.co.kr) 글과 당근알바(jobs.daangn.com) 공고를 조건으로 골라 엑셀로 만듭니다 — 탭에서 고르세요")
         subtitle.setObjectName("appSubtitle")
         outer.addWidget(title)
         outer.addWidget(subtitle)
@@ -285,8 +376,10 @@ class MainWindow(QMainWindow):
         # 2. 커뮤니티/카테고리
         reg = QGroupBox("2. 커뮤니티 · 카테고리 고르기 (아무것도 안 고르면 전체)")
         rg = QGridLayout(reg)
-        self.lst_meet = CheckList(170)
-        self.lst_cat = CheckList(170)
+        self.lst_meet = CheckList(200)
+        self.lst_cat = CheckList(200)
+        self.lst_meet.setMinimumHeight(180)
+        self.lst_cat.setMinimumHeight(180)
         self.lst_meet.itemChanged.connect(lambda *_: self._refresh_cat_view())
         self.btn_meet_refresh = QPushButton("커뮤니티 목록 새로 받기")
         self.btn_meet_refresh.clicked.connect(self._refresh_meets)
@@ -352,6 +445,8 @@ class MainWindow(QMainWindow):
         self.chk_seen.setChecked(True)
         self.chk_polite = QCheckBox("천천히 받기 (요청 사이 잠깐 쉼, 권장)")
         self.chk_polite.setChecked(True)
+        self.chk_auto = QCheckBox("자동 실행(--run-all)에 긱톡 포함")
+        self.chk_auto.setChecked(True)
         cg.addWidget(QLabel("등록일 기간"), 0, 0)
         cg.addWidget(self.cb_period, 0, 1)
         cg.addWidget(self.de_from, 0, 2)
@@ -370,6 +465,7 @@ class MainWindow(QMainWindow):
         cg.addWidget(self.chk_open, 5, 0, 1, 3)
         cg.addWidget(self.chk_seen, 5, 3, 1, 2)
         cg.addWidget(self.chk_polite, 5, 5, 1, 2)
+        cg.addWidget(self.chk_auto, 6, 0, 1, 3)
         cg.setColumnStretch(1, 1)
         v.addWidget(cond)
 
@@ -396,9 +492,10 @@ class MainWindow(QMainWindow):
         v.addWidget(self.progress)
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
-        self.log.setMinimumHeight(170)
+        self.log.setMinimumHeight(110)
         v.addWidget(self.log, 1)
-        self.tabs.addTab(page, "수집")
+        self.tabs.addTab(page, "긱톡")
+        self._build_daangn_tab()
 
         # 보내기 · 자동화 탭
         page2 = QWidget()
@@ -437,9 +534,9 @@ class MainWindow(QMainWindow):
         auto = QGroupBox("자동 실행")
         ag = QVBoxLayout(auto)
         ag.addWidget(QLabel(
-            "1) 수집 탭에서 조건을 정하고 [지금 수집]으로 한 번 돌려보세요. 그 설정이 저장됩니다.\n"
+            "1) 긱톡 탭 / 당근알바 탭에서 조건을 정하고 [지금 수집]으로 한 번 돌려보세요. 그 설정이 저장됩니다.\n"
             "2) 위에 메일 또는 텔레그램을 넣고 [테스트 전송]으로 확인하세요.\n"
-            "3) 프로그램 폴더의  자동실행_설정.bat  을 실행하면 매일 정한 시각에 PC가 깨어나 수집하고 보냅니다.\n"
+            "3) 프로그램 폴더의  자동실행_설정.bat  을 실행하면 매일 정한 시각에 PC가 깨어나 긱톡 → 당근알바 순서로 수집하고 보냅니다.\n""   (각 탭의 '자동 실행에 포함' 체크로 어느 쪽을 돌릴지 정합니다)\n"
             "   (명령줄:  프로그램.exe --run-all  = 저장된 설정으로 한 번 돌리고 스스로 닫힘)\n"
             "4) 끄려면  자동실행_해제.bat  을 실행하세요."
         ))
@@ -679,11 +776,14 @@ class MainWindow(QMainWindow):
             "only_open": self.chk_open.isChecked(),
             "skip_seen": self.chk_seen.isChecked(),
             "polite": self.chk_polite.isChecked(),
+            "auto_include": self.chk_auto.isChecked(),
         }
 
     def _save_settings(self) -> None:
         write_json(os.path.join(self.base_dir, SETTINGS_FILE), self._settings())
         self._send_config(save=True)
+        if hasattr(self, "dj_lst_sido"):
+            self._dj_save_settings()
 
     def _load_settings(self) -> None:
         s = read_json(os.path.join(self.base_dir, SETTINGS_FILE)) or {}
@@ -706,9 +806,11 @@ class MainWindow(QMainWindow):
             self.chk_open.setChecked(bool(s.get("only_open", True)))
             self.chk_seen.setChecked(bool(s.get("skip_seen", True)))
             self.chk_polite.setChecked(bool(s.get("polite", True)))
+            self.chk_auto.setChecked(bool(s.get("auto_include", True)))
         else:
             self.lst_meet.set_checked(["재택모음"])
         self._refresh_cat_view()
+        self._dj_load_settings()
         cfg = auto_send.load_config(os.path.join(self.base_dir, SEND_FILE))
         self.chk_mail.setChecked(bool(cfg.get("mail_on")))
         self.ed_mail_from.setText(cfg.get("mail_from", ""))
@@ -717,6 +819,368 @@ class MainWindow(QMainWindow):
         self.chk_tg.setChecked(bool(cfg.get("tg_on")))
         self.ed_tg_token.setText(cfg.get("tg_token", ""))
         self.ed_tg_chat.setText(cfg.get("tg_chat", ""))
+
+    # ====================== 당근알바 ======================
+    def _build_daangn_tab(self) -> None:
+        page = QWidget()
+        v = QVBoxLayout(page)
+        reg = QGroupBox("1. 지역 고르기 (시도 → 시군구, 시군구 안의 모든 동을 이웃 동까지 검색)")
+        rg = QGridLayout(reg)
+        self.dj_lst_sido = CheckList(200)
+        self.dj_lst_sido.setMinimumHeight(160)
+        self.dj_lst_gu = CheckList(200)
+        self.dj_lst_gu.setMinimumHeight(160)
+        self.dj_lst_sido.itemChanged.connect(self._dj_on_sido_changed)
+        self.dj_ed_gu_find = QLineEdit()
+        self.dj_ed_gu_find.setPlaceholderText("시군구 찾기 (예: 강남)")
+        self.dj_ed_gu_find.textChanged.connect(self.dj_lst_gu.filter)
+        self.dj_ed_dong = QLineEdit()
+        self.dj_ed_dong.setPlaceholderText("동 이름으로 좁히기 (쉼표, 비우면 시군구 전체) 예: 역삼, 삼성")
+        self.dj_btn_sido_clear = QPushButton("시도 전체 해제")
+        self.dj_btn_sido_clear.clicked.connect(lambda: self.dj_lst_sido.check_all(False))
+        self.dj_btn_gu_all = QPushButton("보이는 시군구 전체 선택")
+        self.dj_btn_gu_all.clicked.connect(lambda: self.dj_lst_gu.check_all(True))
+        self.dj_btn_gu_clear = QPushButton("시군구 전체 해제")
+        self.dj_btn_gu_clear.clicked.connect(lambda: self.dj_lst_gu.check_all(False))
+        rg.addWidget(QLabel("시 · 도"), 0, 0)
+        rg.addWidget(QLabel("시 · 군 · 구  (시도를 고르면 채워집니다)"), 0, 1)
+        rg.addWidget(self.dj_lst_sido, 1, 0)
+        rg.addWidget(self.dj_lst_gu, 1, 1)
+        rg.addWidget(self.dj_btn_sido_clear, 2, 0)
+        rg.addWidget(self.dj_ed_gu_find, 2, 1)
+        gurow = QHBoxLayout()
+        gurow.addWidget(self.dj_btn_gu_all)
+        gurow.addWidget(self.dj_btn_gu_clear)
+        rg.addLayout(gurow, 3, 1)
+        rg.addWidget(QLabel("동 좁히기"), 4, 0)
+        rg.addWidget(self.dj_ed_dong, 4, 1)
+        rg.setColumnStretch(0, 1)
+        rg.setColumnStretch(1, 2)
+        v.addWidget(reg)
+
+        cond = QGroupBox("2. 조건")
+        cg = QGridLayout(cond)
+        self.dj_ed_kw = QLineEdit(DJ_DEFAULT_KEYWORDS)
+        self.dj_ed_kw.setPlaceholderText("당근알바 검색어 (쉼표로 여러 개, 각각 따로 검색) 예: 재택, 투잡, 부업")
+        self.dj_chk_short = QCheckBox("단기만 (1개월 미만)")
+        self.dj_cb_period = QComboBox()
+        self.dj_cb_period.addItems([p[0] for p in PERIODS])
+        self.dj_cb_period.setCurrentIndex(2)
+        self.dj_cb_period.currentIndexChanged.connect(self._dj_on_period_changed)
+        self.dj_de_from = QDateEdit(QDate.currentDate().addDays(-3))
+        self.dj_de_from.setCalendarPopup(True)
+        self.dj_de_from.setDisplayFormat("yyyy-MM-dd")
+        self.dj_de_to = QDateEdit(QDate.currentDate())
+        self.dj_de_to.setCalendarPopup(True)
+        self.dj_de_to.setDisplayFormat("yyyy-MM-dd")
+        for _de in (self.dj_de_from, self.dj_de_to):
+            _de.setMinimumWidth(170)
+            _de.setMinimumHeight(34)
+        self.dj_de_from.setEnabled(False)
+        self.dj_de_to.setEnabled(False)
+        self.dj_sp_max = QSpinBox()
+        self.dj_sp_max.setRange(10, 5000)
+        self.dj_sp_max.setSingleStep(50)
+        self.dj_sp_max.setValue(300)
+        self.dj_ed_include = QLineEdit()
+        self.dj_ed_include.setPlaceholderText("제목·내용에 이 단어가 있는 공고만 (쉼표)")
+        self.dj_ed_exclude = QLineEdit()
+        self.dj_ed_exclude.setPlaceholderText("이 단어가 있으면 빼기 (쉼표) 예: 보험, 대출, 다단계")
+        self.dj_chk_detail = QCheckBox("상세도 가져오기 (내용·주소·조회수·지원자, 공고당 1번 더 요청)")
+        self.dj_chk_detail.setChecked(True)
+        self.dj_chk_closed = QCheckBox("마감된 공고 빼기")
+        self.dj_chk_closed.setChecked(True)
+        self.dj_chk_seen = QCheckBox("이미 받은 공고는 빼기")
+        self.dj_chk_seen.setChecked(True)
+        self.dj_chk_polite = QCheckBox("천천히 받기 (권장)")
+        self.dj_chk_polite.setChecked(True)
+        self.dj_chk_auto = QCheckBox("자동 실행(--run-all)에 당근알바 포함")
+        self.dj_chk_auto.setChecked(True)
+        cg.addWidget(QLabel("검색어"), 0, 0)
+        cg.addWidget(self.dj_ed_kw, 0, 1, 1, 5)
+        cg.addWidget(self.dj_chk_short, 0, 6)
+        cg.addWidget(QLabel("등록일 기간"), 1, 0)
+        cg.addWidget(self.dj_cb_period, 1, 1)
+        cg.addWidget(self.dj_de_from, 1, 2)
+        cg.addWidget(QLabel("~"), 1, 3)
+        cg.addWidget(self.dj_de_to, 1, 4)
+        cg.addWidget(QLabel("최대 건수"), 1, 5)
+        cg.addWidget(self.dj_sp_max, 1, 6)
+        cg.addWidget(QLabel("포함 단어"), 2, 0)
+        cg.addWidget(self.dj_ed_include, 2, 1, 1, 6)
+        cg.addWidget(QLabel("제외 단어"), 3, 0)
+        cg.addWidget(self.dj_ed_exclude, 3, 1, 1, 6)
+        cg.addWidget(self.dj_chk_detail, 4, 0, 1, 3)
+        cg.addWidget(self.dj_chk_closed, 4, 3, 1, 2)
+        cg.addWidget(self.dj_chk_seen, 4, 5, 1, 2)
+        cg.addWidget(self.dj_chk_polite, 5, 0, 1, 3)
+        cg.addWidget(self.dj_chk_auto, 5, 3, 1, 4)
+        cg.setColumnStretch(1, 1)
+        v.addWidget(cond)
+
+        row = QHBoxLayout()
+        self.dj_btn_start = QPushButton("지금 수집")
+        self.dj_btn_start.clicked.connect(self._dj_start)
+        self.dj_btn_stop = QPushButton("중지")
+        self.dj_btn_stop.setEnabled(False)
+        self.dj_btn_stop.clicked.connect(self._dj_stop)
+        self.dj_btn_open = QPushButton("결과 폴더 열기")
+        self.dj_btn_open.clicked.connect(self._open_out)
+        self.dj_btn_reset_seen = QPushButton("받은 기록 지우기")
+        self.dj_btn_reset_seen.clicked.connect(self._dj_reset_seen)
+        row.addWidget(self.dj_btn_start)
+        row.addWidget(self.dj_btn_stop)
+        row.addWidget(self.dj_btn_open)
+        row.addWidget(self.dj_btn_reset_seen)
+        row.addStretch(1)
+        v.addLayout(row)
+        self.dj_progress = QProgressBar()
+        self.dj_progress.setRange(0, 0)
+        self.dj_progress.setVisible(False)
+        v.addWidget(self.dj_progress)
+        self.dj_log = QPlainTextEdit()
+        self.dj_log.setReadOnly(True)
+        self.dj_log.setMinimumHeight(110)
+        v.addWidget(self.dj_log, 1)
+        self.tabs.addTab(page, "당근알바")
+        self._dj_load_regions()
+
+    def _dj_append(self, s: str) -> None:
+        self.dj_log.appendPlainText(f"[{datetime.now():%H:%M:%S}] {s}")
+        try:
+            with open(os.path.join(self.base_dir, "실행기록.log"), "a", encoding="utf-8") as f:
+                f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} [당근알바] {s}\n")
+        except Exception:
+            pass
+
+    def _dj_load_regions(self) -> None:
+        self.dj_regions = read_json(os.path.join(self.base_dir, DJ_REGIONS_FILE)) or {}
+        sidos = self.dj_regions.get("sidos") or list(dj.BUILTIN_SIDOS)
+        self.dj_regions.setdefault("sidos", sidos)
+        self.dj_regions.setdefault("gus", {})
+        self.dj_regions.setdefault("dongs", {})
+        self.dj_lst_sido.set_items([s["name"] for s in sidos])
+
+    def _dj_sido_ids(self, names: List[str]) -> List[Dict[str, Any]]:
+        return [s for s in self.dj_regions.get("sidos", []) if s["name"] in set(names)]
+
+    def _dj_on_sido_changed(self, *_: Any) -> None:
+        checked = self.dj_lst_sido.checked()
+        sel = self._dj_sido_ids(checked)
+        missing = [s for s in sel if str(s["_id"]) not in self.dj_regions.get("gus", {})]
+        if missing:
+            def fn(log: Callable[[str], None]) -> Dict[str, List[Dict[str, Any]]]:
+                cli = dj.DaangnJobsClient(log, delay=(0.1, 0.3))
+                out: Dict[str, List[Dict[str, Any]]] = {}
+                for s in missing:
+                    log(f"{s['name']} 시군구 목록 받는 중...")
+                    out[str(s["_id"])] = cli.region_children(int(s["_id"]))
+                return out
+
+            def done(res: Dict[str, List[Dict[str, Any]]]) -> None:
+                self.dj_regions.setdefault("gus", {}).update(res)
+                write_json(os.path.join(self.base_dir, DJ_REGIONS_FILE), self.dj_regions)
+                self._dj_fill_gu()
+
+            self._run_func(fn, done, [self.dj_btn_start])
+        self._dj_fill_gu()
+
+    def _dj_gu_label(self, sido: Dict[str, Any], gu: Dict[str, Any]) -> str:
+        return f"{sido['name']} {gu['name']}"
+
+    def _dj_fill_gu(self, checked: Optional[List[str]] = None) -> None:
+        keep = checked if checked is not None else self.dj_lst_gu.checked()
+        labels: List[str] = []
+        for s in self._dj_sido_ids(self.dj_lst_sido.checked()):
+            for g in self.dj_regions.get("gus", {}).get(str(s["_id"]), []):
+                labels.append(self._dj_gu_label(s, g))
+        self.dj_lst_gu.set_items(labels, keep)
+        self.dj_lst_gu.filter(self.dj_ed_gu_find.text())
+
+    def _dj_selected_gus(self) -> List[Dict[str, Any]]:
+        want = set(self.dj_lst_gu.checked())
+        out = []
+        for s in self._dj_sido_ids(self.dj_lst_sido.checked()):
+            for g in self.dj_regions.get("gus", {}).get(str(s["_id"]), []):
+                if self._dj_gu_label(s, g) in want:
+                    out.append({"_id": g["_id"], "name": self._dj_gu_label(s, g)})
+        return out
+
+    def _dj_on_period_changed(self, idx: int) -> None:
+        custom = PERIODS[idx][1] < 0
+        self.dj_de_from.setEnabled(custom)
+        self.dj_de_to.setEnabled(custom)
+
+    def _dj_date_range(self) -> Tuple[date, date]:
+        days = PERIODS[self.dj_cb_period.currentIndex()][1]
+        if days < 0:
+            f = self.dj_de_from.date().toPython()
+            t = self.dj_de_to.date().toPython()
+            if f > t:
+                f, t = t, f
+            return f, t
+        t = date.today()
+        return t - timedelta(days=days), t
+
+    def _dj_reset_seen(self) -> None:
+        p = os.path.join(self.base_dir, DJ_SEEN_FILE)
+        if QMessageBox.question(self, "받은 기록 지우기", "당근알바 받은 공고 기록을 지울까요?") != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            if os.path.exists(p):
+                os.remove(p)
+            self._dj_append("받은 기록을 지웠습니다.")
+        except Exception as e:  # noqa: BLE001
+            QMessageBox.warning(self, "오류", str(e))
+
+    def _dj_settings(self) -> Dict[str, Any]:
+        f, t = self._dj_date_range()
+        return {
+            "sidos": self.dj_lst_sido.checked(),
+            "gus": self.dj_lst_gu.checked(),
+            "dong": self.dj_ed_dong.text().strip(),
+            "keywords": self.dj_ed_kw.text().strip(),
+            "short_term": self.dj_chk_short.isChecked(),
+            "period_idx": self.dj_cb_period.currentIndex(),
+            "date_from": f.isoformat(),
+            "date_to": t.isoformat(),
+            "max_count": self.dj_sp_max.value(),
+            "include": self.dj_ed_include.text().strip(),
+            "exclude": self.dj_ed_exclude.text().strip(),
+            "with_detail": self.dj_chk_detail.isChecked(),
+            "skip_closed": self.dj_chk_closed.isChecked(),
+            "skip_seen": self.dj_chk_seen.isChecked(),
+            "polite": self.dj_chk_polite.isChecked(),
+            "auto_include": self.dj_chk_auto.isChecked(),
+        }
+
+    def _dj_save_settings(self) -> None:
+        write_json(os.path.join(self.base_dir, DJ_SETTINGS_FILE), self._dj_settings())
+
+    def _dj_load_settings(self) -> None:
+        s = read_json(os.path.join(self.base_dir, DJ_SETTINGS_FILE)) or {}
+        if not s:
+            return
+        self._dj_pending_gus = s.get("gus") or []
+        self.dj_lst_sido.set_checked(s.get("sidos") or [])
+        self._dj_fill_gu(self._dj_pending_gus)
+        self.dj_ed_dong.setText(s.get("dong", ""))
+        self.dj_ed_kw.setText(s.get("keywords", DJ_DEFAULT_KEYWORDS))
+        self.dj_chk_short.setChecked(bool(s.get("short_term", False)))
+        self.dj_cb_period.setCurrentIndex(int(s.get("period_idx", 2)))
+        if s.get("date_from"):
+            self.dj_de_from.setDate(QDate.fromString(s["date_from"], "yyyy-MM-dd"))
+        if s.get("date_to"):
+            self.dj_de_to.setDate(QDate.fromString(s["date_to"], "yyyy-MM-dd"))
+        self.dj_sp_max.setValue(int(s.get("max_count", 300)))
+        self.dj_ed_include.setText(s.get("include", ""))
+        self.dj_ed_exclude.setText(s.get("exclude", ""))
+        self.dj_chk_detail.setChecked(bool(s.get("with_detail", True)))
+        self.dj_chk_closed.setChecked(bool(s.get("skip_closed", True)))
+        self.dj_chk_seen.setChecked(bool(s.get("skip_seen", True)))
+        self.dj_chk_polite.setChecked(bool(s.get("polite", True)))
+        self.dj_chk_auto.setChecked(bool(s.get("auto_include", True)))
+
+    def _dj_start(self, auto: bool = False) -> None:
+        if self.dj_thread and self.dj_thread.isRunning():
+            return
+        self._dj_save_settings()
+        self._send_config(save=True)
+        s = self._dj_settings()
+        f, t = self._dj_date_range()
+        gus = self._dj_selected_gus()
+        if not gus:
+            msg = "당근알바: 시도와 시군구를 하나 이상 고르세요."
+            if auto or self._batch:
+                self._dj_append("실행 불가: " + msg)
+                self._batch_step_done()
+            else:
+                QMessageBox.information(self, "확인", msg)
+            return
+        scope = gus[0]["name"].split(" ", 1)[-1] + (f" 외 {len(gus) - 1}" if len(gus) > 1 else "")
+        kws = split_words(s["keywords"])
+        if kws:
+            scope += "_" + "·".join(kws)[:30]
+        p = dict(
+            gus=gus, dong_words=split_words(s["dong"]), keywords=kws, start=f, end=t,
+            max_count=int(s["max_count"]), short_term=bool(s["short_term"]), with_detail=bool(s["with_detail"]),
+            include_words=split_words(s["include"]), exclude_words=split_words(s["exclude"]),
+            skip_closed=bool(s["skip_closed"]), skip_seen=bool(s["skip_seen"]), polite=bool(s["polite"]),
+            base_dir=self.base_dir, send=self._send_config(), scope_label=scope,
+        )
+        self.dj_log.clear()
+        self._dj_append(f"시작 {datetime.now():%Y-%m-%d %H:%M} — {', '.join(g['name'] for g in gus)} / 검색어 {s['keywords'] or '(없음)'} / 등록일 {f} ~ {t}" + (" / 단기만" if s["short_term"] else ""))
+        self.dj_btn_start.setEnabled(False)
+        self.dj_btn_stop.setEnabled(True)
+        self.dj_progress.setRange(0, max(1, int(s["max_count"])))
+        self.dj_progress.setValue(0)
+        self.dj_progress.setVisible(True)
+        self.dj_thread = QThread(self)
+        self.dj_worker = DaangnWorker(p)
+        self.dj_worker.moveToThread(self.dj_thread)
+        self.dj_thread.started.connect(self.dj_worker.run)
+        self.dj_worker.log.connect(self._dj_append)
+        self.dj_worker.progress.connect(self._dj_on_progress)
+        self.dj_worker.finished.connect(self._dj_done)
+        self.dj_worker.failed.connect(self._dj_fail)
+        self.dj_worker.finished.connect(self.dj_thread.quit)
+        self.dj_worker.failed.connect(self.dj_thread.quit)
+        self.dj_thread.finished.connect(self._dj_cleanup)
+        self.dj_thread.start()
+
+    def _dj_on_progress(self, n: int, mx: int) -> None:
+        if mx:
+            self.dj_progress.setRange(0, mx)
+            self.dj_progress.setValue(min(n, mx))
+        self.dj_progress.setFormat(f"{n}건")
+
+    def _dj_stop(self) -> None:
+        if self.dj_worker:
+            self.dj_worker.stop()
+            self._dj_append("중지 요청... 진행 중인 요청만 마치고 멈춥니다.")
+            self.dj_btn_stop.setEnabled(False)
+
+    def _dj_done(self, msg: str) -> None:
+        self._dj_append(msg)
+        self._dj_load_regions_quiet()
+        if self._batch:
+            self._batch_step_done()
+
+    def _dj_fail(self, msg: str) -> None:
+        self._dj_append("오류: " + msg)
+        if self._batch:
+            self._batch_step_done()
+        else:
+            QMessageBox.warning(self, "오류", msg)
+
+    def _dj_load_regions_quiet(self) -> None:
+        d = read_json(os.path.join(self.base_dir, DJ_REGIONS_FILE)) or {}
+        if d:
+            self.dj_regions.setdefault("dongs", {}).update(d.get("dongs") or {})
+
+    def _dj_cleanup(self) -> None:
+        self.dj_btn_start.setEnabled(True)
+        self.dj_btn_stop.setEnabled(False)
+        self.dj_progress.setVisible(False)
+        if self.dj_worker:
+            self.dj_worker.deleteLater()
+        if self.dj_thread:
+            self.dj_thread.deleteLater()
+        self.dj_worker = None
+        self.dj_thread = None
+
+    # ====================== 자동 실행 순서 ======================
+    def _batch_step_done(self) -> None:
+        """자동 실행에서 한 단계가 끝나면 다음 단계를, 없으면 프로그램을 닫는다."""
+        if self._batch_queue:
+            nxt = self._batch_queue.pop(0)
+            if nxt == "gk":
+                QTimer.singleShot(500, lambda: self._start(auto=True))
+            else:
+                QTimer.singleShot(500, lambda: self._dj_start(auto=True))
+            return
+        self._append("자동 실행 완료 — 프로그램을 닫습니다.")
+        QTimer.singleShot(2000, QApplication.quit)
 
     # ---------- 실행 ----------
     def _start(self, auto: bool = False) -> None:
@@ -730,7 +1194,7 @@ class MainWindow(QMainWindow):
             msg = "받을 글 종류를 하나 이상 체크하세요."
             if auto or self._batch:
                 self._append("실행 불가: " + msg)
-                QTimer.singleShot(1500, QApplication.quit)
+                self._batch_step_done()
             else:
                 QMessageBox.information(self, "확인", msg)
             return
@@ -816,13 +1280,12 @@ class MainWindow(QMainWindow):
     def _done(self, msg: str) -> None:
         self._append(msg)
         if self._batch:
-            self._append("자동 실행 완료 — 프로그램을 닫습니다.")
-            QTimer.singleShot(2000, QApplication.quit)
+            self._batch_step_done()
 
     def _fail(self, msg: str) -> None:
         self._append("오류: " + msg)
         if self._batch:
-            QTimer.singleShot(2500, QApplication.quit)
+            self._batch_step_done()
         else:
             QMessageBox.warning(self, "오류", msg)
 
@@ -838,10 +1301,15 @@ class MainWindow(QMainWindow):
         self.thread = None
 
     def run_batch(self) -> None:
-        """--run-all: 저장된 설정으로 한 번 돌리고 종료."""
+        """--run-all: 저장된 설정으로 긱톡 → 당근알바 차례로 돌리고 종료."""
         self._batch = True
-        self._append("자동 실행 시작 (저장된 설정)")
-        self._start(auto=True)
+        self._batch_queue = []
+        if self.chk_auto.isChecked():
+            self._batch_queue.append("gk")
+        if self.dj_chk_auto.isChecked():
+            self._batch_queue.append("dj")
+        self._append("자동 실행 시작 (저장된 설정): " + (" → ".join("긱톡" if x == "gk" else "당근알바" for x in self._batch_queue) or "포함된 탭 없음"))
+        self._batch_step_done()
 
     def _apply_style(self):
         self.setStyleSheet(APP_STYLE)
@@ -948,6 +1416,28 @@ APP_STYLE = """
                 background: #6b7280;
             }
 
+            QListWidget, QPlainTextEdit {
+                background: #ffffff;
+                color: #111827;
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+            }
+            QListWidget::item {
+                color: #111827;
+                padding: 3px 4px;
+            }
+            QListWidget::item:selected {
+                background: #dbe4f5;
+                color: #111827;
+            }
+            QSpinBox {
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+                padding: 4px 8px;
+                background: #ffffff;
+                color: #0f172a;
+                min-width: 90px;
+            }
             QLineEdit, QComboBox, QDateEdit {
                 border: 1px solid #cbd5e1;
                 border-radius: 8px;
