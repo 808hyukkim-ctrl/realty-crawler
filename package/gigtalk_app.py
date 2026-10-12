@@ -276,6 +276,7 @@ class MainWindow(QMainWindow):
         for lbl, t in gk.POST_TYPES:
             cb = QCheckBox(lbl)
             cb.setChecked(t == "job")
+            cb.toggled.connect(lambda *_: self._refresh_cat_view())
             self.chk_types[t] = cb
             kg.addWidget(cb)
         kg.addStretch(1)
@@ -286,19 +287,20 @@ class MainWindow(QMainWindow):
         rg = QGridLayout(reg)
         self.lst_meet = CheckList(170)
         self.lst_cat = CheckList(170)
+        self.lst_meet.itemChanged.connect(lambda *_: self._refresh_cat_view())
         self.btn_meet_refresh = QPushButton("커뮤니티 목록 새로 받기")
         self.btn_meet_refresh.clicked.connect(self._refresh_meets)
         self.btn_meet_clear = QPushButton("커뮤니티 전체 해제")
         self.btn_meet_clear.clicked.connect(lambda: self.lst_meet.check_all(False))
-        self.btn_cat_load = QPushButton("고른 커뮤니티의 카테고리 받기")
+        self.btn_cat_load = QPushButton("카테고리 목록 새로 받기")
         self.btn_cat_load.clicked.connect(self._load_categories)
         self.btn_cat_clear = QPushButton("카테고리 전체 해제")
         self.btn_cat_clear.clicked.connect(lambda: self.lst_cat.check_all(False))
         self.ed_cat_find = QLineEdit()
         self.ed_cat_find.setPlaceholderText("카테고리 찾기 (예: 번역)")
-        self.ed_cat_find.textChanged.connect(self.lst_cat.filter)
+        self.ed_cat_find.textChanged.connect(lambda *_: self._refresh_cat_view())
         rg.addWidget(QLabel("커뮤니티"), 0, 0)
-        rg.addWidget(QLabel("카테고리  (커뮤니티를 고르고 [카테고리 받기]를 누르면 채워집니다)"), 0, 1)
+        rg.addWidget(QLabel("카테고리  (고른 커뮤니티·종류의 것만 보입니다. 비면 [카테고리 받기])"), 0, 1)
         rg.addWidget(self.lst_meet, 1, 0)
         rg.addWidget(self.lst_cat, 1, 1)
         mrow = QHBoxLayout()
@@ -452,8 +454,9 @@ class MainWindow(QMainWindow):
     def _load_lists(self) -> None:
         self.meets = read_json(os.path.join(self.base_dir, MEETS_FILE)) or list(gk.BUILTIN_MEETS)
         self.lst_meet.set_items(self._meet_labels())
-        cats = read_json(os.path.join(self.base_dir, CATS_FILE)) or []
+        cats = read_json(os.path.join(self.base_dir, CATS_FILE)) or list(gk.BUILTIN_CATEGORIES)
         self._set_categories(cats)
+        self._refresh_cat_view()
 
     def _set_categories(self, cats: List[Dict[str, Any]], checked: Optional[List[str]] = None) -> None:
         name_of = {m["id"]: m["name"] for m in self.meets}
@@ -466,6 +469,28 @@ class MainWindow(QMainWindow):
             self.cat_map[lbl] = (int(c["id"]), int(c.get("meetId") or 0), str(c.get("postType") or ""))
             labels.append(lbl)
         self.lst_cat.set_items(labels, checked)
+
+
+    def _refresh_cat_view(self) -> None:
+        """고른 커뮤니티·글 종류에 속한 카테고리만 보이게 (체크된 것은 항상 보임)."""
+        if not hasattr(self, "lst_cat"):
+            return
+        meet_ids = set(self._selected_meet_ids())
+        types = set(self._selected_types())
+        find = (self.ed_cat_find.text() or "").strip().lower() if hasattr(self, "ed_cat_find") else ""
+        for i in range(self.lst_cat.count()):
+            it = self.lst_cat.item(i)
+            cid, mid, ptype = self.cat_map.get(it.text(), (0, 0, ""))
+            show = True
+            if meet_ids and mid not in meet_ids:
+                show = False
+            if types and ptype and ptype not in types:
+                show = False
+            if find and find not in it.text().lower():
+                show = False
+            if it.checkState() == Qt.CheckState.Checked:
+                show = True
+            it.setHidden(not show)
 
     def _run_func(self, fn: Callable[[Callable[[str], None]], Any], on_done: Callable[[Any], None], busy_btns: List[QPushButton]) -> None:
         if self.fthread and self.fthread.isRunning():
@@ -548,6 +573,7 @@ class MainWindow(QMainWindow):
             merged = keep + cats
             write_json(os.path.join(self.base_dir, CATS_FILE), merged)
             self._set_categories(merged, self.lst_cat.checked())
+            self._refresh_cat_view()
 
         self._run_func(fn, done, [self.btn_meet_refresh, self.btn_cat_load])
 
@@ -680,6 +706,9 @@ class MainWindow(QMainWindow):
             self.chk_open.setChecked(bool(s.get("only_open", True)))
             self.chk_seen.setChecked(bool(s.get("skip_seen", True)))
             self.chk_polite.setChecked(bool(s.get("polite", True)))
+        else:
+            self.lst_meet.set_checked(["재택모음"])
+        self._refresh_cat_view()
         cfg = auto_send.load_config(os.path.join(self.base_dir, SEND_FILE))
         self.chk_mail.setChecked(bool(cfg.get("mail_on")))
         self.ed_mail_from.setText(cfg.get("mail_from", ""))
