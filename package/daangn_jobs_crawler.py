@@ -18,7 +18,10 @@ from __future__ import annotations
 import json
 import os
 import random
+import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
@@ -30,6 +33,7 @@ Q_PAGE = "daf6296ed9995299770c6ade90b9d80c"
 Q_DETAIL = "53f9195a00c59634ffdabca4178f7581"
 Q_REGION_CHILDREN = "3b92291962883ef85597e461e8908e89"
 Q_REGION_SEARCH = "e5eb7d7e6ca3a71821db69609e66d47d"
+Q_PHONE = "f4bb3b67f6327b6ac6e7351b4e39e6c2"   # jobPostContactButtonPhoneMappingQuery {id} → phoneMapping.safeNumber (050 안심번호, 로그인 불필요)
 POST_URL = "https://jobs.daangn.com/job-posts/{pid}"
 
 HEADERS = {
@@ -97,9 +101,40 @@ BUILTIN_GUS: Dict[str, List[Dict[str, Any]]] = {
 }
 
 EXCEL_COLUMNS: List[str] = [
-    "번호", "제목", "회사명", "지역", "주소", "급여", "고용형태", "근무기간", "업무", "근무요일/날짜", "근무시간",
-    "내용", "전화연락", "조회수", "관심", "지원자", "등록일시", "마감", "검색어", "당근링크",
+    "번호", "제목", "회사명", "원문링크(당근)", "지역", "주소", "급여", "고용형태", "근무기간", "업무", "근무요일/날짜", "근무시간",
+    "연락처(안심번호)", "내용 속 연락처", "전화연락", "내용", "조회수", "관심", "지원자", "등록일시", "마감", "검색어",
 ]
+
+_PHONE_RE = re.compile(r"(?<!\d)(01[016789][-.\s]?\d{3,4}[-.\s]?\d{4}|0[2-6]\d?[-.\s]?\d{3,4}[-.\s]?\d{4}|050\d?[-.\s]?\d{3,4}[-.\s]?\d{4}|1[5-9]\d{2}[-.\s]?\d{4})(?!\d)")
+_MAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+_KAKAO_RE = re.compile(r"(?:카톡|카카오톡|오픈채팅|오픈톡|open\.kakao\.com\S*)[^\n]{0,40}", re.I)
+
+
+def contacts_in_text(text: str) -> str:
+    """본문에 적힌 전화·이메일·카톡 링크를 뽑아 한 칸에 모은다."""
+    t = text or ""
+    out: List[str] = []
+    for m in _PHONE_RE.findall(t):
+        s = m.strip()
+        if s not in out:
+            out.append(s)
+    for m in _MAIL_RE.findall(t):
+        if m not in out:
+            out.append(m)
+    for m in _KAKAO_RE.findall(t):
+        s = m.strip()
+        if s and s not in out and len(out) < 8:
+            out.append(s)
+    return " / ".join(out)
+
+
+def format_safe_number(n: str) -> str:
+    s = re.sub(r"\D", "", str(n or ""))
+    if len(s) == 12 and s.startswith("050"):
+        return f"{s[:4]}-{s[4:8]}-{s[8:]}"
+    if len(s) == 11:
+        return f"{s[:3]}-{s[3:7]}-{s[7:]}"
+    return s
 
 
 def to_kst(iso: Optional[str]) -> Optional[datetime]:
@@ -175,14 +210,16 @@ def normalize(jp: Dict[str, Any], keyword: str = "", detail: Optional[Dict[str, 
         "근무요일/날짜": workdays_text(jp),
         "근무시간": worktime_text(jp),
         "내용": (d.get("content") or "").strip(),
-        "전화연락": "가능" if d.get("isPhoneContactable") else ("" if not d else "채팅만"),
+        "연락처(안심번호)": "",
+        "내용 속 연락처": contacts_in_text(d.get("content") or "") if d else "",
+        "전화연락": "가능(앱 통화·안심번호)" if d.get("isPhoneContactable") else ("" if not d else "채팅 지원만"),
         "조회수": d.get("viewCount") if d else "",
         "관심": d.get("watchCount") if d else "",
         "지원자": app.get("totalCount") if d else "",
         "등록일시": pub.strftime("%Y-%m-%d %H:%M") if pub else "",
         "마감": "마감" if closed else "",
         "검색어": keyword,
-        "당근링크": POST_URL.format(pid=pid) if pid else "",
+        "원문링크(당근)": POST_URL.format(pid=pid) if pid else "",
         "_created": pub,
         "_id": jp.get("_id") or d.get("_id"),
     }
@@ -262,6 +299,15 @@ class DaangnJobsClient:
         pi = feed.get("pageInfo") or {}
         return posts, pi.get("endCursor"), bool(pi.get("hasNextPage"))
 
+    def phone(self, post_id: str) -> str:
+        """글의 050 안심번호 (isPhoneContactable 인 글만 있음). _id(hex) 또는 전역 id 둘 다 됨."""
+        try:
+            d = self.gql(Q_PHONE, {"id": post_id})
+        except Exception:
+            return ""
+        pm = ((d.get("jobPostById") or {}).get("phoneMapping") or {})
+        return format_safe_number(pm.get("safeNumber") or "")
+
     def detail(self, public_id: str) -> Dict[str, Any]:
         d = self.gql(Q_DETAIL, {"publicId": public_id})
         pair = d.get("permalinkPairByPublicId") or {}
@@ -294,97 +340,148 @@ def collect(
     progress: Optional[Callable[[int, int], None]] = None,
     region_names: Optional[Dict[int, str]] = None,
     max_pages: int = 10,
+    stop_detail: Optional[Callable[[], bool]] = None,
+    workers: int = 4,
 ) -> List[Dict[str, Any]]:
-    """동 id 목록 × 검색어 별로 당근알바를 검색해 중복 없이 모은다(등록일 기간, 최대 건수)."""
+    """동 id 목록 × 검색어 별로 당근알바를 검색해 중복 없이 모은다(등록일 기간, 최대 건수).
+
+    stop: 검색 단계 중지(모은 것은 상세까지 받아 저장). stop_detail: 상세 단계까지 건너뜀.
+    검색·상세는 workers 개 스레드로 나눠 받는다(요청 사이 쉼은 그대로).
+    """
     log = log or (lambda s: None)
     stop = stop or (lambda: False)
+    stop_detail = stop_detail or (lambda: False)
     include_words = [w for w in (include_words or []) if w]
     exclude_words = [w for w in (exclude_words or []) if w]
     seen_ids = seen_ids or set()
     kws: List[str] = [k for k in (keywords or []) if k] or [""]
     names = region_names or {}
+    workers = max(1, int(workers or 1))
 
     got: Dict[str, Dict[str, Any]] = {}
     order: List[str] = []
     kw_of: Dict[str, List[str]] = {}
-    for rid in region_ids:
-        if stop():
-            break
-        for kw in kws:
-            if stop():
+    lock = threading.Lock()
+
+    def full() -> bool:
+        return bool(max_count and len(order) >= max_count)
+
+    def search_one(rid: int, kw: str) -> List[Dict[str, Any]]:
+        """한 동×검색어 조합을 끝까지(페이지) 읽어 조건에 맞는 글만 돌려준다 (중복 판단은 호출 쪽에서)."""
+        found: List[Dict[str, Any]] = []
+        after = None
+        pages = 0
+        older_streak = 0
+        label = f"{names.get(rid, rid)}" + (f" '{kw}'" if kw else "")
+        while not stop() and not full():
+            try:
+                posts, after, more = client.search(rid, kw, short_term, after)
+            except Exception as e:  # noqa: BLE001
+                log(f"  [{label}] 검색 실패: {e}")
                 break
-            after = None
-            pages = 0
-            older_streak = 0
-            label = f"{names.get(rid, rid)}" + (f" '{kw}'" if kw else "")
-            n_before = len(order)
-            while not stop():
-                try:
-                    posts, after, more = client.search(rid, kw, short_term, after)
-                except Exception as e:  # noqa: BLE001
-                    log(f"  [{label}] 검색 실패: {e}")
-                    break
-                pages += 1
-                for jp in posts:
-                    pub = to_kst(jp.get("publishedAt"))
-                    d = pub.date() if pub else None
-                    if d and d < start:
-                        older_streak += 1
-                        continue
-                    if d and d > end:
-                        continue
-                    older_streak = 0
-                    pid = jp.get("_id") or ""
-                    if not pid:
-                        continue
-                    if pid in got:
-                        if kw and kw not in kw_of[pid]:
-                            kw_of[pid].append(kw)
-                        continue
-                    if pid in seen_ids:
-                        continue
-                    if skip_closed and jp.get("closed"):
-                        continue
-                    n = normalize(jp, kw)
-                    hay = n["제목"] + " " + n["회사명"]
-                    if exclude_words and _contains_any(hay, exclude_words):
-                        continue
-                    got[pid] = n
-                    kw_of[pid] = [kw] if kw else []
-                    order.append(pid)
-                    if max_count and len(order) >= max_count:
-                        break
-                if progress:
-                    progress(len(order), max_count or 0)
-                if (max_count and len(order) >= max_count) or not more or not after or pages >= max_pages or older_streak >= 20:
-                    break
-            log(f"  [{label}] +{len(order) - n_before}건 (누적 {len(order)})")
-            if max_count and len(order) >= max_count:
+            pages += 1
+            for jp in posts:
+                pub = to_kst(jp.get("publishedAt"))
+                d = pub.date() if pub else None
+                if d and d < start:
+                    older_streak += 1
+                    continue
+                if d and d > end:
+                    continue
+                older_streak = 0
+                if skip_closed and jp.get("closed"):
+                    continue
+                found.append(jp)
+            if not more or not after or pages >= max_pages or older_streak >= 20:
                 break
-        if max_count and len(order) >= max_count:
-            log(f"최대 건수 {max_count}건에 도달해 멈춥니다.")
-            break
+        return found
+
+    combos = [(rid, kw) for rid in region_ids for kw in kws]
+    total_combos = len(combos)
+    done_combos = 0
+    log(f"검색 조합 {total_combos}개 (동 {len(region_ids)} × 검색어 {len(kws)}), 동시에 {workers}개씩")
+
+    def merge(rid: int, kw: str, posts: List[Dict[str, Any]]) -> int:
+        added = 0
+        with lock:
+            for jp in posts:
+                pid = jp.get("_id") or ""
+                if not pid:
+                    continue
+                if pid in got:
+                    if kw and kw not in kw_of[pid]:
+                        kw_of[pid].append(kw)
+                    continue
+                if pid in seen_ids:
+                    continue
+                if full():
+                    break
+                n = normalize(jp, kw)
+                hay = n["제목"] + " " + n["회사명"]
+                if exclude_words and _contains_any(hay, exclude_words):
+                    continue
+                got[pid] = n
+                kw_of[pid] = [kw] if kw else []
+                order.append(pid)
+                added += 1
+        return added
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        chunk = workers * 2
+        for i in range(0, total_combos, chunk):
+            if stop() or full():
+                break
+            part = combos[i:i + chunk]
+            results = list(ex.map(lambda rk: (rk[0], rk[1], search_one(rk[0], rk[1])), part))
+            for rid, kw, posts in results:
+                added = merge(rid, kw, posts)
+                done_combos += 1
+                if added:
+                    log(f"  [{names.get(rid, rid)}{(' ' + repr(kw)) if kw else ''}] +{added}건 (누적 {len(order)})")
+            if progress:
+                progress(len(order), max_count or 0)
+            if done_combos % (chunk * 5) == 0 or done_combos == total_combos:
+                log(f"  진행 {done_combos}/{total_combos} 조합, 누적 {len(order)}건")
+    if full():
+        log(f"최대 건수 {max_count}건에 도달해 검색을 멈춥니다.")
+    elif stop():
+        log(f"검색을 중지했습니다 (지금까지 {len(order)}건).")
 
     rows = [got[p] for p in order]
-    if with_detail and rows:
-        log(f"상세(내용·주소·조회수) 가져오는 중... {len(rows)}건")
-        for i, r in enumerate(rows, 1):
-            if stop():
-                break
+    if with_detail and rows and not stop_detail():
+        log(f"상세(내용·주소·안심번호·조회수) 가져오는 중... {len(rows)}건, 동시에 {workers}개씩")
+
+        def fetch_detail(r: Dict[str, Any]) -> None:
+            if stop_detail():
+                return
             try:
                 dt = client.detail(r["번호"]) if r.get("번호") else {}
             except Exception as e:  # noqa: BLE001
                 log(f"  상세 실패 {r.get('번호')}: {e}")
                 dt = {}
-            if dt:
-                jp_stub = {k: r.get(k) for k in ()}  # noqa: F841
-                merged = normalize({**dt, "daangnPermalink": {"publicId": r["번호"]}, "workplaceRegion": {"name": r["지역"]}}, r["검색어"], dt)
-                merged["근무요일/날짜"] = r["근무요일/날짜"] or merged["근무요일/날짜"]
-                merged["근무시간"] = r["근무시간"] or merged["근무시간"]
-                merged["급여"] = r["급여"] or merged["급여"]
+            if not dt:
+                return
+            merged = normalize({**dt, "daangnPermalink": {"publicId": r["번호"]}, "workplaceRegion": {"name": r["지역"]}}, r["검색어"], dt)
+            merged["근무요일/날짜"] = r["근무요일/날짜"] or merged["근무요일/날짜"]
+            merged["근무시간"] = r["근무시간"] or merged["근무시간"]
+            merged["급여"] = r["급여"] or merged["급여"]
+            if dt.get("isPhoneContactable") and not stop_detail():
+                merged["연락처(안심번호)"] = client.phone(dt.get("id") or dt.get("_id") or r.get("_id") or "")
+            with lock:
                 r.update(merged)
-            if progress and i % 5 == 0:
-                progress(i, len(rows))
+
+        done = 0
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            for _ in ex.map(fetch_detail, rows):
+                done += 1
+                if progress and done % 5 == 0:
+                    progress(done, len(rows))
+                if done % 25 == 0:
+                    log(f"  상세 {done}/{len(rows)}")
+        if stop_detail():
+            log("상세 받기를 중단했습니다 (받은 데까지 저장).")
+    elif with_detail and rows:
+        log("상세 받기를 건너뜁니다 (중지).")
     for r in rows:
         r["검색어"] = ", ".join(kw_of.get(r.get("_id"), [])) or r.get("검색어", "")
     if include_words:
@@ -400,9 +497,9 @@ def save_excel(rows: List[Dict[str, Any]], path: str) -> str:
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
 
-    widths = {"번호": 14, "제목": 44, "회사명": 18, "지역": 10, "주소": 30, "급여": 16, "고용형태": 8, "근무기간": 14,
-              "업무": 16, "근무요일/날짜": 22, "근무시간": 14, "내용": 60, "전화연락": 8, "조회수": 7, "관심": 6,
-              "지원자": 6, "등록일시": 16, "마감": 6, "검색어": 12, "당근링크": 40}
+    widths = {"번호": 14, "제목": 44, "회사명": 18, "원문링크(당근)": 40, "지역": 10, "주소": 30, "급여": 16, "고용형태": 8, "근무기간": 14,
+              "업무": 16, "근무요일/날짜": 22, "근무시간": 14, "연락처(안심번호)": 16, "내용 속 연락처": 24, "전화연락": 16, "내용": 60,
+              "조회수": 7, "관심": 6, "지원자": 6, "등록일시": 16, "마감": 6, "검색어": 12}
     wb = Workbook()
     ws = wb.active
     ws.title = "당근알바"
@@ -419,7 +516,7 @@ def save_excel(rows: List[Dict[str, Any]], path: str) -> str:
         i = ws.max_row
         for j, k in enumerate(EXCEL_COLUMNS, 1):
             cell = ws.cell(row=i, column=j)
-            if k == "당근링크" and cell.value:
+            if k == "원문링크(당근)" and cell.value:
                 cell.hyperlink = str(cell.value)
                 cell.font = link_font
             cell.alignment = wrap if k in ("내용", "제목", "주소", "근무요일/날짜") else top

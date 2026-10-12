@@ -248,9 +248,16 @@ class DaangnWorker(QObject):
         super().__init__()
         self.p = p
         self._stop = False
+        self._stop_detail = False
 
     def stop(self) -> None:
+        """1단계: 검색만 멈추고 모은 글의 상세는 받아서 저장"""
         self._stop = True
+
+    def stop_detail(self) -> None:
+        """2단계: 상세도 건너뛰고 바로 저장"""
+        self._stop = True
+        self._stop_detail = True
 
     @Slot()
     def run(self) -> None:
@@ -292,6 +299,7 @@ class DaangnWorker(QObject):
                 include_words=p["include_words"], exclude_words=p["exclude_words"],
                 skip_closed=p["skip_closed"], seen_ids=set(seen.keys()),
                 stop=lambda: self._stop, log=self.log.emit, progress=self.progress.emit, region_names=names,
+                stop_detail=lambda: self._stop_detail, workers=2 if p.get("polite", True) else 4,
             )
             if self._stop:
                 self.log.emit("중지했습니다." + (f" (지금까지 {len(rows)}건은 저장합니다)" if rows else ""))
@@ -900,13 +908,13 @@ class MainWindow(QMainWindow):
         self.dj_ed_include.setPlaceholderText("제목·내용에 이 단어가 있는 공고만 (쉼표)")
         self.dj_ed_exclude = QLineEdit()
         self.dj_ed_exclude.setPlaceholderText("이 단어가 있으면 빼기 (쉼표) 예: 보험, 대출, 다단계")
-        self.dj_chk_detail = QCheckBox("상세도 가져오기 (내용·주소·조회수·지원자, 공고당 1번 더 요청)")
+        self.dj_chk_detail = QCheckBox("상세도 가져오기 (내용·주소·050 안심번호·조회수·지원자 — 공고당 요청 1~2번 더)")
         self.dj_chk_detail.setChecked(True)
         self.dj_chk_closed = QCheckBox("마감된 공고 빼기")
         self.dj_chk_closed.setChecked(True)
         self.dj_chk_seen = QCheckBox("이미 받은 공고는 빼기")
         self.dj_chk_seen.setChecked(True)
-        self.dj_chk_polite = QCheckBox("천천히 받기 (권장)")
+        self.dj_chk_polite = QCheckBox("천천히 받기 (동시 2개, 끄면 4개)")
         self.dj_chk_polite.setChecked(True)
         self.dj_chk_auto = QCheckBox("자동 실행(--run-all)에 당근알바 포함")
         self.dj_chk_auto.setChecked(True)
@@ -1179,9 +1187,15 @@ class MainWindow(QMainWindow):
         self.dj_progress.setFormat(f"{n}건")
 
     def _dj_stop(self) -> None:
-        if self.dj_worker:
+        if not self.dj_worker:
+            return
+        if not self.dj_worker._stop:
             self.dj_worker.stop()
-            self._dj_append("중지 요청... 진행 중인 요청만 마치고 멈춥니다.")
+            self._dj_append("검색을 멈춥니다. 지금까지 모은 글의 상세(내용·주소·안심번호)는 받아서 저장합니다. 상세도 건너뛰려면 [상세도 건너뛰기]를 누르세요.")
+            self.dj_btn_stop.setText("상세도 건너뛰기")
+        else:
+            self.dj_worker.stop_detail()
+            self._dj_append("상세 받기도 건너뛰고 바로 저장합니다.")
             self.dj_btn_stop.setEnabled(False)
 
     def _dj_done(self, msg: str) -> None:
@@ -1205,6 +1219,7 @@ class MainWindow(QMainWindow):
     def _dj_cleanup(self) -> None:
         self.dj_btn_start.setEnabled(True)
         self.dj_btn_stop.setEnabled(False)
+        self.dj_btn_stop.setText("중지")
         self.dj_progress.setVisible(False)
         if self.dj_worker:
             self.dj_worker.deleteLater()
