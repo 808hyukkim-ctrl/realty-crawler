@@ -45,6 +45,7 @@ from peterpan_crawler import PeterpanCrawler
 from onhouse_crawler import OnhouseCrawler, OnhouseLoginError, is_short_term_row
 from naver_crawler import NaverCrawler
 from app_main_common import (
+    PYEONG_COLUMNS, add_pyeong_price, sort_by_pyeong_price,
     DetailFilters,
     DualSlider,
     MultiSelectCombo,
@@ -187,7 +188,13 @@ class DaangnWorker(QObject):
                 if self.params.get("sort_views"):   # 조회수 많은 순 (같으면 관심 → 채팅 순)
                     all_results.sort(key=lambda r: (-_to_int(r.get("조회수")), -_to_int(r.get("관심")), -_to_int(r.get("채팅"))))
                     self.status.emit("당근: 조회수 많은 순으로 정렬했습니다")
-                crawler._save_to_excel([daangn_excel_row(r) for r in all_results], filepath=out, columns=DAANGN_EXCEL_COLUMNS)
+                dg_cols = list(DAANGN_EXCEL_COLUMNS)
+                if self.params.get("sort_pyeong"):   # 평단가(만원/평) 계산 + 낮은 순 (2026-10-13)
+                    add_pyeong_price(all_results, "daangn")
+                    all_results = sort_by_pyeong_price(all_results)
+                    dg_cols += ["면적(㎡)"] + PYEONG_COLUMNS
+                    self.status.emit("당근: 평단가를 계산해 낮은 순으로 정렬했습니다 (면적 없으면 확인불가)")
+                crawler._save_to_excel([daangn_excel_row(r, dg_cols) for r in all_results], filepath=out, columns=dg_cols)
                 sheets = split_excel_by_category(out)
                 if sheets:
                     self.status.emit(f"종류별 시트 추가: {', '.join(sheets)}")
@@ -437,6 +444,10 @@ class OnhouseWorker(QObject):
             out_dir = self.params.get("out_dir", os.getcwd())
             out_path = os.path.join(out_dir, f"{site}_{region}_{len(all_rows)}건_{ts}.xlsx")
             all_rows = sort_newest_first(all_rows, ["등록일", "확인일"])   # 온하우스: 등록일(없으면 확인일) 최신순 (2026-10-11)
+            if self.params.get("sort_pyeong"):   # 평단가 계산 + 낮은 순 (2026-10-13)
+                add_pyeong_price(all_rows, "onhouse")
+                all_rows = sort_by_pyeong_price(all_rows)
+                self.status.emit("온하우스: 평단가를 계산해 낮은 순으로 정렬했습니다 (전용면적 평 기준, 0이면 확인불가)")
             crawler.crawl_details_to_excel(rows=all_rows, output_path=out_path)
             sheets = split_excel_by_category(out_path)
             if sheets:
@@ -463,7 +474,7 @@ DAANGN_EXCEL_COLUMNS = [
     "매물번호", "매물_URL", "매물유형", "거래유형", "지번주소", "거래주체", "매매가", "전세금", "보증금", "월세", "관리비", "권리금",
     "제목", "상세내용", "등록일시", "조회수", "관심", "채팅", "방수", "욕실수", "층수", "최고층수", "사용승인일", "건축용도", "방향", "입주가능일",
 ]
-DAANGN_COLUMN_SOURCE = {"상세내용": "상세_내용", "건축용도": "건축물용도"}
+DAANGN_COLUMN_SOURCE = {"상세내용": "상세_내용", "건축용도": "건축물용도", "면적(㎡)": "면적"}
 
 
 def _to_int(v) -> int:
@@ -495,10 +506,10 @@ def daangn_same_key(r: dict) -> str:
                      r.get("매매가"), r.get("전세금"), r.get("보증금"), r.get("월세"))
 
 
-def daangn_excel_row(row: dict) -> dict:
+def daangn_excel_row(row: dict, columns=None) -> dict:
     """당근 수집 행 → 지정 컬럼 순서의 행 (없는 값은 빈칸)"""
     out = {}
-    for col in DAANGN_EXCEL_COLUMNS:
+    for col in (columns or DAANGN_EXCEL_COLUMNS):
         v = row.get(col)
         if v is None or v == "":
             v = row.get(DAANGN_COLUMN_SOURCE.get(col, col))
@@ -686,6 +697,12 @@ class NaverWorker(QObject):
                     df = df.drop_duplicates(subset=[c for c in NAVER_SAME_KEY_COLUMNS if c in df.columns], keep="first")
             if "등록/확인일" in df.columns:   # 등록일 최신순 (2026-10-11) — 네이버는 날짜만 있고 시각은 없다
                 df = df.assign(_srt=df["등록/확인일"].map(parse_any_datetime)).sort_values("_srt", ascending=False, na_position="last", kind="stable").drop(columns="_srt")
+            if self.params.get("sort_pyeong") and "거래방식" in df.columns:   # 평단가 계산 + 낮은 순 (2026-10-13)
+                _recs = df.to_dict("records")
+                add_pyeong_price(_recs, "naver")
+                _recs = sort_by_pyeong_price(_recs)
+                df = pd.DataFrame(_recs, columns=list(df.columns) + PYEONG_COLUMNS)
+                self.status.emit("네이버: 평단가를 계산해 낮은 순으로 정렬했습니다 (공급/계약면적 기준, 없으면 전용 → 그것도 없으면 확인불가)")
             df = df.map(lambda x: ILLEGAL_CHARACTERS_RE.sub(r"", x) if isinstance(x, str) else x)
             df.to_excel(out_path, index=False)
             self._apply_excel_hyperlinks(out_path)
@@ -1153,6 +1170,10 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self.dg_sort_views = QCheckBox("조회수 많은 순으로 정렬")
         self.dg_sort_views.setToolTip("당근 매물마다 조회수·관심·채팅 수를 함께 수집하고(엑셀 열), 체크하면 조회수 많은 순으로 저장합니다")
         dr.addWidget(self.dg_sort_views)
+        self.dg_sort_pyeong = QCheckBox("평단가 계산 + 낮은 순")
+        self.dg_sort_pyeong.setToolTip("엑셀에 면적(㎡)·기준면적(평)·평단가(만원/평)·평단가 기준 열을 붙이고 거래(매매→전세→월세) 안에서 평단가 낮은 순으로 저장합니다.\n"
+                                       "평단가 = 매매가·전세금·월세 ÷ 평. 면적을 모르거나 0이면 '확인불가'(맨 뒤). 상가·사무실만 골라 돌리면 평단가 비교표가 됩니다")
+        dr.addWidget(self.dg_sort_pyeong)
         dr.addStretch(1)
         v.addWidget(date_box)
         price_box = QGroupBox("가격/면적 (직접 입력, 빈칸=제한없음)")
@@ -1380,6 +1401,10 @@ class MainWindow(QMainWindow, ScheduleMixin):
         tr.addWidget(self.oh_trade_month)
         tr.addWidget(self.oh_trade_buy)
         tr.addWidget(self.oh_trade_short)
+        self.oh_sort_pyeong = QCheckBox("평단가 계산 + 낮은 순")
+        self.oh_sort_pyeong.setToolTip("엑셀에 기준면적(평)·평단가(만원/평)·평단가 기준 열을 붙이고 거래 안에서 평단가 낮은 순으로 저장합니다.\n"
+                                       "온하우스는 전용면적(평)으로 계산하고, 0이거나 '확인필요'면 '확인불가'")
+        tr.addWidget(self.oh_sort_pyeong)
         tr.addSpacing(16)
         tr.addWidget(QLabel("구분"))
         tr.addWidget(self.oh_mode)
@@ -1503,6 +1528,10 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self.nv_dedupe.setToolTip("같은 집을 여러 중개사가 올린 경우(주소·동·호·층·면적·금액 동일) 하나만 남깁니다")
         nv_date_row.addSpacing(10)
         nv_date_row.addWidget(self.nv_dedupe)
+        self.nv_sort_pyeong = QCheckBox("평단가 계산 + 낮은 순")
+        self.nv_sort_pyeong.setToolTip("엑셀에 기준면적(평)·평단가(만원/평)·평단가 기준 열을 붙이고 거래 안에서 평단가 낮은 순으로 저장합니다.\n"
+                                       "면적은 공급/계약면적(상가·사무실의 임대면적), 없으면 전용. 둘 다 없거나 0이면 '확인불가'")
+        nv_date_row.addWidget(self.nv_sort_pyeong)
         nv_date_row.addStretch(1)
         pg.addWidget(nv_date_wrap, 2, 1)
         v.addWidget(price_box)
@@ -1953,6 +1982,7 @@ class MainWindow(QMainWindow, ScheduleMixin):
             "writer_types": writer_types,
             "dedupe_same": self.dg_dedupe.isChecked(),
             "sort_views": self.dg_sort_views.isChecked(),
+            "sort_pyeong": self.dg_sort_pyeong.isChecked(),
             "site_name": "당근",
             "region_for_file": region_for_file,
             "timestamp": ts,
@@ -2113,6 +2143,7 @@ class MainWindow(QMainWindow, ScheduleMixin):
             "site_name": "온하우스공동" if self.oh_mode.currentIndex() == 1 else "온하우스",
             "mode": "share" if self.oh_mode.currentIndex() == 1 else "rent",
             "short_term": self.oh_trade_short.isChecked(),
+            "sort_pyeong": self.oh_sort_pyeong.isChecked(),
             "region_for_file": region_for_file,
             "timestamp": ts,
             "out_dir": out_dir,
@@ -2240,6 +2271,7 @@ class MainWindow(QMainWindow, ScheduleMixin):
             "detail_uses": self.nv_use_group.selected(),
             "hosu_enabled": self.nv_hosu_check.isChecked(),
             "dedupe_same": self.nv_dedupe.isChecked(),
+            "sort_pyeong": self.nv_sort_pyeong.isChecked(),
             "site_name": "네이버",
             "region_for_file": region_for_file,
             "timestamp": ts,

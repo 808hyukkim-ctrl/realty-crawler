@@ -48,6 +48,7 @@ from PySide6.QtWidgets import (
 
 import auto_send
 from app_main_common import (
+    add_pyeong_price, sort_by_pyeong_price,
     sort_newest_first,
     APP_STYLESHEET, DetailFilters, MultiSelectCombo, RangeInput, contains_any_keyword, parse_keywords_csv, wrap_in_scroll,
     split_excel_by_category,
@@ -574,6 +575,10 @@ class Worker(QObject):
                 out_dir, f"{'온하우스공동' if self.p.get('mode') == 'share' else '온하우스'}_{self.p['region_label']}{period_part}_{len(all_rows)}건_{ts}.xlsx"
             )
             all_rows = sort_newest_first(all_rows, ["등록일", "확인일"])   # 등록일(없으면 확인일) 최신순 (2026-10-11)
+            if self.p.get("sort_pyeong"):   # 평단가 계산 + 낮은 순 (2026-10-13)
+                add_pyeong_price(all_rows, "onhouse")
+                all_rows = sort_by_pyeong_price(all_rows)
+                self.log.emit("평단가(만원/평)를 계산해 거래 안에서 낮은 순으로 정렬했습니다 (전용면적 평 기준, 0이면 확인불가)")
             crawler.crawl_details_to_excel(rows=all_rows, output_path=out_path)
             sheets = split_excel_by_category(out_path)
             if sheets:
@@ -918,6 +923,10 @@ class MainWindow(QMainWindow):
         self.chk_short = QCheckBox("단기만")
         self.chk_short.setToolTip("월세 목록을 읽어 상세에 '단기' 거래가 있는 매물만 저장합니다 (온하우스 목록 필터는 단기를 못 걸러서 상세로 거릅니다)")
         tr.addWidget(self.chk_short)
+        self.chk_pyeong = QCheckBox("평단가 계산 + 낮은 순")
+        self.chk_pyeong.setToolTip("엑셀에 기준면적(평)·평단가(만원/평)·평단가 기준 열을 붙이고 거래(매매→전세→월세) 안에서 평단가 낮은 순으로 저장합니다.\n"
+                                   "평단가 = 매매가·전세금·월세 ÷ 전용면적(평). 면적이 0이거나 '확인필요'면 '확인불가'(맨 뒤). 사무실·상가만 골라 돌리면 평단가 비교표가 됩니다")
+        tr.addWidget(self.chk_pyeong)
         tr.addSpacing(14)
         tr.addWidget(QLabel("구분"))
         self.cb_mode = QComboBox()
@@ -1355,6 +1364,7 @@ class MainWindow(QMainWindow):
             "dong": self.cb_dong.checked_labels(),
             "trade": [k for k, cb in self.trade_checks.items() if cb.isChecked()],
             "short_term": self.chk_short.isChecked(),
+            "sort_pyeong": self.chk_pyeong.isChecked(),
             "mode": "share" if self.cb_mode.currentIndex() == 1 else "rent",
             "kinds": [k for k, cb in self.room_checks.items() if cb.isChecked()],
             "structs": [k for k, cb in self.struct_checks.items() if cb.isChecked()],
@@ -1392,6 +1402,7 @@ class MainWindow(QMainWindow):
         for k, cb in self.trade_checks.items():
             cb.setChecked(k in (s.get("trade") or []))
         self.chk_short.setChecked(bool(s.get("short_term")))
+        self.chk_pyeong.setChecked(bool(s.get("sort_pyeong")))
         self.cb_mode.setCurrentIndex(1 if s.get("mode") == "share" else 0)
         kinds = s.get("kinds")
         if kinds is None and s.get("room") and s.get("room") != "전체":   # 옛 예약(방유형 드롭다운) 호환
@@ -1651,6 +1662,7 @@ class MainWindow(QMainWindow):
             "bbox": self.bbox,
             "trade_types": trade_types,
             "short_term": self.chk_short.isChecked(),
+            "sort_pyeong": self.chk_pyeong.isChecked(),
             "mode": "share" if self.cb_mode.currentIndex() == 1 else "rent",
             "room_type": "all",
             "passes": passes,

@@ -228,6 +228,131 @@ def parse_any_datetime(text: Any):
     return None
 
 
+
+# ───────────────────────── 평단가 (2026-10-13) ─────────────────────────
+PYEONG_M2 = 3.3058
+PYEONG_COLUMNS = ["기준면적(평)", "평단가(만원/평)", "평단가 기준"]
+_TRADE_ORDER = {"매매": 0, "전세": 1, "월세": 2, "단기": 3, "단기임대": 3}
+
+
+def _py_num(v):
+    """'26,000' / 900000000 / 55.1 / None → float 또는 None"""
+    if v is None:
+        return None
+    s = str(v).strip().replace(",", "")
+    if not s:
+        return None
+    m = re.search(r"-?\d+(?:\.\d+)?", s)
+    if not m:
+        return None
+    try:
+        return float(m.group(0))
+    except Exception:
+        return None
+
+
+def _py_pair(v):
+    """'26,000 / 100' → (26000.0, 100.0) / '55.1 / 16.67' → (55.1, 16.67) / 그 외 (num, None)"""
+    if v is None:
+        return (None, None)
+    s = str(v)
+    if "/" in s:
+        a, b = s.split("/", 1)
+        return (_py_num(a), _py_num(b))
+    return (_py_num(s), None)
+
+
+def pyeong_info(site: str, r: dict):
+    """(거래, 금액(만원), 기준면적(평), 면적출처) — 금액/면적을 모르면 None"""
+    site = (site or "").lower()
+    trade = ""
+    price = None
+    area_py = None
+    src = ""
+    if site in ("daangn", "당근"):
+        trade = str(r.get("거래유형") or "")
+        if trade == "매매":
+            price = _py_num(r.get("매매가"))
+        elif trade == "전세":
+            price = _py_num(r.get("전세금"))
+        else:
+            price = _py_num(r.get("월세"))
+            if not trade:
+                trade = "월세"
+        m2 = _py_num(r.get("면적(㎡)") if r.get("면적(㎡)") not in (None, "") else r.get("면적"))
+        if m2 and m2 > 0:
+            area_py = m2 / PYEONG_M2
+            src = "면적"
+    elif site in ("naver", "네이버"):
+        trade = str(r.get("거래방식") or "")
+        if trade in ("매매", "전세"):
+            price = _py_num(r.get("매매/전세금"))
+        else:
+            price = _py_num(r.get("월세"))
+            if not trade:
+                trade = "월세"
+        if price is not None:
+            price = price / 10000.0   # 네이버는 원 단위
+        m2 = _py_num(r.get("공급/계약/대지"))
+        src = "공급/계약면적"
+        if not m2 or m2 <= 0:
+            m2 = _py_num(r.get("전용/연"))
+            src = "전용면적"
+        if m2 and m2 > 0:
+            area_py = m2 / PYEONG_M2
+    else:  # 온하우스: '매매' / '전세' / '월세'("보증금 / 월세"), '전용면적(㎡/P)'("㎡ / 평")
+        if str(r.get("매매") or "").strip():
+            trade, price = "매매", _py_num(r.get("매매"))
+        elif str(r.get("전세") or "").strip():
+            trade, price = "전세", _py_num(r.get("전세"))
+        elif str(r.get("월세") or "").strip():
+            trade = "월세"
+            _dep, rent = _py_pair(r.get("월세"))
+            price = rent if rent is not None else _dep
+        m2, py = _py_pair(r.get("전용면적(㎡/P)"))
+        if py and py > 0:
+            area_py = py
+        elif m2 and m2 > 0:
+            area_py = m2 / PYEONG_M2
+        src = "전용면적"
+    return trade, price, area_py, src
+
+
+def add_pyeong_price(rows, site: str):
+    """dict 행마다 기준면적(평)·평단가(만원/평)·평단가 기준 열을 붙인다. 면적을 모르거나 0이면 '확인불가'."""
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        trade, price, area_py, src = pyeong_info(site, r)
+        if area_py and area_py > 0 and price is not None and price > 0:
+            val = round(price / area_py, 1)
+            r["기준면적(평)"] = round(area_py, 2)
+            r["평단가(만원/평)"] = val
+            r["평단가 기준"] = f"{trade} {price:,.0f}만원 ÷ {area_py:.2f}평 ({src})"
+        else:
+            r["기준면적(평)"] = round(area_py, 2) if area_py else ""
+            r["평단가(만원/평)"] = "확인불가"
+            r["평단가 기준"] = "면적 없음(0)" if not area_py else f"{trade or '거래'} 금액 없음"
+    return rows
+
+
+def sort_by_pyeong_price(rows):
+    """거래(매매→전세→월세) 안에서 평단가 낮은 순. '확인불가'는 맨 뒤."""
+    def k(item):
+        i, r = item
+        trade = str((r or {}).get("거래유형") or (r or {}).get("거래방식") or "")
+        if not trade:
+            t, _p, _a, _s = pyeong_info("onhouse", r or {})
+            trade = t
+        v = (r or {}).get("평단가(만원/평)")
+        try:
+            fv = float(v)
+            return (_TRADE_ORDER.get(trade, 9), 0, fv, i)
+        except Exception:
+            return (_TRADE_ORDER.get(trade, 9), 1, 0.0, i)
+    return [r for _, r in sorted(enumerate(rows), key=k)]
+
+
 def sort_newest_first(rows, keys):
     """dict 행 목록을 keys 중 처음 값이 있는 날짜로 최신순 정렬 (날짜 없는 행은 뒤로, 같은 날짜는 원래 순서)"""
     def k(item):
