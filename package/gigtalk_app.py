@@ -589,9 +589,11 @@ class MainWindow(QMainWindow):
                 show = True
             it.setHidden(not show)
 
-    def _run_func(self, fn: Callable[[Callable[[str], None]], Any], on_done: Callable[[Any], None], busy_btns: List[QPushButton]) -> None:
+    def _run_func(self, fn: Callable[[Callable[[str], None]], Any], on_done: Callable[[Any], None], busy_btns: List[QPushButton],
+                  on_fail: Optional[Callable[[str], None]] = None, quiet: bool = False) -> None:
         if self.fthread and self.fthread.isRunning():
-            QMessageBox.information(self, "잠시만요", "목록을 받는 중입니다.")
+            if not quiet:
+                self._append("목록을 받는 중입니다. 잠시 후 다시 눌러 주세요.")
             return
         for b in busy_btns:
             b.setEnabled(False)
@@ -608,13 +610,20 @@ class MainWindow(QMainWindow):
         def _done(res: Any) -> None:
             try:
                 on_done(res)
+            except Exception as e:  # noqa: BLE001
+                self._append("처리 오류: " + str(e))
             finally:
                 _finish()
 
         def _fail(msg: str) -> None:
             _finish()
             self._append("오류: " + msg)
-            if not self._batch:
+            if on_fail:
+                try:
+                    on_fail(msg)
+                except Exception:
+                    pass
+            if not self._batch and not quiet:
                 QMessageBox.warning(self, "오류", msg)
 
         self.fworker.done.connect(_done)
@@ -836,8 +845,10 @@ class MainWindow(QMainWindow):
         self.dj_ed_gu_find.textChanged.connect(self.dj_lst_gu.filter)
         self.dj_ed_dong = QLineEdit()
         self.dj_ed_dong.setPlaceholderText("동 이름으로 좁히기 (쉼표, 비우면 시군구 전체) 예: 역삼, 삼성")
+        self.dj_btn_sido_all = QPushButton("시도 전체 선택")
+        self.dj_btn_sido_all.clicked.connect(lambda: self._dj_check_all_sido(True))
         self.dj_btn_sido_clear = QPushButton("시도 전체 해제")
-        self.dj_btn_sido_clear.clicked.connect(lambda: self.dj_lst_sido.check_all(False))
+        self.dj_btn_sido_clear.clicked.connect(lambda: self._dj_check_all_sido(False))
         self.dj_btn_gu_all = QPushButton("보이는 시군구 전체 선택")
         self.dj_btn_gu_all.clicked.connect(lambda: self.dj_lst_gu.check_all(True))
         self.dj_btn_gu_clear = QPushButton("시군구 전체 해제")
@@ -846,7 +857,10 @@ class MainWindow(QMainWindow):
         rg.addWidget(QLabel("시 · 군 · 구  (시도를 고르면 채워집니다)"), 0, 1)
         rg.addWidget(self.dj_lst_sido, 1, 0)
         rg.addWidget(self.dj_lst_gu, 1, 1)
-        rg.addWidget(self.dj_btn_sido_clear, 2, 0)
+        sidorow = QHBoxLayout()
+        sidorow.addWidget(self.dj_btn_sido_all)
+        sidorow.addWidget(self.dj_btn_sido_clear)
+        rg.addLayout(sidorow, 2, 0)
         rg.addWidget(self.dj_ed_gu_find, 2, 1)
         gurow = QHBoxLayout()
         gurow.addWidget(self.dj_btn_gu_all)
@@ -957,33 +971,63 @@ class MainWindow(QMainWindow):
         self.dj_regions = read_json(os.path.join(self.base_dir, DJ_REGIONS_FILE)) or {}
         sidos = self.dj_regions.get("sidos") or list(dj.BUILTIN_SIDOS)
         self.dj_regions.setdefault("sidos", sidos)
-        self.dj_regions.setdefault("gus", {})
+        gus = dict(dj.BUILTIN_GUS)
+        gus.update(self.dj_regions.get("gus") or {})
+        self.dj_regions["gus"] = gus
         self.dj_regions.setdefault("dongs", {})
+        self._dj_gu_fetching = False
+        self._dj_gu_recheck = False
         self.dj_lst_sido.set_items([s["name"] for s in sidos])
 
     def _dj_sido_ids(self, names: List[str]) -> List[Dict[str, Any]]:
         return [s for s in self.dj_regions.get("sidos", []) if s["name"] in set(names)]
 
+    def _dj_check_all_sido(self, on: bool) -> None:
+        self.dj_lst_sido.blockSignals(True)
+        try:
+            self.dj_lst_sido.check_all(on)
+        finally:
+            self.dj_lst_sido.blockSignals(False)
+        self._dj_on_sido_changed()
+
     def _dj_on_sido_changed(self, *_: Any) -> None:
-        checked = self.dj_lst_sido.checked()
-        sel = self._dj_sido_ids(checked)
-        missing = [s for s in sel if str(s["_id"]) not in self.dj_regions.get("gus", {})]
-        if missing:
+        try:
+            self._dj_fill_gu()
+            sel = self._dj_sido_ids(self.dj_lst_sido.checked())
+            missing = [s for s in sel if not self.dj_regions.get("gus", {}).get(str(s["_id"]))]
+            if not missing:
+                return
+            if self._dj_gu_fetching or (self.fthread and self.fthread.isRunning()):
+                self._dj_gu_recheck = True   # 받는 중이면 끝난 뒤 다시 확인
+                return
+            self._dj_gu_fetching = True
+
             def fn(log: Callable[[str], None]) -> Dict[str, List[Dict[str, Any]]]:
                 cli = dj.DaangnJobsClient(log, delay=(0.1, 0.3))
                 out: Dict[str, List[Dict[str, Any]]] = {}
                 for s in missing:
                     log(f"{s['name']} 시군구 목록 받는 중...")
-                    out[str(s["_id"])] = cli.region_children(int(s["_id"]))
+                    try:
+                        out[str(s["_id"])] = cli.region_children(int(s["_id"]))
+                    except Exception as e:  # noqa: BLE001
+                        log(f"  {s['name']} 실패: {e}")
                 return out
 
             def done(res: Dict[str, List[Dict[str, Any]]]) -> None:
-                self.dj_regions.setdefault("gus", {}).update(res)
+                self._dj_gu_fetching = False
+                self.dj_regions.setdefault("gus", {}).update({k: v for k, v in res.items() if v})
                 write_json(os.path.join(self.base_dir, DJ_REGIONS_FILE), self.dj_regions)
                 self._dj_fill_gu()
+                if self._dj_gu_recheck:
+                    self._dj_gu_recheck = False
+                    QTimer.singleShot(0, self._dj_on_sido_changed)
 
-            self._run_func(fn, done, [self.dj_btn_start])
-        self._dj_fill_gu()
+            def fail(_msg: str) -> None:
+                self._dj_gu_fetching = False
+
+            self._run_func(fn, done, [], on_fail=fail, quiet=True)
+        except Exception as e:  # noqa: BLE001
+            self._dj_append("시군구 목록 처리 오류: " + str(e))
 
     def _dj_gu_label(self, sido: Dict[str, Any], gu: Dict[str, Any]) -> str:
         return f"{sido['name']} {gu['name']}"
@@ -1630,7 +1674,32 @@ APP_STYLE = """
             """
 
 
+def _install_crash_guard() -> None:
+    """창 모드 exe 는 stdout/stderr 가 없어 예외 출력 자체가 또 예외가 된다 → 파일로 돌리고 전역 예외는 기록만."""
+    import io
+    log_path = os.path.join(base_dir(), "오류기록.log")
+    if getattr(sys, "frozen", False) or sys.stderr is None or sys.stdout is None:
+        try:
+            f = open(log_path, "a", encoding="utf-8", buffering=1)
+            sys.stderr = f
+            sys.stdout = f
+        except Exception:
+            sys.stderr = io.StringIO()
+            sys.stdout = io.StringIO()
+
+    def hook(t, v, tb):
+        import traceback
+        try:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} 처리되지 않은 오류" + chr(10) + "".join(traceback.format_exception(t, v, tb)) + chr(10))
+        except Exception:
+            pass
+
+    sys.excepthook = hook
+
+
 def main() -> None:
+    _install_crash_guard()
     argv = sys.argv[1:]
     batch = "--run-all" in argv
     app = QApplication.instance() or QApplication(sys.argv)
