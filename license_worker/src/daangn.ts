@@ -14,7 +14,7 @@ import DAANGN_HTML from "./daangn.html";
 import { layout } from "./layout";
 import { verifyPassword } from "./auth";
 import { collectPhotos, proxyImage, getSetting, setSetting } from "./photos";
-import { matchUnits } from "./listings";
+import { matchUnits, parsePastedText, ingest, kst } from "./listings";   // 은주루틴 탭(routine-*)은 재원루틴과 같은 대조·저장 함수를 쓴다 (2026-10-13)
 import { staffLookup } from "./staffdb";
 import { briefApi } from "./brief";   // 손님 브리핑 (포털 탭, 2026-10-10)
 import { naverad } from "./naverad";   // 네이버 광고정리 (포털 탭, 2026-10-10)
@@ -313,6 +313,45 @@ async function apiHandler(c: any) {
   if (action === "db-lookup") {
     if (!me.features.includes("db")) return json(c, { error: "이 계정에는 'DB 조회' 권한이 없습니다. 관리자에게 요청하세요." }, 403);
     return json(c, await staffLookup(db, me.username, q("q")));
+  }
+
+  // ---- 은주루틴 (기능 routine, 2026-10-13): 어드민 재원루틴(/admin/routine)과 같은 두 가지를 직원 포털 탭으로.
+  //      대조는 전체 DB(listings)와, 저장도 같은 전체 DB에 쌓인다(올린 사람 = 이 계정). 하루 한도 없음 — 이 기능을 켠 계정(은주2)만.
+  if (action.startsWith("routine-")) {
+    if (!me.features.includes("routine")) return json(c, { error: "이 계정에는 '은주루틴' 권한이 없습니다. 관리자(사용자 관리)에게 요청하세요." }, 403);
+    const body: any = c.req.method === "POST" ? await c.req.json().catch(() => ({})) : {};
+    if (action === "routine-match") {
+      const want: any[] = Array.isArray(body.items) ? body.items : [];
+      const items = await matchUnits(db, want);
+      const hit = items.filter((x: any) => x.phone).length;
+      await addLog(db, me.username, "routine", "매물중복DB대조", `${str(body.file || "글")} · ${items.length}줄 중 ${hit}건 찾음`, items.length);
+      return json(c, { items });
+    }
+    if (action === "routine-paste") {
+      const { rows, skipped } = parsePastedText(String(body.text || ""));
+      if (!rows.length) return json(c, { success: false, message: "지번(예: 논현동 124-12)이 들어 있는 줄이 없습니다.", skipped });
+      const r = await ingest(db, me.username, str(body.site) || "임대인", "텍스트 붙여넣기 " + kst(nowIso()).slice(0, 16), rows.slice(0, 500));
+      await addLog(db, me.username, "routine", "DB저장(텍스트)", `추가 ${r.inserted}건 · 갱신 ${r.updated}건${r.dup ? ` · 중복 ${r.dup}건` : ""}`, r.inserted);
+      return json(c, { success: true, ...r, parsed: rows.length, skipped });
+    }
+    if (action === "routine-upload") {
+      const rowsIn: any[] = Array.isArray(body.rows) ? body.rows : [];
+      if (rowsIn.length > 1000) return json(c, { success: false, message: "한 번에 1000행까지 보낼 수 있습니다." }, 413);
+      const r = await ingest(db, me.username, str(body.site), str(body.file), rowsIn);
+      await addLog(db, me.username, "routine", "DB저장(엑셀)", `${str(body.file)} · 추가 ${r.inserted}건 · 갱신 ${r.updated}건${r.dup ? ` · 중복 ${r.dup}건` : ""}`, r.inserted);
+      return json(c, { success: true, ...r });
+    }
+    if (action === "routine-manual") {
+      const g = (k: string) => str(body[k]);
+      if (!g("addr")) return json(c, { success: false, message: "지번·호수를 적어주세요." });
+      const row: Record<string, string> = { "지번·호수": g("addr"), "임대인 연락처": g("phone"), "기타 연락처": g("contacts"), "종류": g("kind"), "거래": g("deal"), "금액": g("price"), "이름": g("title"), "메모": g("memo") };
+      for (const k of Object.keys(row)) if (!row[k]) delete row[k];
+      const r = await ingest(db, me.username, g("site") || "임대인", "수기 입력", [row]);
+      await addLog(db, me.username, "routine", "DB저장(수기)", `${g("addr")} ${g("phone")}`.trim() + (r.dup ? " — 중복이라 안 넣음" : ""), r.inserted);
+      if (r.dup) return json(c, { success: false, message: `중복: 같은 지번·호수에 같은 연락처가 이미 2건 있어 추가하지 않았습니다 (${r.dupList[0] || ""})` });
+      return json(c, { success: true, ...r });
+    }
+    return json(c, { error: "없는 창구: " + action }, 404);
   }
 
   // ---- 당근 (기능 daangn)

@@ -13,7 +13,7 @@ routine.get("/admin/routine", async (c) => {
   const body = html`
     <div class="page-head">
       <h1>재원루틴</h1>
-      <span class="small muted">매일 하는 일 두 가지를 순서대로 — ① 수집 엑셀을 DB와 대조해서 시작하고 ② 끝나면 새로 안 번호를 DB에 저장합니다. 쌓인 DB 는 <a href="/admin/listings">매물·임대인 DB</a> 탭에서 봅니다.</span>
+      <span class="small muted">매일 하는 일 두 가지를 순서대로 — ① 수집 엑셀을 DB와 대조해서 시작하고 ② 끝나면 새로 안 번호를 DB에 저장합니다. 쌓인 DB 는 <a href="/admin/listings">매물·임대인 DB</a> 탭에서 봅니다. 직원 포털에서는 기능 <b>은주루틴</b>을 켠 계정(은주2)에 같은 두 가지가 "은주루틴" 탭으로 보이고, 거기서 넣은 것도 이 전체 DB에 쌓입니다.</span>
     </div>
     ${notice ? html`<div class="notice">${notice}</div>` : ""}
 

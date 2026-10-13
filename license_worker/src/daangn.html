@@ -157,7 +157,7 @@
   table.bulk .btn{padding:3px 8px; font-size:11px}
   table.bulk tr.done td{background:#f7fdf9; color:#4b5563}
 </style>
-<style>#csubmit,#cdaangn,#bregister,label:has(#blgall),label:has(input[data-lg]){display:none!important}.tab[data-t=photo] .n,.tab[data-t=db] .n,.tab[data-t=fill] .n,.tab[data-t=log] .n,.tab[data-t=brief] .n,.tab[data-t=naverad] .n{display:none}</style>
+<style>#csubmit,#cdaangn,#bregister,label:has(#blgall),label:has(input[data-lg]){display:none!important}.tab[data-t=photo] .n,.tab[data-t=db] .n,.tab[data-t=fill] .n,.tab[data-t=log] .n,.tab[data-t=brief] .n,.tab[data-t=naverad] .n,.tab[data-t=routine] .n{display:none}</style>
 <style>
   .bf-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px}
   .bf-head h1{margin:0;font-size:22px;color:var(--accent-dark)}
@@ -437,8 +437,8 @@ async function boot() {
   try { S.me = await api('summary') } catch (e) { if (e.message !== '401') renderGate(e.message); return }
   await loadPrefs()
   S.dg = CONFIG.DAANGN_API ? await dapi('summary').catch(() => null) : S.me   // 당근 광고 서버의 내 정보(권한·연결·안전장치)
-  const fts = S.me.features || []; const order = [].concat(fts.includes('brief') ? ['brief'] : [], fts.includes('naverad') ? ['naverad'] : [], fts.includes('daangn') ? ['create', 'uploads'] : [], fts.includes('photo') ? ['photo'] : [], fts.includes('db') ? ['db'] : [])   // 직원에겐 '내 활동'·'매물중복DB대조' 탭 없음 (사용자 결정 2026-10-10)
-  if (!fts.includes('daangn') && !fts.includes('photo') && !fts.includes('brief') && !fts.includes('db')) setTimeout(() => toast('이 계정에는 아직 켜진 기능이 없습니다. 관리자(사용자 관리)에게 요청하세요.'), 400)
+  const fts = S.me.features || []; const order = [].concat(fts.includes('routine') ? ['routine'] : [], fts.includes('brief') ? ['brief'] : [], fts.includes('naverad') ? ['naverad'] : [], fts.includes('daangn') ? ['create', 'uploads'] : [], fts.includes('photo') ? ['photo'] : [], fts.includes('db') ? ['db'] : [])   // 직원에겐 '내 활동'·'매물중복DB대조' 탭 없음 (사용자 결정 2026-10-10) · routine = 은주루틴 (2026-10-13)
+  if (!fts.includes('daangn') && !fts.includes('photo') && !fts.includes('brief') && !fts.includes('db') && !fts.includes('naverad') && !fts.includes('routine')) setTimeout(() => toast('이 계정에는 아직 켜진 기능이 없습니다. 관리자(사용자 관리)에게 요청하세요.'), 400)
   if (CONFIG.DAANGN_API && dgMine()) order.splice(Math.max(1, order.indexOf('uploads') + 1), 0, 'daangn')   // 권한 있는 사람만 '🥕 당근 광고' 탭
   if (!order.length) return renderGate('이 계정에는 아직 켜진 기능이 없습니다. 관리자(사용자 관리)에서 손님 브리핑·당근 광고·사진950·DB 조회 중 필요한 기능을 켜 달라고 하세요.')
   if (!order.includes(S.tab)) S.tab = order[0]
@@ -454,7 +454,7 @@ async function refresh() {
 }
 
 /* ── 껍데기 ───────────────────────────────────────────── */
-const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', daangn:'🥕 당근 광고', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함', photo:'사진 950', db:'지번 조회', fill:'매물중복DB대조', brief:'🧾 손님 브리핑', naverad:'N 광고정리', log:'내 활동' }
+const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', daangn:'🥕 당근 광고', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함', photo:'사진 950', db:'지번 조회', fill:'매물중복DB대조', brief:'🧾 손님 브리핑', naverad:'N 광고정리', routine:'🗓 은주루틴', log:'내 활동' }
 function renderShell(order) {
   el.innerHTML = `
     <header>
@@ -518,7 +518,8 @@ async function load(tab, quiet) {
     S.painted = 'create'; return
   }
   if (tab === 'daangn') { paintDaangnTab(); S.painted = 'daangn'; return }
-  const paint = { supply: paintSupply, review: paintReview, cs: paintCS, uploads: paintUploads, photo: paintPhoto, db: paintDb, fill: paintFill, brief: paintBrief, naverad: paintNaverad, log: paintLog }[tab]
+  const paint = { supply: paintSupply, review: paintReview, cs: paintCS, uploads: paintUploads, photo: paintPhoto, db: paintDb, fill: paintFill, brief: paintBrief, naverad: paintNaverad, routine: paintRoutine, log: paintLog }[tab]
+  if (tab === 'routine') { paintRoutine(); S.painted = 'routine'; return }
   if (tab === 'naverad') { paintNaverad(); S.painted = 'naverad'; return }
   if (tab === 'brief') { paintBrief(); S.painted = 'brief'; return }
   if (tab === 'fill') { paintFill(); S.painted = 'fill'; return }
@@ -2501,7 +2502,7 @@ async function paintDaangnTab() {
 
 
 /* ── 직원 포털 탭: 사진 950 (기능 photo) · 내 활동 ── build_daangn_html.py 가 daangn.html 에 끼워 넣는다 */
-const APP_KO = { daangn: '당근 광고', photo: '사진950', crawl: '매물 수집기', db: 'DB 조회' }
+const APP_KO = { daangn: '당근 광고', photo: '사진950', crawl: '매물 수집기', db: 'DB 조회', routine: '은주루틴' }
 function paintLog() {
   S.painted = 'log'
   const rows = (S.data.log && S.data.log.rows) || []
@@ -2622,8 +2623,13 @@ function paintDb() {
 function paintFill() {
   S.painted = 'fill'
   if (document.getElementById('fl_box')) return
-  document.getElementById('body').innerHTML = `
-    <div class="paste" id="fl_box" style="border:2px dashed #4fc3f7;background:#eef7ff">
+  const body = document.getElementById('body'); body.innerHTML = ''
+  fillMount(body, 'fill-match')
+}
+/* 대조 상자를 root 안에 그린다 — matchAction: 'fill-match'(기능 db, 하루 500줄) 또는 'routine-match'(기능 routine, 한도 없음) */
+function fillMount(root, matchAction) {
+  root.innerHTML = `
+    <div class="paste" id="fl_box" style="border:2px dashed #4fc3f7;background:#eef7ff;margin-top:0">
       <div style="font-weight:800;color:#0277bd">📎 매물중복DB대조 <span style="font-weight:400;color:var(--dim);font-size:12px">매일 뽑는 수집 엑셀(네이버·당근·온하우스)을 여기에 끌어다 놓거나 고르세요. 줄마다 지번(+호수)으로 DB 를 대조해 <b>링크 바로 옆에 하늘색 "임대인 연락처(DB)" 칸</b>을 끼워 넣습니다. 나머지 칸은 그대로, 없으면 빈칸. 끝나면 [내려받기] 버튼이 생깁니다.</span></div>
       <div class="row-acts" style="align-items:center;margin-top:8px"><input type="file" id="fl_file" accept=".xlsx,.xlsm" multiple style="font:inherit"><button class="btn b" id="fl_go" style="background:#29b6f6;border-color:#29b6f6">DB 대조하기</button><span class="hint" id="fl_msg" style="margin:0"></span></div>
       <div class="row-acts" style="align-items:center;margin-top:8px"><textarea id="fl_text" rows="2" placeholder="또는 지번을 글로 — 한 줄에 하나 (예: 석촌동 1-1 302호)" style="flex:1;min-width:220px;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:10px"></textarea><button class="btn" id="fl_txt">글로 찾기</button></div>
@@ -2635,7 +2641,7 @@ function paintFill() {
   const ADDR_COLS = ['세부주소','지번주소','전체주소','주소_호실','지번·호수','지번','주소','소재지'], HO_COLS = ['호수','호실','호'], LINK_COLS = ['매물번호','매물_URL','URL','링크','url']
   const hdrIdx = (hdr, names) => { for (const n of names) { const j = hdr.findIndex(h => String(h || '').trim() === n); if (j >= 0) return j } return -1 }
   const loadExcelJS = () => new Promise((ok, bad) => { if (typeof ExcelJS !== 'undefined') return ok(); const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js'; sc.onload = ok; sc.onerror = () => bad(new Error('엑셀 라이브러리를 못 불러왔습니다')); document.head.appendChild(sc) })
-  const match = async (items, file) => { let out = []; for (let i = 0; i < items.length; i += 500) { const r = await api('fill-match', { items: items.slice(i, i + 500), file }); out = out.concat(r.items || []) } return out }
+  const match = async (items, file) => { let out = []; for (let i = 0; i < items.length; i += 500) { const r = await api(matchAction, { items: items.slice(i, i + 500), file }); out = out.concat(r.items || []) } return out }
   const cellText = v => v && typeof v === 'object' ? (v.text || v.result || v.hyperlink || (v.richText ? v.richText.map(x => x.text).join('') : '')) : v
   const fillWorkbook = async file => {
     await loadExcelJS()
@@ -2687,6 +2693,103 @@ function paintFill() {
       $d('fl_out').innerHTML = `<div class="card scroll"><table><thead><tr><th>적은 지번</th><th>찾은 단위</th><th>임대인 연락처(DB)</th></tr></thead><tbody>${h}</tbody></table></div>`; $d('fl_msg').textContent = `${lines.length}줄 중 ${hit}건 찾음`
     } catch (e) { if (e.message !== '401') $d('fl_msg').textContent = '오류: ' + e.message }
   }
+}
+
+/* ── 은주루틴 (기능 routine, 2026-10-13): 어드민 '재원루틴' 탭과 같은 두 가지 — ① <시작> 매물중복DB대조(전체 DB와 대조, 한도 없음) ② <마무리> DB저장(텍스트 붙여넣기·엑셀 올리기·수기 입력 → 전체 DB에 쌓임). 어드민 사용자 관리에서 '은주루틴'을 켠 계정(은주2)만 */
+function paintRoutine() {
+  S.painted = 'routine'
+  if (document.getElementById('rt_root')) return
+  const I = 'font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:10px'
+  document.getElementById('body').innerHTML = `
+    <div id="rt_root">
+      <div class="paste" style="border:2px solid #4fc3f7;background:#f1f9ff;margin-top:0">
+        <div style="font-weight:800;color:#0277bd;font-size:16px">① &lt;시작&gt; 매물중복DB대조 <span style="font-weight:400;color:var(--dim);font-size:12px">오늘 뽑은 수집 엑셀을 전체 DB와 대조합니다.</span></div>
+        <div id="rt_fill" style="margin-top:8px"></div>
+      </div>
+      <div class="paste" style="border:2px solid #f6b4cf;background:#fff4f8">
+        <div style="font-weight:800;color:#c2185b;font-size:16px">② &lt;마무리&gt; DB저장 <span style="font-weight:400;color:var(--dim);font-size:12px">오늘 새로 안 번호를 전체 DB에 저장합니다. 같은 지번·호수에 같은 연락처가 이미 2건 있으면 더 넣지 않습니다.</span></div>
+        <div style="margin-top:10px;font-weight:700">텍스트 붙여넣기</div>
+        <div class="row-acts" style="align-items:flex-start;margin-top:6px"><input id="rt_pssite" value="임대인" placeholder="구분" style="${I};width:90px"><textarea id="rt_pstext" rows="4" placeholder="카톡·메모·엑셀에서 복사한 글을 그대로 붙여넣으세요. 한 줄 = 매물 하나.&#10;예) 논현동 124-12 302호 010-1234-5678 월세 5000/150 빌라 김사장님" style="flex:1;min-width:260px;margin:0"></textarea><button class="btn b" id="rt_psgo">넣기</button></div>
+        <div class="hint" id="rt_psmsg">지번·호수, 임대인 연락처(첫 번호)·그 밖의 번호, 거래·금액, 종류, 이름을 줄마다 알아서 찾아 칸에 넣고, 못 알아본 글은 메모에 남깁니다. 지번이 없는 줄은 건너뜁니다.</div>
+        <div style="margin-top:14px;font-weight:700">엑셀 올리기</div>
+        <div class="row-acts" style="align-items:center;margin-top:6px"><input id="rt_upsite" value="임대인" placeholder="구분 (예: 임대인)" title="네이버·당근·온하우스 수집기 엑셀은 열 이름으로 자동 판별됩니다" style="${I};width:120px"><input type="file" id="rt_upfile" accept=".xlsx,.xls,.csv" multiple style="font:inherit"><button class="btn b" id="rt_upgo">올리기</button></div>
+        <div class="hint" id="rt_upmsg">열 이름 줄은 자동으로 찾습니다. 지번·주소와 임대인 연락처는 맨 앞에, 임차인·세입자·관리·중개 번호는 그 옆 칸에 정리됩니다. 같은 행을 다시 올리면 중복 없이 갱신됩니다.</div>
+        <div style="margin-top:14px;font-weight:700">수기 입력</div>
+        <div class="row-acts" style="align-items:center;margin-top:6px">
+          <input id="rt_m_addr" placeholder="지번·호수 (예: 논현동 124-12 302호)" style="${I};min-width:240px"><input id="rt_m_phone" placeholder="임대인 연락처" style="${I};width:140px"><input id="rt_m_contacts" placeholder="임차인·관리 등 (예: 임차인 010-… 관리 02-…)" style="${I};min-width:220px">
+          <input id="rt_m_kind" placeholder="종류" style="${I};width:80px"><input id="rt_m_deal" placeholder="거래" style="${I};width:70px"><input id="rt_m_price" placeholder="금액" style="${I};width:100px"><input id="rt_m_title" placeholder="이름" style="${I};width:90px"><input id="rt_m_memo" placeholder="메모" style="${I};min-width:150px"><input id="rt_m_site" value="임대인" placeholder="구분" style="${I};width:80px">
+          <button class="btn b" id="rt_mgo">추가</button></div>
+        <div class="hint" id="rt_mmsg"></div>
+      </div>
+    </div>`
+  const $d = id => document.getElementById(id)
+  fillMount($d('rt_fill'), 'routine-match')
+  // 텍스트 붙여넣기
+  $d('rt_psgo').onclick = async () => {
+    const text = $d('rt_pstext').value; if (!text.trim()) { $d('rt_psmsg').textContent = '붙여넣을 글이 없습니다'; return }
+    $d('rt_psgo').disabled = true; $d('rt_psmsg').textContent = '정리해서 넣는 중…'
+    try {
+      const r = await api('routine-paste', { site: $d('rt_pssite').value, text })
+      if (!r.success) { $d('rt_psmsg').textContent = r.message || '실패'; return }
+      $d('rt_psmsg').textContent = `넣었습니다: 추가 ${r.inserted}건 · 갱신 ${r.updated}건` + (r.dup ? ` · 중복으로 건너뜀 ${r.dup}건` : '') + (r.skipped && r.skipped.length ? ` · 지번 없어 건너뜀 ${r.skipped.length}줄` : '') + ` — 전체 DB(${r.site}) ${r.total}건`
+      $d('rt_pstext').value = ''; toast('DB에 저장했습니다')
+    } catch (e) { if (e.message !== '401') $d('rt_psmsg').textContent = '오류: ' + e.message }
+    finally { $d('rt_psgo').disabled = false }
+  }
+  // 엑셀 올리기 (SheetJS 로 읽어 500행씩)
+  const HW = ['매물','주소','연락처','임대인','번호','거래','월세','전세','매매','종류','이름','URL','등록','확인','지번','호수','면적','금액','메모','비고','성명','전화','건물','층','옵션','제목']
+  const isHeader = row => { const cells = (row || []).map(v => String(v == null ? '' : v).trim()).filter(Boolean); if (cells.length < 3) return false; const txt = cells.filter(v => v.length <= 20 && !/\d/.test(v)).length; if (txt < cells.length * 0.9) return false; let hits = 0; HW.forEach(w => { if (cells.some(v => v.indexOf(w) >= 0)) hits++ }); return hits >= 2 }
+  const findHeader = aoa => {
+    for (let i = 0; i < Math.min(aoa.length, 15); i++) if (isHeader(aoa[i])) return i
+    const sc = []; for (let i = 0; i < Math.min(aoa.length, 15); i++) { const seen = {}; let n = 0; (aoa[i] || []).forEach(v => { v = String(v == null ? '' : v).trim(); if (!v || v.length > 20 || /^https?:/i.test(v) || /^[\d,.\s/-]+$/.test(v) || seen[v]) return; seen[v] = 1; n++ }); sc.push(n) }
+    const mx = Math.max.apply(null, sc.concat([0])); if (mx < 2) return 0
+    for (let j = 0; j < sc.length; j++) if (sc[j] >= 3 && sc[j] >= mx * 0.6) return j
+    return 0
+  }
+  $d('rt_upgo').onclick = async () => {
+    const files = $d('rt_upfile').files, site = $d('rt_upsite').value.trim(), msg = $d('rt_upmsg')
+    if (!files.length) { msg.textContent = '엑셀 파일을 고르세요.'; return }
+    if (typeof XLSX === 'undefined') { msg.textContent = '엑셀 라이브러리를 아직 못 불러왔습니다. 잠시 뒤 다시 눌러 주세요.'; return }
+    $d('rt_upgo').disabled = true; let totalIns = 0, totalUpd = 0, totalDup = 0; const dupList = [], fail = []
+    try {
+      for (const f of files) {
+        try {
+          const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true })
+          const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' })
+          const hi = findHeader(aoa); let hdr = (aoa[hi] || []).map(h => String(h == null ? '' : h).trim()); const rows = []
+          for (let i = hi + 1; i < aoa.length; i++) {
+            if (isHeader(aoa[i])) { hdr = aoa[i].map(h => String(h == null ? '' : h).trim()); continue }
+            const o = {}; let any = false; hdr.forEach((h, j) => { if (!h) return; let v = aoa[i][j]; if (v == null) return; v = String(v).trim(); if (v) { o[h] = v; any = true } }); if (any) rows.push(o)
+          }
+          if (!rows.length) { fail.push(f.name + ' (행 없음)'); continue }
+          for (let k = 0; k < rows.length; k += 500) {
+            msg.textContent = `올리는 중… ${f.name} ${Math.min(k + 500, rows.length)}/${rows.length}행`
+            const r = await api('routine-upload', { site, file: f.name, rows: rows.slice(k, k + 500) })
+            if (!r.success) { fail.push(f.name + ' (' + (r.message || '오류') + ')'); break }
+            totalIns += r.inserted; totalUpd += r.updated; totalDup += (r.dup || 0); (r.dupList || []).forEach(d => { if (dupList.length < 20) dupList.push(d) })
+          }
+        } catch (e) { if (e.message === '401') return; fail.push(f.name + ' (' + e.message + ')') }
+      }
+      msg.textContent = `완료: 추가 ${totalIns}건 · 갱신 ${totalUpd}건` + (totalDup ? ` · 중복으로 건너뜀 ${totalDup}건` : '') + (fail.length ? ' · 실패: ' + fail.join(', ') : '') + ' — 전체 DB에 쌓였습니다'
+      if (totalDup) alert('중복 ' + totalDup + '건은 넣지 않았습니다 — 같은 지번·호수에 같은 연락처가 이미 2건 있는 줄입니다.\n' + dupList.join('\n'))
+      if (totalIns || totalUpd) toast('DB에 저장했습니다')
+    } finally { $d('rt_upgo').disabled = false }
+  }
+  // 수기 입력
+  $d('rt_mgo').onclick = async () => {
+    const v = k => $d('rt_m_' + k).value.trim()
+    if (!v('addr')) { $d('rt_mmsg').textContent = '지번·호수를 적어주세요.'; $d('rt_m_addr').focus(); return }
+    $d('rt_mgo').disabled = true; $d('rt_mmsg').textContent = '넣는 중…'
+    try {
+      const r = await api('routine-manual', { addr: v('addr'), phone: v('phone'), contacts: v('contacts'), kind: v('kind'), deal: v('deal'), price: v('price'), title: v('title'), memo: v('memo'), site: v('site') })
+      if (!r.success) { $d('rt_mmsg').textContent = r.message || '실패'; return }
+      $d('rt_mmsg').textContent = (r.inserted ? '한 줄 추가했습니다.' : '이미 있는 줄이라 갱신했습니다.') + ` — 전체 DB(${r.site}) ${r.total}건`
+      ;['addr','phone','contacts','kind','deal','price','title','memo'].forEach(k => { $d('rt_m_' + k).value = '' }); $d('rt_m_addr').focus(); toast('DB에 저장했습니다')
+    } catch (e) { if (e.message !== '401') $d('rt_mmsg').textContent = '오류: ' + e.message }
+    finally { $d('rt_mgo').disabled = false }
+  }
+  // 엔터로 추가
+  ;['addr','phone','contacts','kind','deal','price','title','memo','site'].forEach(k => { $d('rt_m_' + k).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $d('rt_mgo').click() } }) })
 }
 
 /* ── 손님 브리핑 탭 (기능 brief): brief_admin.html 의 briefMount 를 토큰으로 그 자리에 그린다. 다른 탭에 갔다 와도 입력 중인 내용이 남게 DOM 을 보관 */
@@ -3128,7 +3231,7 @@ function naMount(){
 if(!(window.NA_CFG&&NA_CFG.deferred)) naMount();
 /*NA_JS_END*/
 const NA_MARKUP = "<div class=\"page-head\"><h1>네이버 광고정리</h1><span class=\"small muted\">위: 링크 넣으면 광고용 정보 자동 정리 · 아래: 지번으로 우리 DB + 지금 네이버에 걸린 매물 찾기 (줄을 누르면 그 매물이 바로 정리됩니다)</span></div>\n<div class=\"na-stack\">\n  <section class=\"panel green\">\n    <h2>⚡ 링크 자동 정리</h2>\n    <textarea id=\"na_links\" rows=\"4\" placeholder=\"아무 링크나 넣어주세요. 정리해드릴게요!  여러 개면 줄바꿈·쉼표·공백으로 구분&#10;https://new.land.naver.com/houses?articleNo=2653867465\"></textarea>\n    <div class=\"na-bar\"><button class=\"btn btn-primary\" id=\"na_go\">자동 정리</button><button class=\"btn\" id=\"na_clip\">📋 클립보드에서</button><span class=\"small muted\" id=\"na_msg\"></span></div>\n    <div class=\"na-bar\" id=\"na_tools\" style=\"display:none\"><button class=\"btn btn-primary\" id=\"na_save\">체크한 줄 DB에 저장</button><button class=\"btn\" id=\"na_dgbulk\" style=\"display:none\" title=\"체크한 줄의 링크를 당근 올리기 탭의 '여러 매물 한 번에' 목록에 넣습니다\">🥕 체크한 줄 당근 일괄 목록으로</button><button class=\"btn\" id=\"na_clear\" title=\"정리한 목록을 비웁니다 (DB 에 저장한 것은 그대로)\">목록 지우기</button><button class=\"btn\" id=\"na_xl\">엑셀 다운로드</button><button class=\"btn\" id=\"na_copyall\">전체 광고문구 복사</button><label class=\"small\"><input type=\"checkbox\" id=\"na_all\" checked> 전체 선택</label></div>\n    <div id=\"na_out\" class=\"na-out\"></div>\n  </section>\n  <section class=\"panel pink\">\n    <h2><span class=\"nlogo\">N</span>🔍 지번으로 매물 찾기</h2>\n    <div class=\"na-bar\"><input type=\"text\" id=\"na_q\" placeholder=\"예: 양재동 17-27 (구 이름을 붙이면 더 정확: 서초구 양재동 17-27)\" style=\"flex:1;min-width:240px\"><button class=\"btn btn-primary\" id=\"na_find\">찾기</button><label class=\"small\" style=\"display:flex;align-items:center;gap:5px;margin:0;white-space:nowrap\" title=\"같은 매물(종류·거래·금액·층·면적이 같은 것)을 여러 부동산이 올렸으면 한 줄로 묶어 'N곳' 으로 보여줍니다\"><input type=\"checkbox\" id=\"na_group\" checked style=\"width:16px;height:16px;margin:0\"> 중복매물 묶기</label></div>\n    <div class=\"small muted\" id=\"na_fmsg\">우리 DB 에 쌓인 줄은 바로, 네이버는 그 지번 자리(60m 안)의 매물을 모아 지번을 확인합니다 (5~15초). 줄을 누르면 오른쪽에 바로 정리됩니다.</div>\n    <div class=\"na-split\">\n      <div id=\"na_fout\" class=\"na-out\"></div>\n      <div class=\"na-pick\"><div id=\"na_pick\"><div class=\"small muted\" style=\"padding:14px\">← 결과 줄을 누르면 그 매물의 광고 정보가 여기에 정리됩니다 (위 링크 자동 정리와는 별개)</div></div><div id=\"na_bldg\" class=\"na-bldg\"></div></div>\n    </div>\n  </section>\n</div>"
-const BUILD = '2026-10-11 21:11 당근'
+const BUILD = '2026-10-13 15:24 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()
