@@ -6,6 +6,7 @@ import { adminSessionValid, adminSessionDelete } from "./daangn";   // 포털 �
 import { photos } from "./photos";
 import { telegram } from "./telegram";
 import { listings } from "./listings";
+import { routine } from "./routine";     // 재원루틴 /admin/routine (2026-10-13)
 import { staffdb } from "./staffdb";
 import { naverad } from "./naverad";
 import { hosu } from "./hosu";
@@ -144,6 +145,7 @@ app.use("/admin/*", async (c, next) => {
 app.route("/", photos);   // 사진 950 (src/photos.ts)
 app.route("/", telegram);   // 텔레그램 봇·예약 대기열 (src/telegram.ts)
 app.route("/", listings);   // 매물 DB (src/listings.ts)
+app.route("/", routine);    // 재원루틴 (src/routine.ts)
 app.route("/", staffdb);    // 직원용 DB 조회 /db (src/staffdb.ts)
 app.route("/", naverad);    // 네이버 광고정리 /admin/naverad (src/naverad.ts)
 app.route("/", hosu);       // 호수 추정 /admin/hosu (src/hosu.ts)

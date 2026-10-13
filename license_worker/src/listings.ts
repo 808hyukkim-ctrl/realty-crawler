@@ -14,7 +14,7 @@ import { html, raw } from "hono/html";
 import { layout } from "./layout";
 
 type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string; OWNER_KEY?: string };
-// 대표 키: 엑셀 내려받기(rows.json)·엑셀DB대조(match) 같은 '통째로 가져가는' 요청은 어드민 비밀번호 외에 이 키가 또 있어야 한다 (직원이 어드민에 들어와도 긁어가지 못하게, 2026-10-09)
+// 대표 키: 엑셀 내려받기(rows.json)·매물중복DB대조(match) 같은 '통째로 가져가는' 요청은 어드민 비밀번호 외에 이 키가 또 있어야 한다 (직원이 어드민에 들어와도 긁어가지 못하게, 2026-10-09)
 const ownerOk = (c: any) => !c.env.OWNER_KEY || String(c.req.header("x-owner-key") || "") === String(c.env.OWNER_KEY);
 export const listings = new Hono<{ Bindings: Bindings }>();
 
@@ -277,12 +277,13 @@ listings.post("/admin/listings/manual", async (c) => {
   const form = await c.req.formData();
   const g = (k: string) => String(form.get(k) ?? "").trim();
   const addr = g("addr");
-  if (!addr) return c.redirect("/admin/listings?err=" + encodeURIComponent("지번·호수를 적어주세요."));
+  const back = g("back").startsWith("/admin/") ? g("back") : "/admin/listings";   // 재원루틴 탭에서 넣으면 그 탭으로 돌아감 (2026-10-13)
+  if (!addr) return c.redirect(back + "?err=" + encodeURIComponent("지번·호수를 적어주세요."));
   const row: Record<string, string> = { "지번·호수": addr, "임대인 연락처": g("phone"), "기타 연락처": g("contacts"), "종류": g("kind"), "거래": g("deal"), "금액": g("price"), "이름": g("title"), "메모": g("memo") };
   for (const k of Object.keys(row)) if (!row[k]) delete row[k];
   const r = await ingest(c.env.DB, c.env.ADMIN_USER || "admin", g("site") || "임대인", "수기 입력", [row]);
-  if (r.dup) return c.redirect("/admin/listings?err=" + encodeURIComponent(`중복: 같은 지번·호수에 같은 연락처가 이미 2건 있어 추가하지 않았습니다 (${r.dupList[0] || ""})`));
-  return c.redirect("/admin/listings?added=" + (r.inserted ? 1 : 0) + "&site=" + encodeURIComponent(r.site));
+  if (r.dup) return c.redirect(back + "?err=" + encodeURIComponent(`중복: 같은 지번·호수에 같은 연락처가 이미 2건 있어 추가하지 않았습니다 (${r.dupList[0] || ""})`));
+  return c.redirect(back + "?added=" + (r.inserted ? 1 : 0) + (back === "/admin/listings" ? "&site=" + encodeURIComponent(r.site) : ""));
 });
 
 /** 행 묶음을 upsert — 돌아오는 값: 구분, 추가/갱신 건수, 그 구분의 총 건수 */
@@ -568,16 +569,7 @@ listings.get("/admin/listings", async (c) => {
       <button type="button" class="btn btn-primary" id="psgo">넣기</button>
       <span class="small muted" id="psmsg">지번·호수, 임대인 연락처(첫 번호)·그 밖의 번호, 거래·금액, 종류, 이름을 줄마다 알아서 찾아 칸에 넣고, 못 알아본 글은 메모에 남깁니다. 지번이 없는 줄은 건너뜁니다.</span>
     </div>
-    <div class="upbox fillbox" id="fillbox">
-      <b>엑셀DB대조</b>
-      <span class="small muted">매일 뽑는 수집 엑셀을 여기에 끌어다 놓거나 고르면, 줄마다 지번(+호수)으로 DB를 대조해 <b>링크 바로 옆에 하늘색 "임대인 연락처(DB)" 칸</b>을 끼워 넣습니다. 나머지 칸은 그대로, 없는 건 빈칸. 끝나면 [내려받기] 버튼이 생깁니다.</span>
-      <input type="file" id="fillfile" accept=".xlsx,.xlsm" multiple>
-      <button type="button" class="btn btn-primary" id="fillgo">DB 대조하기</button>
-      <textarea id="filltext" rows="2" placeholder="또는 지번을 글로 — 한 줄에 하나 (예: 석촌동 1-1 302호)"></textarea>
-      <button type="button" class="btn" id="filltxt">글로 찾기</button>
-      <span class="small muted" id="fillmsg"></span>
-      <div id="fillout" style="width:100%"></div>
-    </div>
+    <div class="upbox" style="border-style:dashed"><b>매물중복DB대조</b><span class="small muted">이 기능은 <a href="/admin/routine">재원루틴</a> 탭의 &lt;시작&gt; 으로 옮겼습니다.</span></div>
     <form class="search-form lf" method="get" id="lf">
       <select name="site"><option value="">전체 구분</option>${siteOpts}</select>
       <select name="user"><option value="">전체 계정</option>${userOpts}</select>
@@ -604,7 +596,7 @@ listings.get("/admin/listings", async (c) => {
     <style>${raw(LT_STYLE)}</style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-    <script>var LT_QS=${raw(JSON.stringify(qs(f)))}, LT_TOTAL=${total}, LT_SITE=${raw(JSON.stringify(f.site ? siteLabel(f.site) : "전체"))};${raw(LT_JS)}</script>`;
+    <script>var LT_QS=${raw(JSON.stringify(qs(f)))}, LT_TOTAL=${total}, LT_SITE=${raw(JSON.stringify(f.site ? siteLabel(f.site) : "전체"))};(function(){${raw(LT_CORE_JS)}${raw(LT_PAGE_JS)}})();</script>`;
   return c.html(layout("매물·임대인 DB", body));
 });
 
@@ -652,7 +644,7 @@ listings.post("/admin/listings/delete", async (c) => {
   return c.redirect("/admin/listings?" + qs({ site: f.site, q: "", from: "", to: "", user: "", file: "" }) + "&deleted=" + r.n);
 });
 
-const LT_STYLE = `
+export const LT_STYLE = `
 .lf{flex-wrap:wrap;align-items:center}
 .lf select,.lf input{display:inline-block;width:auto;margin:0;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);font-size:13px}
 .lf input[type=text]{min-width:260px}
@@ -723,11 +715,11 @@ const LT_STYLE = `
 #lkres .lkmore{color:var(--muted);font-size:12px;padding:6px 2px}
 `;
 
-// 브라우저 쪽: 헤더 줄 찾기 → 올리기 / 칸 클릭 수정 / 엑셀 만들기(지번·연락처가 맨 앞) / 조건 삭제
-const LT_JS = `
-(function(){
+// 공통(붙여넣기·엑셀 올리기·대표 키·헤더 찾기) — 매물·임대인 DB 화면과 재원루틴 화면이 같이 쓴다 (2026-10-13)
+export const LT_CORE_JS = `
   var $=function(i){return document.getElementById(i)};
-  // 대표 키: 엑셀 내려받기·엑셀DB대조 때 한 번 물어보고 이 탭(세션)에만 기억. 틀리면 다시 묻는다.
+  var esc=function(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')};
+  // 대표 키: 엑셀 내려받기·매물중복DB대조 때 한 번 물어보고 이 탭(세션)에만 기억. 틀리면 다시 묻는다.
   function ownerKey(force){ var k=''; try{ k=sessionStorage.getItem('owner_key')||''; }catch(_){} if(!k||force){ k=prompt('대표 키를 입력하세요 (DB 내려받기·대조 보호 — README 에 있음)')||''; k=k.trim(); try{ if(k) sessionStorage.setItem('owner_key',k); }catch(_){} } return k; }
   async function ownerFetch(url, opt){ opt=opt||{}; var h=Object.assign({}, opt.headers||{}); h['x-owner-key']=ownerKey(false); var r=await fetch(url, Object.assign({}, opt, {headers:h})); if(r.status===403){ try{ sessionStorage.removeItem('owner_key'); }catch(_){} h['x-owner-key']=ownerKey(true); r=await fetch(url, Object.assign({}, opt, {headers:h})); if(r.status===403){ try{ sessionStorage.removeItem('owner_key'); }catch(_){} throw new Error('대표 키가 맞지 않습니다'); } } return r; }
   // 열 이름 줄: 비어있지 않은 칸이 3개 이상이고 그 90% 가 '숫자 없는 20자 이하 글자' 이며 열 이름 낱말이 2개 이상 → 헤더.
@@ -745,17 +737,17 @@ const LT_JS = `
     for(var j=0;j<sc.length;j++){ if(sc[j]>=3 && sc[j]>=mx*0.6) return j; }
     return 0;
   }
-  $('psgo').onclick=async function(){
+  if($('psgo')) $('psgo').onclick=async function(){
     var text=$('pstext').value; if(!text.trim()){ $('psmsg').textContent='붙여넣을 글이 없습니다'; return; }
     $('psgo').disabled=true; $('psmsg').textContent='정리해서 넣는 중…';
     try{
       var r=await fetch('/admin/listings/paste',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({site:$('pssite').value,text:text})}).then(function(x){return x.json()});
       if(!r.success){ $('psmsg').textContent=r.message||'실패'; $('psgo').disabled=false; return; }
       $('psmsg').textContent='넣었습니다: 추가 '+r.inserted+'건 · 갱신 '+r.updated+'건'+(r.skipped&&r.skipped.length?' · 지번 없어 건너뜀 '+r.skipped.length+'줄':'')+' — 잠시 뒤 표가 새로 뜹니다';
-      setTimeout(function(){ location.href='/admin/listings?file='+encodeURIComponent('텍스트 붙여넣기'); },900);
+      if(!window.LT_STAY) setTimeout(function(){ location.href='/admin/listings?file='+encodeURIComponent('텍스트 붙여넣기'); },900); else { $('psgo').disabled=false; $('pstext').value=''; }
     }catch(e){ $('psmsg').textContent='오류: '+e.message; $('psgo').disabled=false; }
   };
-  $('upgo').onclick=async function(){
+  if($('upgo')) $('upgo').onclick=async function(){
     var files=$('upfile').files; var site=$('upsite').value.trim(); var msg=$('upmsg');
     if(!files.length){ msg.textContent='엑셀 파일을 고르세요.'; return; }
     $('upgo').disabled=true; var totalIns=0,totalUpd=0,totalDup=0,dupList=[],fail=[];
@@ -783,8 +775,11 @@ const LT_JS = `
     msg.textContent='완료: 추가 '+totalIns+'건 · 갱신 '+totalUpd+'건'+(totalDup?' · 중복으로 건너뜀 '+totalDup+'건':'')+(fail.length?' · 실패: '+fail.join(', '):'')+' — 잠시 후 목록을 새로 불러옵니다.';
     $('upgo').disabled=false;
     if(totalDup){ alert('중복 '+totalDup+'건은 넣지 않았습니다 — 같은 지번·호수에 같은 연락처가 이미 2건 있는 줄입니다.'+String.fromCharCode(10)+dupList.join(String.fromCharCode(10))); }
-    if(totalIns||totalUpd) setTimeout(function(){ location.href='/admin/listings'; },1500);
+    if((totalIns||totalUpd)&&!window.LT_STAY) setTimeout(function(){ location.href='/admin/listings'; },1500);
   };
+`;
+// 매물중복DB대조 (수집 엑셀에 임대인 연락처(DB) 칸 끼우기) — 재원루틴 <시작> (2026-10-13 이동)
+export const LT_FILL_JS = `
   // ── 엑셀에 임대인 연락처 채우기: ExcelJS 로 서식·링크 그대로 두고 링크 열 옆에 열 하나만 끼운다
   var ADDR_COLS=['세부주소','지번주소','전체주소','주소_호실','지번·호수','지번','주소','소재지'], HO_COLS=['호수','호실','호'], LINK_COLS=['매물번호','매물_URL','URL','링크','url'];
   function hdrIdx(hdr, names){ for(var i=0;i<names.length;i++){ var j=hdr.findIndex(function(h){return String(h||'').trim()===names[i]}); if(j>=0) return j; } return -1; }
@@ -837,8 +832,10 @@ const LT_JS = `
     lines.forEach(function(l,i){ var r=res[i]||{}; if(r.phone) hit++; h+='<tr><td>'+esc(l)+'</td><td>'+esc(r.lot||'')+(r.ho?' '+esc(r.ho)+'호':'')+'</td><td><b>'+esc(r.phone||'')+'</b></td></tr>'; });
     $('fillout').innerHTML=h+'</table>'; $('fillmsg').textContent=lines.length+'줄 중 '+hit+'건 찾음'; FILL_DONE=[];
   };
+`;
+// 매물·임대인 DB 화면 전용 (지번 조회·칸 수정·선택 삭제·엑셀 내려받기)
+const LT_PAGE_JS = `
   // 지번 조회: 치는 대로(0.3초 뒤) 찾기, Enter·[찾기]도 됨. 결과 표의 연락처·메모·지번 칸도 클릭 수정.
-  var esc=function(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')};
   var lkTimer=null, lkLast='';
   async function lookup(){
     var q=$('lkq').value.trim(); var res=$('lkres'), msg=$('lkmsg');
@@ -911,5 +908,5 @@ const LT_JS = `
   }
   $('xl').onclick=function(){ exportXlsx($('xl'), window.LT_QS, window.LT_SITE); };
   $('xlall').onclick=function(){ exportXlsx($('xlall'), '', '전체'); };
-})();
 `;
+

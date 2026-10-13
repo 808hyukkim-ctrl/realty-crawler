@@ -181,6 +181,12 @@
   .bf-th{position:relative;width:64px;height:64px}
   .bf-th img{width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border);background:#f3f4f6}
   .bf-th button{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:1px solid #f5c9db;background:#fff;color:var(--danger);font-weight:900;line-height:1;padding:0;cursor:pointer}
+  .bf-th{cursor:grab} .bf-th.dragging{opacity:.4} .bf-th.over img{outline:3px solid var(--accent);outline-offset:-3px}
+  .bf-th.first::before{content:"대표";position:absolute;left:0;top:0;background:var(--accent);color:#fff;font-size:10px;padding:1px 5px;border-radius:8px 0 6px 0;z-index:1}
+  .bf-th .bf-mv{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;opacity:0;transition:opacity .15s}
+  .bf-th:hover .bf-mv{opacity:1}
+  .bf-th .bf-mv button{position:static;width:22px;height:20px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,.95);color:var(--accent-dark);font-size:14px;line-height:1;font-weight:900}
+  .bf-th .bf-mv button[disabled]{opacity:.3;cursor:default}
   .bf-th.own::after{content:"올림";position:absolute;left:0;bottom:0;background:rgba(214,58,120,.85);color:#fff;font-size:10px;padding:1px 5px;border-radius:0 6px 0 8px}
   .bf-drop{display:flex;align-items:center;gap:8px;border:1.5px dashed #f5c9db;border-radius:9px;padding:7px 10px;font-size:12.5px;color:var(--muted);background:#fff;cursor:pointer}
   .bf-drop:hover{border-color:var(--accent);color:var(--accent-dark)}
@@ -274,7 +280,7 @@
 <body>
 
 <!-- ══════════════════════════════════════════════════════════════
-     당근 광고자동화 — 라운지 인트라넷 화면을 복제한 당근 전용 화면 (build_daangn_html.py 가 만든다. 직접 고치지 말 것)
+     당근 광고자동화 — 포털 인트라넷 화면을 복제한 당근 전용 화면 (build_daangn_html.py 가 만든다. 직접 고치지 말 것)
      API_BASE 만 맞춰두면 되고, 토큰은 파일에 박지 않고 접속한 사람이 넣어 브라우저에만 저장한다.
      화면에 없는 것(계약 원장·백업·결제·회원목록·매출)은 이 토큰으로도 부를 수 없다.
      ══════════════════════════════════════════════════════════════ -->
@@ -286,7 +292,7 @@
     PARSE_API: 'https://daangn-parse.808hyukkim.workers.dev/parse',
     PREFS_SYNC: true,          // true 면 자주 쓰는 문구 등 계정별 설정을 서버(prefs 창구)에도 저장해 어느 PC 에서나 같다 (직원 포털)
     // 당근 광고(본인 계정 QR 연결·등록·안전장치)는 라이선스 서버가 맡는다. 같은 인트라넷 토큰으로 부르고, 권한은 라이선스 어드민 '사용자 관리'의 인트라넷 직원 목록에서 켠다. 비우면 API_BASE 와 같은 서버.
-    DAANGN_API: '',   // 라운지 인트라넷은 라이선스 서버와 연동하지 않는다(사용자 결정 2026-10-10). 비우면 API_BASE 와 같은 서버(포털)
+    DAANGN_API: '',   // 포털 인트라넷은 라이선스 서버와 연동하지 않는다(사용자 결정 2026-10-10). 비우면 API_BASE 와 같은 서버(포털)
   }
 </script>
 
@@ -341,7 +347,7 @@ function autoLines(ac) {
   return out
 }
 const STAT = { pending:'승인대기', active:'공급중', rejected:'반려', done:'처리완료', new:'접수', incomplete:'서류미비' }
-const KIND = { joint:'중개사 공동중개', lounge:'라운지 직공급', etc:'기타' }
+const KIND = { joint:'중개사 공동중개', lounge:'직공급', etc:'기타' }
 const pill = s => `<span class="pill ${['pending','active','rejected'].includes(s) ? s : 'etc'}">${esc(STAT[s] ?? s ?? '')}</span>`
 
 let toastT
@@ -431,7 +437,7 @@ async function boot() {
   try { S.me = await api('summary') } catch (e) { if (e.message !== '401') renderGate(e.message); return }
   await loadPrefs()
   S.dg = CONFIG.DAANGN_API ? await dapi('summary').catch(() => null) : S.me   // 당근 광고 서버의 내 정보(권한·연결·안전장치)
-  const fts = S.me.features || []; const order = [].concat(fts.includes('brief') ? ['brief'] : [], fts.includes('naverad') ? ['naverad'] : [], fts.includes('daangn') ? ['create', 'uploads'] : [], fts.includes('photo') ? ['photo'] : [], fts.includes('db') ? ['db'] : [])   // 직원에겐 '내 활동'·'엑셀DB대조' 탭 없음 (사용자 결정 2026-10-10)
+  const fts = S.me.features || []; const order = [].concat(fts.includes('brief') ? ['brief'] : [], fts.includes('naverad') ? ['naverad'] : [], fts.includes('daangn') ? ['create', 'uploads'] : [], fts.includes('photo') ? ['photo'] : [], fts.includes('db') ? ['db'] : [])   // 직원에겐 '내 활동'·'매물중복DB대조' 탭 없음 (사용자 결정 2026-10-10)
   if (!fts.includes('daangn') && !fts.includes('photo') && !fts.includes('brief') && !fts.includes('db')) setTimeout(() => toast('이 계정에는 아직 켜진 기능이 없습니다. 관리자(사용자 관리)에게 요청하세요.'), 400)
   if (CONFIG.DAANGN_API && dgMine()) order.splice(Math.max(1, order.indexOf('uploads') + 1), 0, 'daangn')   // 권한 있는 사람만 '🥕 당근 광고' 탭
   if (!order.length) return renderGate('이 계정에는 아직 켜진 기능이 없습니다. 관리자(사용자 관리)에서 손님 브리핑·당근 광고·사진950·DB 조회 중 필요한 기능을 켜 달라고 하세요.')
@@ -448,7 +454,7 @@ async function refresh() {
 }
 
 /* ── 껍데기 ───────────────────────────────────────────── */
-const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', daangn:'🥕 당근 광고', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함', photo:'사진 950', db:'지번 조회', fill:'엑셀DB대조', brief:'🧾 손님 브리핑', naverad:'N 광고정리', log:'내 활동' }
+const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', daangn:'🥕 당근 광고', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함', photo:'사진 950', db:'지번 조회', fill:'매물중복DB대조', brief:'🧾 손님 브리핑', naverad:'N 광고정리', log:'내 활동' }
 function renderShell(order) {
   el.innerHTML = `
     <header>
@@ -606,7 +612,7 @@ function amount(r) {
 /* ── ② 검수·승인 ──────────────────────────────────────── */
 function paintReview() {
   const { l, s } = S.data.review
-  // 직원이 방금 올린 매물(라운지 직공급)이 공동중개 대기분 밑에 묻히지 않도록: 직원 등록 먼저, 그 안에서는 최신순
+  // 직원이 방금 올린 매물(직공급)이 공동중개 대기분 밑에 묻히지 않도록: 직원 등록 먼저, 그 안에서는 최신순
   l.queue = [...l.queue].sort((a, b) => ((b.hqKind === 'lounge') - (a.hqKind === 'lounge')) || (new Date(b.createdAt) - new Date(a.createdAt)))
   const mine = l.queue.filter(r => r.hqKind === 'lounge').length
   document.getElementById('body').innerHTML = `
@@ -646,7 +652,7 @@ function paintReview() {
       ${s.rows.length ? '' : '<div class="empty">승인 대기 중인 가입 신청이 없습니다.</div>'}
     </div>
 
-    <h2>라운지매물 검수 <span class="c">${l.queue.length}건 대기${mine ? ` · 직원 등록 ${mine}건 (맨 위)` : ''}</span></h2>
+    <h2>매물 검수 <span class="c">${l.queue.length}건 대기${mine ? ` · 직원 등록 ${mine}건 (맨 위)` : ''}</span></h2>
     <div class="card scroll">
       <table>
         <thead><tr><th>등록</th><th>매물</th><th>올린 사무소</th><th>임대인</th><th class="num">금액</th><th></th></tr></thead>
@@ -764,21 +770,21 @@ function paintUploads() {
   document.getElementById('body').innerHTML = `
     <style>#uptbl td,#uptbl th{padding:4px 6px;vertical-align:middle;font-size:12.5px} #uptbl .ed{cursor:text} #uptbl .ed:hover{background:#fffbeb;outline:1px dashed #f59e0b} #uptbl .edin{font:inherit;font-size:12.5px;padding:2px 5px;border:1px solid #f59e0b;border-radius:5px;width:100%;box-sizing:border-box} #uptbl .stack{display:flex;flex-direction:column;gap:3px;align-items:flex-start}</style>
     <div class="kpis">
-      <div class="kpi"><div class="k">라운지+당근 (진행중)</div><div class="v">${cnt('라운지+당근')}<em>건</em></div></div>
-      <div class="kpi"><div class="k">라운지만</div><div class="v" style="color:#1d4ed8">${cnt('라운지만')}<em>건</em></div></div>
+      <div class="kpi"><div class="k">기록+당근 (진행중)</div><div class="v">${cnt('기록+당근')}<em>건</em></div></div>
+      <div class="kpi"><div class="k">기록만</div><div class="v" style="color:#1d4ed8">${cnt('기록만')}<em>건</em></div></div>
       <div class="kpi"><div class="k">당근만</div><div class="v" style="color:#ff6f0f">${cnt('당근만')}<em>건</em></div></div>
       <div class="kpi"><div class="k">나간 매물</div><div class="v" style="color:var(--dim)">${rows.filter(r => r.closed).length}<em>건</em></div></div>${rows.some(r => r.src_state) ? `<div class="kpi"><div class="k">⚠️ 확인 요망 (원문 내려감)</div><div class="v" style="color:var(--bad)">${rows.filter(r => r.src_state === 'gone' && !r.closed).length}<em>건</em></div></div>` : ''}
     </div>
     <div class="row-acts" style="margin:8px 0;align-items:center">
       <select id="up_days">${[7, 30, 90, 180, 365].map(n => `<option value="${n}" ${+d.days === n ? 'selected' : ''}>최근 ${n}일</option>`).join('')}</select>${S.me && Array.isArray(S.me.features) ? `<button class="btn" id="up_srccheck" style="margin-left:6px" title="업로드 기록의 원문 링크를 지금 열어 봅니다(40건까지). 매일 오전 11시·오후 6시에 자동으로도 확인해 삭제·내려간 매물은 '확인 요망'으로 표시됩니다">🔁 원문 지금 확인</button><span class="hint" style="margin:0 0 0 8px">${S.data.uploads && S.data.uploads.src_last ? `마지막 자동 확인 ${esc(dt(S.data.uploads.src_last.at))} · ${S.data.uploads.src_last.checked}건 중 내려감 ${S.data.uploads.src_last.gone}건` : '매일 오전 11시·오후 6시 원문 자동 확인'}</span>` : ''}
-      <select id="up_where"><option value="">올린 곳 전체</option>${['라운지+당근', '라운지만', '당근만', '당근 실패'].map(w => `<option value="${w}" ${f.where === w ? 'selected' : ''}>${w}</option>`).join('')}</select>
+      <select id="up_where"><option value="">올린 곳 전체</option>${['기록+당근', '기록만', '당근만', '당근 실패'].map(w => `<option value="${w}" ${f.where === w ? 'selected' : ''}>${w}</option>`).join('')}</select>
       <select id="up_by"><option value="">담당 전체</option>${bys.map(b => `<option value="${esc(b)}" ${f.by === b ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select>
       <input id="up_q" placeholder="주소·연락처·번호 검색" value="${esc(f.q || '')}" style="width:170px">
       <label style="display:flex;align-items:center;gap:5px;margin:0;font-weight:400;font-size:12.5px"><input type="checkbox" id="up_hide" ${f.hideClosed ? 'checked' : ''} style="width:auto;margin:0"> 나간 매물 숨기기</label>
       <button class="btn" id="up_csv">엑셀 내보내기</button>
       <span class="hint" style="margin:0">${shown.length}건 · 링크·연락처·주소 칸은 눌러서 바로 고칩니다 · 나감 체크 → 회색 · 당근 글은 주황 버튼으로 열어 당근에서 내리세요</span>
     </div>
-    <div class="card scroll"><table id="uptbl"><thead><tr><th title="나간 매물 체크">나감</th><th>링크</th><th>임대인 연락처</th><th>주소 · 호수</th><th>금액(만원)</th><th>거래</th><th>업로드일</th><th>라운지 / 당근</th><th>담당</th></tr></thead><tbody>
+    <div class="card scroll"><table id="uptbl"><thead><tr><th title="나간 매물 체크">나감</th><th>링크</th><th>임대인 연락처</th><th>주소 · 호수</th><th>금액(만원)</th><th>거래</th><th>업로드일</th><th>기록 / 당근</th><th>담당</th></tr></thead><tbody>
       ${shown.map(r => `<tr data-key="${esc(r.key)}" style="${r.closed ? 'opacity:.5;background:#f3f4f6' : ''}">
         <td><input type="checkbox" data-close="${esc(r.key)}" ${r.closed ? 'checked' : ''} style="width:auto;margin:0" title="${r.closed ? '나간 매물 (체크 해제하면 표시만 풀림)' : '나간 매물로 표시'}"></td>
         <td class="nowrap ed" data-ed="source" data-key="${esc(r.key)}" title="눌러서 링크 수정">${r.source ? `<a href="${esc(r.source)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">원문 ↗</a>${r.src_state === 'gone' ? `<span class="pill rejected" style="margin-left:4px" title="자동 확인: 원문이 삭제·내려감 — 당근에서 내리고 나감 체크하세요 (${esc(dt(r.src_gone_at || r.src_checked_at))})">⚠️ 확인 요망 · 원문 내려감</span>` : r.src_state === 'ok' ? `<span class="small" style="color:var(--ok);margin-left:4px" title="원문 살아 있음 (확인 ${esc(dt(r.src_checked_at))})">✓</span>` : r.src_state === 'unknown' ? `<span class="small" style="color:var(--dim);margin-left:4px" title="원문 확인 못함 (${esc(dt(r.src_checked_at))})">?</span>` : ''} <span class="small" data-pen style="color:var(--dim);cursor:pointer" title="링크 수정">✎</span>` : '<span class="small" data-pen style="color:var(--dim)">링크 넣기 ✎</span>'}</td>
@@ -787,7 +793,7 @@ function paintUploads() {
         <td class="nowrap num">${esc(r.price || '')}</td>
         <td class="nowrap">${esc(r.deal || '')}</td>
         <td class="nowrap small" title="${esc(dt(r.first_at || r.at))}">${esc((r.first_at || r.at || '').slice(5, 10))} <b>${dplus(r.first_at || r.at)}</b></td>
-        <td><div class="stack">${r.lounge && !r.lounge.daangn_only ? `<span class="btn b" style="${BTN};cursor:default;${r.lounge.status === 'done' || r.lounge.status === 'rejected' ? 'background:#9ca3af;border-color:#9ca3af' : ''}">라운지 · ${esc(stL(r.lounge.status))}</span>` : ''}${r.daangn ? (r.daangn.no ? `<a class="btn b" href="${esc(r.daangn.url || '#')}" target="_blank" rel="noopener" style="${BTN};background:#ff6f0f;border-color:#ff6f0f">당근 ${esc(r.daangn.no)}</a>` : `<span style="color:var(--bad);font-size:11.5px" title="${esc(r.daangn.fail || '')}">당근 실패${r.daangn.dup ? ' (중복 ' + esc(r.daangn.dup) + ')' : ''}</span>`) : ''}${!(r.lounge && !r.lounge.daangn_only) && !r.daangn ? '-' : ''}</div></td>
+        <td><div class="stack">${r.lounge && !r.lounge.daangn_only ? `<span class="btn b" style="${BTN};cursor:default;${r.lounge.status === 'done' || r.lounge.status === 'rejected' ? 'background:#9ca3af;border-color:#9ca3af' : ''}">기록 · ${esc(stL(r.lounge.status))}</span>` : ''}${r.daangn ? (r.daangn.no ? `<a class="btn b" href="${esc(r.daangn.url || '#')}" target="_blank" rel="noopener" style="${BTN};background:#ff6f0f;border-color:#ff6f0f">당근 ${esc(r.daangn.no)}</a>` : `<span style="color:var(--bad);font-size:11.5px" title="${esc(r.daangn.fail || '')}">당근 실패${r.daangn.dup ? ' (중복 ' + esc(r.daangn.dup) + ')' : ''}</span>`) : ''}${!(r.lounge && !r.lounge.daangn_only) && !r.daangn ? '-' : ''}</div></td>
         <td class="nowrap small">${esc(r.by || '')}</td>
       </tr>`).join('')}
       ${shown.length ? '' : '<tr><td colspan="9"><div class="empty">기록이 없습니다.</div></td></tr>'}
@@ -802,9 +808,9 @@ function paintUploads() {
   document.querySelectorAll('#uptbl input[data-close]').forEach(cb => cb.onchange = async () => {
     const key = cb.dataset.close; const row = rows.find(r => r.key === key); if (!row) return
     const on = cb.checked
-    if (on && row.lounge && !row.lounge.daangn_only && ['pending', 'active'].includes(row.lounge.status) && !confirm('나간 매물로 표시하고 라운지 매물을 거래완료로 내릴까요? (당근 글은 주황 버튼으로 열어 당근에서 직접 내리세요)')) { cb.checked = false; return }
+    if (on && row.lounge && !row.lounge.daangn_only && ['pending', 'active'].includes(row.lounge.status) && !confirm('나간 매물로 표시할까요? (당근 글은 주황 버튼으로 열어 당근에서 직접 내리세요)')) { cb.checked = false; return }
     cb.disabled = true
-    try { const r = await api('upload-close', { key, closed: on }); row.closed = on; if (on && r.lounge_done && row.lounge) row.lounge.status = 'done'; toast(on ? (r.lounge_done ? '나감 처리 — 라운지 매물을 거래완료로 내렸습니다' : '나감 처리했습니다') : '나감 표시를 풀었습니다') }
+    try { const r = await api('upload-close', { key, closed: on }); row.closed = on; if (on && r.lounge_done && row.lounge) row.lounge.status = 'done'; toast(on ? (r.lounge_done ? '나감 처리했습니다' : '나감 처리했습니다') : '나감 표시를 풀었습니다') }
     catch (e) { cb.checked = !on; toast('처리 실패: ' + e.message) }
     paintUploads()
   })
@@ -838,7 +844,7 @@ function paintUploads() {
     }
   })
   document.getElementById('up_csv').onclick = () => {
-    const head = ['나감', '업로드일', 'D+', '주소', '호수', '거래', '금액(만원)', '연락처 구분', '임대인 연락처', '올린 곳', '라운지 상태', '당근 매물번호', '당근 링크', '원문 링크', '담당']
+    const head = ['나감', '업로드일', 'D+', '주소', '호수', '거래', '금액(만원)', '연락처 구분', '임대인 연락처', '올린 곳', '기록 상태', '당근 매물번호', '당근 링크', '원문 링크', '담당']
     const qq = v => '"' + String(v ?? '').replace(/"/g, '""') + '"'
     const lines = [head.map(qq).join(',')].concat(shown.map(r => [r.closed ? '나감' : '', (r.first_at || r.at || '').slice(0, 10), dplus(r.first_at || r.at), r.addr, r.ho, r.deal, r.price, r.phone ? roleL(r.role) : '', r.phone, r.where, r.lounge ? (r.lounge.daangn_only ? '보관' : stL(r.lounge.status)) : '', r.daangn?.no || '', r.daangn?.url || '', r.source || '', r.by].map(qq).join(',')))
     const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
@@ -929,7 +935,7 @@ async function csStatus(kind, id, done) {
 
 /* ── ④ 매물 올리기 (2026-09-28) ─────────────────────────────────────────
    직원이 네이버 링크나 카톡·문자 글을 붙여넣으면 폼을 채우고, 확인 후 [등록]을 누르면
-   라운지 매물이 '승인대기'로 들어간다. 검수·승인 탭에서 승인해야 공급중이 된다. */
+   포털 매물이 '승인대기'로 들어간다. 검수·승인 탭에서 승인해야 공급중이 된다. */
 const DEALS = ['월세', '전세', '매매', '반전세', '단기임대']
 const PTYPES = ['주택', '원룸', '투룸', '빌라', '아파트', '오피스텔', '상가', '사무실', '토지', '기타']
 const DIRS = ['남향', '남동향', '남서향', '동향', '서향', '북향', '북동향', '북서향']
@@ -1150,6 +1156,7 @@ async function parseListingUrl(url) {
   put('direction', DIRS.includes(j.facing) ? j.facing : '', '향')
   if (Array.isArray(j.photos) && j.photos.length) put('photos', j.photos, '사진')
   if (j.unit && String(j.unit).trim()) put('ho_nm', String(j.unit).trim(), '호수')   // 온하우스 등 호수가 있는 사이트
+  if (j.detail_text) put('source_text', String(j.detail_text).slice(0, 3000), '원문 상세설명')   // '원문 상세설명' 칸 (2026-10-11)
   const head = String(j.memo || '').split('\n').find(l => /^\[(네이버|당근|온하우스)\]/.test(l)) || ''
   put('headline', head.replace(/^\[(네이버|당근|온하우스)\]\s*/, '').slice(0, 40), '제목')
   out.description = [cleanDesc(j.memo), j.realtor ? `등록 중개사: ${j.realtor}${j.realtor_phone ? ' ' + j.realtor_phone : ''}` : '']
@@ -1190,7 +1197,7 @@ function mergeLinkText(fromUrl, s) {
 
 /* ── 여러 매물 한 번에 (2026-09-30) ─────────────────────────────────────
    엑셀 파일(xlsx·csv)이나 여러 줄(한 줄 = 매물 하나: 링크·엑셀 행·글)을 워커 /bulk 로 보내 정리하고,
-   주소는 라운지 주소 창구로 맞춘 뒤 목록(1번~N번)을 보여준다. [N건 일괄등록] → 확인 → 한 건씩 listing-create.
+   주소는 포털 주소 창구로 맞춘 뒤 목록(1번~N번)을 보여준다. [N건 일괄등록] → 확인 → 한 건씩 listing-create.
    상태는 BULK 에 두어 단건 등록으로 폼이 다시 그려져도 목록이 남는다. */
 /** 입주 가능일 글 → YYYY-MM-DD. 즉시·공실·협의는 오늘(바로 입주 가능) */
 function moveInDate(t) {
@@ -1226,10 +1233,15 @@ function dgStart(total) { DG.running = true; DG.total = total; DG.done = 0; DG.c
 function dgNow(text, wait) { DG.cur = text || ''; DG.wait = wait || ''; paintDgPanel() }
 function dgPush(item) { DG.items.push({ ...item, at: Date.now(), batch: DG.batch }); DG.done = Math.min(DG.total, DG.done + 1); dgSave(); paintDgPanel() }
 function dgEnd() { DG.running = false; DG.cur = ''; DG.wait = ''; clearInterval(DG.timer); DG.timer = null; paintDgPanel() }
+/* 이번 올리기 안에서 같은 매물 열쇠(주소|동|호수, 호수 없으면 층) — 미리 확인 뒤에 추가된 줄도 겹치면 건너뛴다 (2026-10-11) */
+const bulkDupKey = r => { const it = (r.addrItems || [])[r.addrIdx]; if (!it) return ''; const g = r.got || {}; const n = v => String(v || '').replace(/\s+/g, '').replace(/호$/, '').replace(/동$/, '').toLowerCase(); const ho = n(g.ho_nm); const f = String(g.floor_no ?? '').trim(); return [n(it.roadAddr || it.jibunAddr), n(g.dong_nm), ho || (f ? 'f' + f : '')].join('|') }
 const dgLabel = r => { const it = (r.addrItems || [])[r.addrIdx] || {}; const g = r.got || {}; return [(it.jibunAddr || it.roadAddr || g.address_q || '').replace(/^서울특별시\s*/, '서울 '), [g.dong_nm, g.ho_nm].filter(Boolean).join(' ')].filter(Boolean).join(' ') }
+/* 주소에서 시·도·구·군을 떼고 '동 지번 호수'만 */
+const dgShort = label => String(label || '').replace(/^(서울특별시|서울시|서울|부산광역시|부산|인천광역시|인천|대구광역시|광주광역시|대전광역시|울산광역시|세종특별자치시|경기도|경기|강원특별자치도|강원도|충청북도|충청남도|전라북도|전북특별자치도|전라남도|경상북도|경상남도|제주특별자치도)\s*/, '').replace(/^[가-힣]+(시|군)\s+(?=[가-힣])/, '').replace(/^[가-힣]+구\s+(?=[가-힣])/, '').trim()
 function dgResultText() {
   const items = DG.items.filter(i => i.batch === DG.batch); let n = 0
-  return items.map(i => i.ok ? `${++n}. 당근 매물번호 ${i.no || '?'} / ${i.label}${i.url ? ' ' + i.url : ''}` : i.dup ? `⏭ 중복(이미 당근 ${i.no || ''}) / ${i.label}` : `✗ ${i.label} — ${i.msg || '실패'}`).join('\n')
+  // 짧게: '1, 당근 4691117/방배동 929-34 302호' — 시·구·링크·'매물번호' 낱말 없이 (2026-10-11)
+  return items.map(i => i.ok ? `${++n}, 당근 ${i.no || '?'}/${dgShort(i.label)}` : i.dup ? `⏭ 중복(당근 ${i.no || ''})/${dgShort(i.label)}` : `✗ ${dgShort(i.label)} — ${i.msg || '실패'}`).join('\n')
 }
 function paintDgPanel() {
   let p = document.getElementById('dgpanel')
@@ -1309,7 +1321,57 @@ async function bulkResolveAddr(r) {
   r.addrItems = items.slice(0, 8); r.addrIdx = items.length ? 0 : -1; r.addrState = !items.length ? 'none' : exact ? 'ok' : 'check'
   if (r.addrQ === undefined) r.addrQ = q0 || g.bd_nm || ''
   paintBulk()
-  if (items.length) bulkLedger(r)
+  if (items.length) { bulkLedger(r); officeCross([r]) }
+}
+/** 사무실 전체 당근 목록과 지번 대조 (2차 검증, 2026-10-11) — 같은 동·번지에 우리 사무실 글이 있으면 줄 아래에 보여 주고 체크는 사람이 정한다 */
+const OFFICE = { rows: null, at: 0, busy: null, geo: new Map() }
+const geoDist = (la, lo, lb, lob) => { la = +la; lo = +lo; lb = +lb; lob = +lob; if (!la || !lo || !lb || !lob) return null; const dy = (la - lb) * 111320, dx = (lo - lob) * 111320 * Math.cos(la * Math.PI / 180); return Math.sqrt(dx * dx + dy * dy) }
+async function officeGeo(q) {   // 지번 → 좌표 (캐시) — 못 구하면 null
+  if (!q) return null; if (OFFICE.geo.has(q)) return OFFICE.geo.get(q)
+  const p = dapi('daangn-geocode?q=' + encodeURIComponent(q)).then(j => (j && j.ok && j.lat && j.lng) ? { lat: +j.lat, lng: +j.lng } : null).catch(() => null)
+  OFFICE.geo.set(q, p); const v = await p; OFFICE.geo.set(q, v); return v
+}
+const KIND_KO = { ONE_ROOM: '원룸', TWO_ROOM: '투룸', THREE_ROOM: '쓰리룸', OFFICETEL: '오피스텔', APART: '아파트', STORE: '상가', OFFICE: '사무실', VILLA: '빌라', HOUSE: '주택', ETC: '기타', SPLIT_ONE_ROOM: '분리형원룸', OPEN_ONE_ROOM: '오픈형원룸' }
+async function officeList() {
+  if (!dgMine()) return []
+  if (OFFICE.rows && Date.now() - OFFICE.at < 5 * 60e3) return OFFICE.rows
+  if (OFFICE.busy) return OFFICE.busy
+  const hk = v => String(v || '').replace(/\s+/g, '').replace(/호$/, '').toLowerCase()
+  OFFICE.busy = dapi('daangn-office-list').then(j => { OFFICE.rows = (j.rows || []).map(x => ({ ...x, lot: lotKey(x.addr), hoKey: hk(x.ho) })); OFFICE.daangn = Array.isArray(j.daangn) ? j.daangn : null; OFFICE.byNo = new Map((j.rows || []).map(x => [String(x.article_no), x])); OFFICE.at = Date.now(); return OFFICE.rows }).catch(() => OFFICE.rows || []).finally(() => { OFFICE.busy = null })
+  return OFFICE.busy
+}
+async function officeCross(rows) {
+  const list = (await officeList()) || []   // 우리 기록이 없어도 당근 기준 대조는 돈다
+  const hk = v => String(v || '').replace(/\s+/g, '').replace(/호$/, '').toLowerCase(); let changed = false
+  for (const r of rows) { if (!r.ok) continue; const it = (r.addrItems || [])[r.addrIdx] || {}; const g = r.got || {}
+    const lot = lotKey(it.jibunAddr || g.address_q || it.roadAddr || ''); const before = (r.office || []).length
+    if (!lot) { r.office = [] } else { const my = hk(g.ho_nm); r.office = list.filter(x => x.lot === lot).map(x => ({ ...x, sameHo: !!my && x.hoKey === my })) }
+    if ((r.office || []).length !== before || r.office.length) changed = true
+    // 당근 기준(앱에서 직접 올린 글 포함): 1순위 좌표 — 우리 지번(또는 매물 좌표)과 당근 글 좌표가 70m 안이면 같은 건물. 좌표를 못 구하면 동·층·면적으로 보되 '위치 확인 못함'
+    const dong = (lot || '').split(' ')[0] || ((it.jibunAddr || g.address_q || '').match(/([가-힣]+동)/) || [])[1] || ''
+    const fl = g.floor_no != null && g.floor_no !== '' ? String(parseInt(g.floor_no, 10)) : ''; const ar = parseFloat(String(g.area_exclusive || '').replace(/,/g, '')); const bd = String(g.bd_nm || it.bdNm || '').replace(/\s+/g, '')
+    const beforeDg = (r.officeDg || []).length
+    let me = (g.lat && g.lng) ? { lat: +g.lat, lng: +g.lng } : null
+    if (!me && OFFICE.daangn && OFFICE.daangn.length && lot) me = await officeGeo((it.jibunAddr || g.address_q || '').trim() || lot)
+    r.officeGeoOk = !!me
+    const simFA = x => fl && String(parseInt(x.floor, 10)) === fl && ar > 0 && parseFloat(x.area) > 0 && Math.abs(parseFloat(x.area) - ar) <= 1
+    if (OFFICE.daangn && me) r.officeDg = OFFICE.daangn.filter(x => !x.hide && (geoDist(me.lat, me.lng, x.lat, x.lon) ?? 1e9) <= 70).map(x => ({ ...x, same: simFA(x), ours: OFFICE.byNo && OFFICE.byNo.get(String(x.no)) })).sort((a, b) => (b.same ? 1 : 0) - (a.same ? 1 : 0))
+    else r.officeDg = (OFFICE.daangn && dong && fl) ? OFFICE.daangn.filter(x => x.dong === dong && String(parseInt(x.floor, 10)) === fl && ((ar > 0 && parseFloat(x.area) > 0 && Math.abs(parseFloat(x.area) - ar) <= 1) || (bd && x.building && x.building.replace(/\s+/g, '') === bd))).map(x => ({ ...x, same: true, approx: true, ours: OFFICE.byNo && OFFICE.byNo.get(String(x.no)) })) : []
+    if (r.officeDg.length !== beforeDg || r.officeDg.length) changed = true }
+  if (changed) paintBulk()
+}
+const officeDgBlock = r => {
+  const o = r.officeDg; if (!o || !o.length || (r.dg && r.dg.state === 'done')) return ''
+  const approx = o.some(x => x.approx); const sameN = o.filter(x => x.same).length
+  const line = x => `<div style="${x.same ? 'color:#b42318;font-weight:700' : ''}">${x.same ? '⚠️ 같은 층·면적 · ' : ''}${esc(x.writer || '')} · ${esc(x.kind || '')} ${esc(x.floor || '')}층 ${x.area ? esc(x.area) + '㎡' : ''}${x.building ? ' · ' + esc(x.building) : ''} · ${esc(x.deal || '')} ${esc(x.price || '')} · <a href="${esc(x.url)}" target="_blank" rel="noopener">당근 ${esc(x.no)}</a>${x.ours ? ` <span class="hint" style="margin:0">(우리 기록: ${esc(x.ours.by)} ${esc(x.ours.ho || '')})</span>` : ' <b style="color:#c2410c">직접 올림</b>'}</div>`
+  const title = approx ? `참고: 같은 동·층·면적의 우리 사무소 당근 글 ${o.length}건 (위치 확인 못함 — 다른 건물일 수 있음)` : `📍 같은 건물(지번)에 올라간 우리 사무소 당근 글 ${o.length}건${sameN ? ` · 같은 층·면적 ${sameN}건` : ''}`
+  return `<div style="margin-top:4px;font-size:12px;line-height:1.5;white-space:normal"><span class="pill ${sameN ? 'pending' : 'etc'}">${title}</span><div style="margin-top:3px;padding-left:4px;border-left:2px solid ${sameN ? '#fca5a5' : '#e5e7eb'}">${o.slice(0, 6).map(line).join('')}</div><div class="hint" style="margin:2px 0 0">${approx ? '지번 좌표를 못 구해 동·층·면적으로만 맞춘 것입니다 — 글을 열어 같은 집인지 확인하세요' : '당근 글의 위치가 이 지번과 70m 안입니다 — 같은 호실이면 🥕 체크를 끄세요 (당근은 호수를 안 보여 줍니다)'}</div></div>`
+}
+const officeBlock = r => {
+  const o = r.office; if (!o || !o.length || (r.dg && r.dg.state === 'done')) return officeDgBlock(r)
+  const same = o.filter(x => x.sameHo).length
+  const line = x => `<div style="${x.sameHo ? 'color:#b42318;font-weight:700' : ''}">${x.sameHo ? '⚠️ 같은 호수 · ' : ''}${esc(x.by)} · ${esc(x.ho || '호수 없음')} · ${esc(x.deal || '')} ${esc(x.price || '')}${x.kind || x.floor != null || x.area ? ' · ' + [KIND_KO[x.kind] || '', x.floor != null ? x.floor + '층' : '', x.area ? x.area + '㎡' : ''].filter(Boolean).join(' ') : ''} · <a href="${esc(x.url)}" target="_blank" rel="noopener">당근 ${esc(x.article_no)}</a></div>`
+  return `<div style="margin-top:4px;font-size:12px;line-height:1.5;white-space:normal"><span class="pill ${same ? 'pending' : 'etc'}">🏢 우리 사무실 같은 지번 ${o.length}건${same ? ` · 같은 호수 ${same}건` : ''}</span><div style="margin-top:3px;padding-left:4px;border-left:2px solid ${same ? '#fca5a5' : '#e5e7eb'}">${o.slice(0, 6).map(line).join('')}${o.length > 6 ? `<div class="hint" style="margin:0">… 외 ${o.length - 6}건</div>` : ''}</div><div class="hint" style="margin:2px 0 0">같은 매물이면 🥕 체크를 끄세요 — 당근은 한 중개사무소에서 같은 매물을 두 번 올리면 제재합니다</div></div>` + officeDgBlock(r)
 }
 /** 줄별 건축물대장 호실 면적 — 주소가 맞춰진 뒤 한 번(주소·호수가 바뀌면 다시) */
 const LEDGER_Q = { running: 0, queue: [] }
@@ -1350,6 +1412,7 @@ async function bulkRun(payload, isFile) {
       addrItems: [], addrIdx: -1, addrState: 'pending', addrQ: undefined, status: it.ok ? 'ready' : 'fail', msg: '' }))
     if (BULK.phrAll) add.forEach(r => { if (r.ok) rowPhrApply(r) })
     BULK.rows.push(...add)
+    officeCross(add.filter(r => r.ok))   // 2차 검증: 사무실 전체 당근 목록과 지번 대조 (주소 확정 전엔 글의 지번으로)
     BULK.msg = `${j.count}건 정리 (${j.ok}건 성공${j.count - j.ok ? ` · ${j.count - j.ok}건 실패` : ''}${j.header ? ' · 엑셀 머리글 인식' : ''}) — 주소를 맞추는 중…`
     paintBulk()
     // 주소 맞추기 (3건씩)
@@ -1384,17 +1447,19 @@ async function bulkPrecheck(manual) {
   try {
     const items = rows.map(r => { const it = r.addrItems[r.addrIdx], g = r.got || {}; return { road_addr: it.roadAddr || it.jibunAddr || '', jibun_addr: it.jibunAddr || '', dong_nm: g.dong_nm || '', ho_nm: g.ho_nm || '', floor_no: g.floor_no ?? null, options: Array.isArray(g.options) ? g.options : [] } })
     const j = await dapi('daangn-precheck', { items })
-    let dupN = 0, oursN = 0
+    let dupN = 0, oursN = 0, sameN = 0, officeN = 0
     ;(j.items || []).forEach(x => { const r = rows[x.i]; if (!r) return
-      if (x.dup) { dupN++; r.pre = { state: 'dup', no: x.dup.originalId, url: x.dup.url, broker: x.dup.brokerName || '', trade: x.dup.tradeText || '', full: x.fullAddress, ours: x.ours ? x.ours.articleNo : '' }; r.dgOn = false }
-      else if (x.ours) { oursN++; r.pre = { state: 'ours', no: x.ours.articleNo, url: x.ours.url }; r.dgOn = false }
+      if (x.same !== null && x.same !== undefined && rows[x.same]) { sameN++; r.pre = { state: 'same', n: rows[x.same].n, noho: !((r.got || {}).ho_nm) }; r.dgOn = false }   // 같은 목록 안에서 겹침 (2026-10-11)
+      else if (x.dup) { dupN++; r.pre = { state: 'dup', no: x.dup.originalId, url: x.dup.url, broker: x.dup.brokerName || '', trade: x.dup.tradeText || '', full: x.fullAddress, ours: x.ours ? x.ours.articleNo : '' }; r.dgOn = false }
+      else if (x.ours) { oursN++; r.pre = { state: 'ours', no: x.ours.articleNo, url: x.ours.url, by: x.ours.by || '', mine: x.ours.mine !== false }; r.dgOn = false }
+      else if (x.office) { officeN++; r.pre = { state: 'office', no: x.office.originalId, url: x.office.url, full: x.office.fullAddress || '', trade: x.office.tradeText || '', broker: x.office.brokerName || '', sameUnit: !!x.office.sameUnit, count: x.office.count || 1 }; if (x.office.sameUnit) r.dgOn = false }   // 우리 중개사무소 글이 같은 건물에 (2026-10-11)
       else if (x.error) r.pre = { state: 'unk', msg: x.error }
       else if (x.writable === false) r.pre = { state: 'no', msg: x.reason || '' }
       else r.pre = { state: 'ok', partial: x.partial || 0, full: x.fullAddress } })
-    BULK.msg = `🔎 당근 중복 확인 끝 — ${rows.length}건 중 당근에 이미 있음 ${dupN}건${oursN ? ` · 내가 올린 것 ${oursN}건` : ''} (중복은 🥕 체크를 꺼 두었습니다)`
-    if (manual) toast(dupN || oursN ? `중복 ${dupN + oursN}건을 찾아 체크를 껐습니다` : '당근에 같은 매물이 없습니다')
+    BULK.msg = `🔎 당근 중복 확인 끝 — ${rows.length}건 중 당근에 이미 있음 ${dupN}건${oursN ? ` · 내가 올린 것 ${oursN}건` : ''}${sameN ? ` · 이 목록 안에서 겹침 ${sameN}건` : ''}${officeN ? ` · 우리 사무실 글이 같은 건물에 ${officeN}건` : ''} (중복은 🥕 체크를 꺼 두었습니다)`
+    if (manual) toast(dupN || oursN || sameN || officeN ? `중복·주의 ${dupN + oursN + sameN + officeN}건을 찾았습니다 (중복은 체크를 껐습니다)` : '당근에 같은 매물이 없습니다')
   } catch (e) { rows.forEach(r => { if (r.pre && r.pre.state === 'busy') r.pre = { state: 'unk', msg: e.message } }); BULK.msg = '당근 중복 확인 실패: ' + e.message; if (manual) toast(e.message) }
-  finally { BULK.preRun = false; paintBulk() }
+  finally { BULK.preRun = false; paintBulk(); OFFICE.at = 0; officeCross(rows) }   // 2차: 사무실 전체 목록과 지번 대조(목록 새로 받음)
 }
 async function bulkDaangn() {
   if (BULK.busy || BULK.dgRun) return
@@ -1407,23 +1472,26 @@ async function bulkDaangn() {
   const onlyN = targets.filter(r => !r.lgOn && r.status !== 'done').length
   if (!confirm(`체크한 ${targets.length}건을 당근부동산에 올립니다 (건당 약 20초 + ${guardOn ? `안전장치 간격 ${S.dg.guard.min}~${S.dg.guard.max}초, 오늘 ${S.dg.guard.today}/${S.dg.guard.daily || '∞'}건` : `${sec}초 간격`}).${notReady.length ? `\n\n빠진 항목이 있는 ${notReady.length}건은 건너뜁니다.` : ''}\n\n계속할까요?`)) return
   BULK.dgRun = true; let ok = 0, fail = 0, skip = 0
+  const runKeys = new Map()   // 이번에 올린 주소·호수 → 줄 번호
   dgStart(targets.length)
   for (let i = 0; i < targets.length; i++) {
     const r = targets[i]; if (!BULK.dgRun) break
+    const bk = bulkDupKey(r)
+    if (bk && runKeys.has(bk)) { r.dg = { state: 'dup', msg: `이번 목록 ${runKeys.get(bk)}번과 같은 주소·호수 — 당근 중복이라 건너뜀 (다른 호실이면 호수를 적고 다시)` }; r.dgOn = false; skip++; dgPush({ ok: false, dup: true, label: dgLabel(r), msg: r.dg.msg }); paintBulk(); continue }
     if (dgMissBulk(r).length || bulkCheck(r)) { r.dg = { state: 'fail', msg: '빠진 항목: ' + (dgMissBulk(r).join(' · ') || bulkCheck(r)) }; skip++; dgPush({ ok: false, label: dgLabel(r), msg: r.dg.msg }); paintBulk(); continue }
     if (!r.photosOn && r.photoCount > 0 && r.status !== 'done') { r.photosOn = true; dgNow(`${r.n}번 — 당근은 사진이 필요해 링크 사진 ${r.photoCount}장을 포함합니다`); paintBulk() }   // 📷 꺼져 있어도 당근엔 사진 포함
-    const directOnly = !r.lgOn && r.status !== 'done'   // 📍 꺼짐 = 당근만: 라운지에 저장하지 않고 폼 값 그대로 당근에
-    if (!directOnly && (r.status !== 'done' || !r.id)) {   // 📍 켜짐: 라운지 승인대기 등록이 먼저
-      r.dg = { state: 'uploading', msg: '라운지 등록 중…' }; dgNow(`${r.n}번 ${dgLabel(r)} — 라운지 등록 중…`); paintBulk()
+    const directOnly = !r.lgOn && r.status !== 'done'   // 📍 꺼짐 = 당근만: 포털에 저장하지 않고 폼 값 그대로 당근에
+    if (!directOnly && (r.status !== 'done' || !r.id)) {   // 📍 켜짐: 포털 승인대기 등록이 먼저
+      r.dg = { state: 'uploading', msg: '기록 중…' }; dgNow(`${r.n}번 ${dgLabel(r)} — 기록 중…`); paintBulk()
       await bulkRegister(r.n)
-      if (r.status !== 'done' || !r.id) { r.dg = { state: 'fail', msg: r.status === 'dup' ? '라운지에 같은 매물이 이미 있음 — [중복이어도 등록] 뒤 다시' : '라운지 등록 실패: ' + (r.msg || '') }; fail++; dgPush({ ok: false, label: dgLabel(r), msg: r.dg.msg }); paintBulk(); continue }
+      if (r.status !== 'done' || !r.id) { r.dg = { state: 'fail', msg: r.status === 'dup' ? '같은 매물이 이미 기록에 있음' : '기록 실패: ' + (r.msg || '') }; fail++; dgPush({ ok: false, label: dgLabel(r), msg: r.dg.msg }); paintBulk(); continue }
     }
-    r.dg = { state: 'uploading', msg: '당근에 올리는 중… (사진 포함 20초 안팎)' }; BULK.msg = `🥕 ${r.n}번 당근에 올리는 중… (${i + 1}/${targets.length})`; dgNow(`${r.n}번 ${dgLabel(r)} — 당근에 올리는 중${directOnly ? ' (당근만 · 라운지 저장 없음)' : ''} (사진 포함 20초 안팎)`); paintBulk()
+    r.dg = { state: 'uploading', msg: '당근에 올리는 중… (사진 포함 20초 안팎)' }; BULK.msg = `🥕 ${r.n}번 당근에 올리는 중… (${i + 1}/${targets.length})`; dgNow(`${r.n}번 ${dgLabel(r)} — 당근에 올리는 중${directOnly ? '' : ''} (사진 포함 20초 안팎)`); paintBulk()
     try {
       const hqk = (document.getElementById('c_hq_kind') || {}).value || 'lounge'
       const j = dgMine() ? await dapi('daangn-direct', { ...bulkBodyOf(r, hqk), listing_id: r.id || undefined }) : directOnly ? await api('daangn-direct', bulkBodyOf(r, hqk)) : await api('daangn-publish', { listing_id: r.id })
-      r.dg = { state: 'done', url: j.url || '', no: dgArticleNo(j.url, j.articleId, j.articleNo), msg: '당근 등록 완료' }; ok++; dgPush({ ok: true, label: dgLabel(r), url: j.url || '', no: r.dg.no, listing_id: r.id, direct: directOnly })
-      if (directOnly) { r.daangnOnly = true; r.status = 'done'; r.msg = '당근에만 올림 (라운지 저장 없음)' }
+      r.dg = { state: 'done', url: j.url || '', no: dgArticleNo(j.url, j.articleId, j.articleNo), msg: '당근 등록 완료' }; ok++; if (bk) runKeys.set(bk, r.n); dgPush({ ok: true, label: dgLabel(r), url: j.url || '', no: r.dg.no, listing_id: r.id, direct: directOnly })
+      if (directOnly) { r.daangnOnly = true; r.status = 'done'; r.msg = '당근에 올림' }
     } catch (e) {
       const m = String(e.message || '')
       if (e.code === 'daangn_dup') { r.dg = { state: 'dup', no: dgArticleNo(e.data && e.data.url, e.data && e.data.articleId, e.data && e.data.articleNo), url: (e.data && e.data.url) || '', msg: m }; dgPush({ ok: false, dup: true, no: r.dg.no, url: r.dg.url, label: dgLabel(r), msg: m }); paintBulk(); if (i < targets.length - 1 && BULK.dgRun) await sleepTick(3, '중복 건너뜀'); continue }
@@ -1444,7 +1512,7 @@ async function bulkDaangn() {
   BULK.msg = `당근 올리기 끝 — 완료 ${ok}건${dupN ? ` · 당근 중복 ${dupN}건(이미 올라가 있어 건너뜀)` : ''}${fail ? ` · 실패 ${fail}건` : ''}${skip ? ` · 건너뜀 ${skip}건(빠진 항목)` : ''}`
   paintBulk(); if (ok) { S.data.review = null; refresh() }
 }
-/** 일괄 줄 → 등록 본문 (라운지 등록과 당근 직행이 같이 씀) */
+/** 일괄 줄 → 등록 본문 (포털 등록과 당근 직행이 같이 씀) */
 function bulkBodyOf(r, hqKind) {
   const g = r.got, it = r.addrItems[r.addrIdx] || {}
   const n = v => (v == null || v === '' || isNaN(Number(v))) ? undefined : Number(v)
@@ -1464,7 +1532,7 @@ function bulkBodyOf(r, hqKind) {
 async function bulkRegister(onlyIdx) {
   if (BULK.busy) return
   const targets = BULK.rows.filter(r => (onlyIdx == null ? r.lgOn : r.n === onlyIdx) && ['ready', 'dup', 'error'].includes(r.status) && !bulkCheck(r))
-  if (!targets.length) return toast(onlyIdx == null ? '라운지에 올릴 매물이 없습니다. 📍 라운지 체크와 주소·금액을 확인해 주세요.' : '등록할 수 있는 매물이 없습니다. 주소·금액을 확인해 주세요.')
+  if (!targets.length) return toast(onlyIdx == null ? '기록할 매물이 없습니다. 주소·금액을 확인해 주세요.' : '등록할 수 있는 매물이 없습니다. 주소·금액을 확인해 주세요.')
   const skipped = BULK.rows.filter(r => ['ready', 'dup', 'error'].includes(r.status) && bulkCheck(r)).length
   if (onlyIdx == null) {
     const first = targets[0].n, last = targets[targets.length - 1].n
@@ -1479,24 +1547,26 @@ async function bulkRegister(onlyIdx) {
     const body = bulkBodyOf(r, hqKind)
     try {
       const res = await api('listing-create', body)
-      r.status = 'done'; r.id = res.row?.id || r.id; r.msg = r.daangnOnly ? '당근 전용으로 보관(라운지 미노출)' : `등록됨 → 승인대기${res.row?.bjdong_nm ? ' (' + res.row.bjdong_nm + ')' : ''}`; done++
+      r.status = 'done'; r.id = res.row?.id || r.id; r.msg = r.daangnOnly ? '당근 전용' : `등록됨 → 승인대기${res.row?.bjdong_nm ? ' (' + res.row.bjdong_nm + ')' : ''}`; done++
     } catch (e) {
       const m = String(e.message || '')
       if (m === '401') { BULK.busy = false; return }
-      if (/이미 있습니다/.test(m)) { r.status = 'dup'; r.msg = '라운지에 같은 주소·동/호수·층·거래유형·금액 매물이 이미 있음(승인대기/공급중)'; dup++ }
+      if (/이미 있습니다/.test(m)) { r.status = 'dup'; r.msg = '같은 주소·동/호수·층·거래유형·금액 매물이 이미 기록에 있음'; dup++ }
       else { r.status = 'error'; r.msg = m; err++ }
     }
     paintBulk()
   }
   BULK.busy = false
-  BULK.msg = `라운지 일괄등록 끝 — 등록 ${done}건${dup ? ` · 중복 ${dup}건(행의 [중복이어도 등록]으로 강행 가능)` : ''}${err ? ` · 실패 ${err}건` : ''}`
+  BULK.msg = `일괄 기록 끝 — 등록 ${done}건${dup ? ` · 중복 ${dup}건` : ''}${err ? ` · 실패 ${err}건` : ''}`
   paintBulk()
   if (done) { toast(`${done}건을 승인대기로 등록했습니다. 검수·승인 탭에서 승인하세요.`); S.data.review = null; refresh() }
 }
 /** 줄 메모: 당근 중복(미리 확인 결과) + 당근 빠진 칸 — '당근에 빠진 것' 자리에 같이 보인다 */
 const bulkMemoText = r => { const miss = dgMissBulk(r); const parts = []
   if (r.pre && r.pre.state === 'dup') parts.push('⚠️ 당근 중복매물 — 이미 판매중' + (r.pre.no ? ' (당근 ' + r.pre.no + (r.pre.broker ? ' · ' + r.pre.broker : '') + (r.pre.trade ? ' · ' + r.pre.trade : '') + ')' : ''))
-  else if (r.pre && r.pre.state === 'ours') parts.push('⚠️ 당근 중복매물 — 내가 이미 올림' + (r.pre.no ? ' (당근 ' + r.pre.no + ')' : ''))
+  else if (r.pre && r.pre.state === 'ours') parts.push('⚠️ 당근 중복매물 — ' + (r.pre.mine === false ? '우리 사무실 ' + (r.pre.by || '다른 직원') + '님이 이미 올림' : '내가 이미 올림') + (r.pre.no ? ' (당근 ' + r.pre.no + ')' : ''))
+  else if (r.pre && r.pre.state === 'office') parts.push((r.pre.sameUnit ? '⚠️ 당근 중복매물 — 우리 사무실 글이 같은 호실에 판매중' : '⚠️ 주의 — 우리 사무실 글이 같은 건물에 판매중') + (r.pre.no ? ' (당근 ' + r.pre.no + ')' : ''))
+  else if (r.pre && r.pre.state === 'same') parts.push('⚠️ 당근 중복매물 — 이 목록 ' + r.pre.n + '번과 같은 주소·호수')
   if (miss.length) parts.push('🥕 당근 빠짐: ' + miss.join(' · '))
   return parts.join('   ') }
 const dgMissBulk = r => {   // 당근 등록에 꼭 필요한 칸 중 비어 있는 것
@@ -1528,7 +1598,9 @@ function paintBulk() {
     const p = r.pre; if (!p || (r.dg && (r.dg.state === 'done' || r.dg.state === 'dup'))) return ''
     if (p.state === 'busy') return `<div style="margin-top:4px"><span class="pill etc">🥕 당근 중복 확인 중…</span></div>`
     if (p.state === 'dup') return `<div style="margin-top:4px"><span class="pill pending" title="${esc(p.full || '')}">당근 중복${p.no ? ' · ' + esc(p.no) : ''}${p.broker ? ' · ' + esc(p.broker) : ''}${p.trade ? ' · ' + esc(p.trade) : ''}</span>${p.url ? ` <a href="${esc(p.url)}" target="_blank" rel="noopener" style="font-size:12px">보기</a>` : ''}${p.ours ? ` <span class="hint" style="margin:0">(내가 올린 ${esc(p.ours)})</span>` : ''}</div>`
-    if (p.state === 'ours') return `<div style="margin-top:4px"><span class="pill pending">⚠️ 내가 이미 올림 ${esc(p.no || '')}</span>${p.url ? ` <a href="${esc(p.url)}" target="_blank" rel="noopener" style="font-size:12px">보기</a>` : ''}</div>`
+    if (p.state === 'same') return `<div style="margin-top:4px"><span class="pill pending">⚠️ 이 목록 ${esc(p.n)}번과 같은 주소·호수${p.noho ? ' (호수 없음 — 같은 건물·같은 층)' : ''}</span> <span class="hint" style="margin:0">둘 다 올리면 당근 중복 — 다른 호실이면 호수를 적어 주세요</span></div>`
+    if (p.state === 'office') return `<div style="margin-top:4px"><span class="pill ${p.sameUnit ? 'pending' : 'etc'}" title="${esc(p.full || '')}">${p.sameUnit ? '⚠️ 우리 사무실 글이 같은 호실에 판매중' : '⚠️ 우리 사무실 글이 같은 건물에 판매중'}${p.no ? ' · ' + esc(p.no) : ''}${p.trade ? ' · ' + esc(p.trade) : ''}</span>${p.url ? ` <a href="${esc(p.url)}" target="_blank" rel="noopener" style="font-size:12px">보기</a>` : ''} <span class="hint" style="margin:0">${p.sameUnit ? '당근은 한 중개사무소를 하나로 봐서 종류·가격이 달라도 제재 — 다른 호실이 확실하면 호수를 적고 다시 확인' : '호수가 달라 올릴 수는 있지만 같은 매물인지 꼭 확인'}</span></div>`
+    if (p.state === 'ours') return `<div style="margin-top:4px"><span class="pill pending">⚠️ ${p.mine === false ? '우리 사무실 ' + esc(p.by || '다른 직원') + '님이 이미 올림' : '내가 이미 올림'} ${esc(p.no || '')}</span>${p.url ? ` <a href="${esc(p.url)}" target="_blank" rel="noopener" style="font-size:12px">보기</a>` : ''}</div>`
     if (p.state === 'ok') return `<div style="margin-top:4px"><span class="pill active" title="${esc(p.full || '')}">✓ 당근에 없음${p.partial ? ` (같은 건물 다른 호 ${p.partial}건)` : ''}</span></div>`
     if (p.state === 'no') return `<div style="margin-top:4px"><span class="pill rejected">🥕 올릴 수 없는 주소 — ${esc(p.msg || '')}</span></div>`
     return `<div style="margin-top:4px"><span class="pill etc">🥕 확인 못함 — ${esc(p.msg || '')}</span></div>`
@@ -1543,7 +1615,7 @@ function paintBulk() {
   const stPill = r => {
     const why = ['ready', 'dup', 'error'].includes(r.status) ? bulkCheck(r) : ''
     if (r.status === 'done') return `<span class="pill active">등록됨</span>`
-    if (BULK.formRow === r.n) return `<span class="pill etc" title="위 폼에 들어가 있는 매물 — 폼에서 고치면 이 줄에 저장">폼에서 편집 중</span>`
+    if (BULK.formRow === r.n) return `<span class="pill etc" style="background:#fef3c7;border-color:#fcd34d;color:#92400e" title="아래 폼에 들어가 있는 매물 — 폼에서 고치는 대로 이 줄에 저장">✎ 폼 입력중${(r.got || {}).area_exclusive ? ' · 전용 ' + esc((r.got || {}).area_exclusive) + '㎡' : ''}</span>`
     if (r.status === 'registering') return `<span class="pill etc">등록 중…</span>`
     if (r.status === 'fail') return `<span class="pill rejected">정리 실패</span>`
     if (r.status === 'dup') return `<span class="pill pending">중복</span>`
@@ -1554,9 +1626,9 @@ function paintBulk() {
   const addrCell = r => {
     if (!r.ok) return `<div class="memo" style="color:var(--bad)">${esc(r.error || '')}</div>`
     const lgLabel = ''
-    const dgLabel = (r.ok && !(r.dg && r.dg.state === 'done') ? `<label style="display:flex;align-items:center;gap:5px;margin:4px 0 0;font-size:12px;font-weight:${r.dgOn ? 700 : 400};color:${r.dgOn ? '#c2410c' : 'inherit'}" title="체크하면 [당근으로 올리기]에 포함됩니다 (라운지 등록 전이면 먼저 승인대기로 등록)"><input type="checkbox" data-dg="${r.n}" ${r.dgOn ? 'checked' : ''} ${BULK.dgRun ? 'disabled' : ''} style="width:auto;margin:0"> 🥕 당근으로 올리기${r.ok && !r.lgOn && r.status !== 'done' ? ' <span style="color:var(--dim);font-weight:400">(당근만 · 라운지 미노출)</span>' : ''}</label>` : '')
+    const dgLabel = (r.ok && !(r.dg && r.dg.state === 'done') ? `<label style="display:flex;align-items:center;gap:5px;margin:4px 0 0;font-size:12px;font-weight:${r.dgOn ? 700 : 400};color:${r.dgOn ? '#c2410c' : 'inherit'}" title="체크하면 [당근으로 올리기]에 포함됩니다 "><input type="checkbox" data-dg="${r.n}" ${r.dgOn ? 'checked' : ''} ${BULK.dgRun ? 'disabled' : ''} style="width:auto;margin:0"> 🥕 당근으로 올리기${r.ok && !r.lgOn && r.status !== 'done' ? '' : ''}</label>` : '')
     const dgLabel2 = lgLabel + dgLabel
-    if (r.status === 'done') { const it = r.addrItems[r.addrIdx] || {}; return `<b>${esc(it.jibunAddr || it.roadAddr || '')}</b><small style="display:block;color:var(--dim)">${esc(it.roadAddr || '')}</small>${r.daangnOnly ? '<div class="memo">당근 전용(라운지 미노출)</div>' : ''}${dgLabel2}` }
+    if (r.status === 'done') { const it = r.addrItems[r.addrIdx] || {}; return `<b>${esc(it.jibunAddr || it.roadAddr || '')}</b><small style="display:block;color:var(--dim)">${esc(it.roadAddr || '')}</small>${r.daangnOnly ? '<div class="memo">당근 전용</div>' : ''}${dgLabel2}` }
     const opts = (r.addrItems || []).map((it, i) => `<option value="${i}" ${i === r.addrIdx ? 'selected' : ''}>${esc(it.jibunAddr || it.roadAddr)}${it.bdNm ? ' · ' + esc(it.bdNm) : ''}</option>`).join('')
     return `${r.addrItems.length ? `<select data-addr="${r.n}" style="width:100%;max-width:100%;font:inherit;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:6px">${opts}</select>` : ''}
       <div style="display:flex;gap:4px;margin-top:4px"><input data-addrq="${r.n}" value="${esc(r.addrQ ?? r.got.address_q ?? '')}" placeholder="주소 다시 찾기" style="flex:1;min-width:120px;font:inherit;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:6px"><button class="btn" data-addrgo="${r.n}" ${r.addrState === 'searching' ? 'disabled' : ''}>찾기</button></div>
@@ -1568,8 +1640,8 @@ function paintBulk() {
   box.innerHTML = `
     <div class="row-acts" style="margin:10px 0 6px;align-items:center">
       <label style="display:flex;align-items:center;gap:4px;margin:0;font-size:12.5px;font-weight:400"><input type="checkbox" id="blgall" ${BULK.rows.some(r => r.ok && r.status !== 'done') && BULK.rows.filter(r => r.ok && r.status !== 'done').every(r => r.lgOn) ? 'checked' : ''} ${BULK.busy || BULK.dgRun ? 'disabled' : ''} style="width:auto;margin:0"> 📍 전부</label>
-      <button class="btn b" id="bregister" ${BULK.busy || !ready ? 'disabled' : ''} title="📍 라운지 체크된 줄을 승인대기로 등록">📍 ${ready}건 라운지 일괄등록</button>
-      <button class="btn" id="bclear" ${BULK.busy || BULK.dgRun ? 'disabled' : ''}>목록 비우기</button>${BULK.rows.some(r => r.got && r.got.views != null) ? `<button class="btn" id="bsortviews" ${BULK.busy || BULK.dgRun ? 'disabled' : ''} title="당근 조회수 많은 순으로 줄을 다시 번호 매깁니다">👁 조회수순</button>` : ''}
+      <button class="btn b" id="bregister" ${BULK.busy || !ready ? 'disabled' : ''} title="📍 체크된 줄을 기록">📍 ${ready}건 일괄 기록</button>
+      <button class="btn" id="bclear" ${BULK.busy || BULK.dgRun ? 'disabled' : ''}>목록 비우기</button>${(() => { const n = BULK.rows.filter(r => r.ok && r.status !== 'done' && areaDiffText(r)).length; return n ? `<button class="btn" id="bareaall" ${BULK.busy || BULK.dgRun ? 'disabled' : ''} title="폼 면적이 건축물대장과 다르거나 비어 있는 줄 전부를 대장 전유면적(공급면적 포함)으로 바꿉니다">📐 대장 면적 따르기 (${n}건)</button>` : '' })()}${BULK.rows.some(r => r.got && r.got.views != null) ? `<button class="btn" id="bsortviews" ${BULK.busy || BULK.dgRun ? 'disabled' : ''} title="당근 조회수 많은 순으로 줄을 다시 번호 매깁니다">👁 조회수순</button>` : ''}
       <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;font-size:12.5px">
         <label style="display:flex;align-items:center;gap:4px;margin:0;font-weight:400"><input type="checkbox" id="bdgall" ${BULK.rows.some(r => r.ok && !(r.dg && r.dg.state === 'done')) && BULK.rows.filter(r => r.ok && !(r.dg && r.dg.state === 'done')).every(r => r.dgOn) ? 'checked' : ''} ${BULK.dgRun ? 'disabled' : ''} style="width:auto;margin:0"> 🥕 전부</label>
         ${dgMine() ? `<button class="btn" id="bdgpre" style="border-color:#fed7aa;color:#c2410c;padding:4px 10px" ${BULK.busy || BULK.dgRun || BULK.preRun || !BULK.rows.some(r => r.ok && !(r.dg && r.dg.state === 'done')) ? 'disabled' : ''} title="연결된 당근 계정 기준으로 같은 호실 매물이 이미 판매중인지 올리기 전에 확인합니다(당근에서 등록 폼이 막는 것과 같은 판정 + 내가 올린 기록)">${BULK.preRun ? '🔎 중복 확인 중…' : '🔎 당근 중복 미리 확인'}</button>` : ''}
@@ -1582,16 +1654,16 @@ function paintBulk() {
       <span class="hint" style="margin:0">총 ${BULK.rows.length}건 · 등록 가능 ${ready}건 · 사진은 줄마다 체크한 것만 들어갑니다 · 매물마다 설명이 다르면 [설명 수정]으로 그 자리에서 고치세요</span>
     </div>
     <div class="card scroll"><table class="bulk"><thead><tr><th>#</th><th>주소 (목록에서 확인)</th><th>동/호</th><th>거래 · 금액(만원)</th><th>종류 · 층 · 면적</th><th>제목 / 출처</th><th>상태</th><th></th></tr></thead><tbody>
-    ${BULK.rows.map(r => { const g = r.got || {}; return `<tr class="${r.status === 'done' ? 'done' : ''}">
+    ${BULK.rows.map(r => { const g = r.got || {}; return `<tr data-brow="${r.n}" class="${r.status === 'done' ? 'done' : ''}">
       <td class="num">${r.n}</td>
       <td style="min-width:190px">${addrCell(r)}</td>
       <td class="nowrap">${esc([g.dong_nm, g.ho_nm].filter(Boolean).join(' ') || '-')}</td>
       <td style="min-width:88px">${r.ok ? `<b>${esc(g.deal_type || '?')}</b> ${esc(moneyLabel(g))}${g.manage_prc ? `<div class="memo">관리 ${esc(g.manage_prc)}</div>` : ''}` : '-'}</td>
       <td style="min-width:78px">${r.ok ? esc([g.property_type, g.floor_no != null ? g.floor_no + (g.total_floors ? '/' + g.total_floors : '') + '층' : '', g.area_exclusive ? g.area_exclusive + '㎡' : ''].filter(Boolean).join(' · ') || '-') : '-'}</td>
       <td style="min-width:120px;max-width:220px"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.headline || '')}</div><div class="memo" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.input || '')}">${r.ok ? `<b style="color:${r.photoCount ? '#1d4ed8' : 'var(--dim)'}">사진${r.photoCount || 0}</b>${r.photoTotal > (r.photoCount || 0) ? ` <b style="color:var(--bad)">⚠ 원본 ${r.photoTotal}장 — 못 읽음, 알려주세요</b>` : ''} · ` : ''}${esc(({ naver: '네이버', daangn: '당근', generic: '링크', excel: '엑셀', text: '글', onhouse: '온하우스' })[String(g._source || '').replace('+excel', '')] || '')}${g.views != null ? ` · <span title="당근 조회수 · 관심 · 채팅" style="color:#c2410c">👁 ${esc(g.views)}${g.watches != null ? ' ♥' + esc(g.watches) : ''}${g.chats != null ? ' 💬' + esc(g.chats) : ''}</span>` : ''}${g.owner_phone ? ' · ' + ({ manager: '관리업체', tenant: '세입자' }[g.contact_role] || '임대인') + ' 연락처 ✓' : ''} · ${esc((r.input || '').slice(0, 60))}</div>${r.msg ? `<div class="memo" style="color:${r.status === 'done' ? 'var(--ok)' : 'var(--bad)'}">${esc(r.msg)}</div>` : ''}${r.ok ? `<div class="memo" data-areadiff="${r.n}" style="color:#b45309;white-space:normal;${areaDiffText(r) ? '' : 'display:none'}">${esc(areaDiffText(r))}</div>` : ''}${r.ok && r.status !== 'done' ? `<div class="memo" data-missmemo="${r.n}" style="color:#b45309;white-space:normal;${bulkMemoText(r) ? '' : 'display:none'}" title="당근부동산에 올리려면 채워야 하는 칸 — [설명 수정]·[폼에 넣기]로 채우세요">${esc(bulkMemoText(r))}</div>` : ''}</td>
-      <td>${stPill(r)}${dgPill(r)}</td>
+      <td>${stPill(r)}${dgPill(r)}${officeBlock(r)}</td>
       <td style="min-width:104px"><div class="row-acts" style="flex-direction:column;align-items:stretch">
-        ${r.status === 'dup' ? `<button class="btn no" data-force="${r.n}">중복이어도 등록</button>` : ''}
+        ${r.status === 'dup' ? `` : ''}
         ${r.ok && r.status !== 'done' ? `<button class="btn" data-toform="${r.n}" title="위 단건 폼에 넣어 고친 뒤 등록">폼에 넣기</button>` : ''}
         ${r.ok && r.status !== 'done' ? `<button class="btn ${r.editOpen ? 'b' : ''}" data-descedit="${r.n}" title="이 매물의 제목·설명을 여기서 바로 고칩니다">${r.editOpen ? '설명 닫기' : '설명 수정'}</button>` : ''}
         ${r.status !== 'registering' ? `<button class="btn" data-del="${r.n}">삭제</button>` : ''}
@@ -1615,8 +1687,16 @@ function paintBulk() {
     </tbody></table></div>`
   const byN = n => BULK.rows.find(r => r.n === +n)
   document.getElementById('bregister').onclick = () => bulkRegister(null)
+  const ba = document.getElementById('bareaall'); if (ba) ba.onclick = () => {
+    const rows = BULK.rows.filter(r => r.ok && r.status !== 'done' && areaDiffText(r)); if (!rows.length) return
+    if (!confirm(`${rows.length}건의 전용면적을 건축물대장 값으로 바꿉니다. (공급면적도 대장에 있으면 함께) 계속할까요?`)) return
+    let n = 0
+    rows.forEach(r => { const L = r.ledger; if (!L || !L.ex) return; const g = r.got || (r.got = {}); g.area_exclusive = +L.ex.toFixed(2); if (L.sup > 0) g.area_supply = +L.sup.toFixed(2); n++
+      if (BULK.formRow === r.n) { const e = $('c_area_exclusive'), s2 = $('c_area_supply'); if (e) { e.value = String(g.area_exclusive); e.classList.add('filled'); e.classList.remove('miss') } if (s2 && L.sup > 0) { s2.value = String(g.area_supply); s2.classList.add('filled') } if (typeof BLDG === 'object') BLDG.areaDiff = '' } })
+    paintBulk(); toast(`${n}건의 면적을 대장 면적으로 바꿨습니다`)
+  }
   document.getElementById('bclear').onclick = () => { if (confirm('정리한 목록을 모두 지울까요? (이미 등록된 매물은 그대로 남습니다)')) { BULK.rows = []; BULK.msg = ''; paintBulk() } }
-  box.querySelectorAll('select[data-addr]').forEach(s => s.onchange = () => { const r = byN(s.dataset.addr); r.addrIdx = +s.value; r.addrState = 'ok'; bulkSummaryMsg(); paintBulk(); bulkLedger(r) })   // 사람이 고르면 확인된 것 → 위 안내 줄의 건수도 다시
+  box.querySelectorAll('select[data-addr]').forEach(s => s.onchange = () => { const r = byN(s.dataset.addr); r.addrIdx = +s.value; r.addrState = 'ok'; bulkSummaryMsg(); paintBulk(); bulkLedger(r); officeCross([r]) })   // 사람이 고르면 확인된 것 → 위 안내 줄의 건수도 다시
   box.querySelectorAll('button[data-addrgo]').forEach(b => b.onclick = async () => { const r = byN(b.dataset.addrgo); const q = box.querySelector(`input[data-addrq="${r.n}"]`).value.trim(); if (q.length < 2) return; r.got.address_q = q; r.addrQ = q; await bulkResolveAddr(r) })
   box.querySelectorAll('input[data-addrq]').forEach(i => i.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); box.querySelector(`button[data-addrgo="${i.dataset.addrq}"]`).click() } })
   box.querySelectorAll('button[data-force]').forEach(b => b.onclick = () => { const r = byN(b.dataset.force); r.force = true; bulkRegister(r.n) })
@@ -1655,7 +1735,7 @@ function paintBulk() {
     if (it && S.pickCreateAddr) S.pickCreateAddr(it)
     paintBulk()
     document.getElementById('cmsg').innerHTML = `<b>${r.n}번 매물</b>을 폼에 넣었습니다${filled.length ? ': ' + filled.map(esc).join(' · ') : ''} — 여기서 고치는 값은 <b>${r.n}번 줄에 바로 저장</b>됩니다. [승인대기로 등록]하면 그 줄은 등록됨으로 바뀝니다.`
-    document.getElementById('cform').scrollIntoView({ behavior: 'smooth', block: 'start' })
+    requestAnimationFrame(() => { const f = document.getElementById('cform'); if (f) window.scrollTo({ top: Math.max(0, f.getBoundingClientRect().top + window.scrollY - 12), behavior: 'smooth' }) })
   })
 }
 function bindBulk() {
@@ -1734,6 +1814,10 @@ function paintCreate() {
       <label>총 주차대수 <span style="font-weight:400;color:var(--dim)">(당근 필수 · 대장에서 자동)</span><input id="c_parking_total" inputmode="numeric" placeholder="예) 8"></label>
       <label class="wide">제목 (한 줄)<input id="c_headline" maxlength="60" placeholder="예) 개포동 리모델링 완료 컨디션 좋은 1.5룸"></label>
       <label class="wide">설명<textarea id="c_description" rows="5"></textarea></label>
+      <div class="wide" id="c_src_box" style="margin-top:-6px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:13px">원문 상세설명</b><span class="hint" style="margin:0;flex:1">링크(온하우스·네이버·당근)에 적혀 있던 설명 그대로 · [넣기]를 누르면 설명 끝에 붙고, 참고만 하려면 그대로 두면 됩니다 (당근에는 안 올라감)</span><button type="button" class="btn b" id="c_src_use" style="padding:5px 12px;font-size:12px">넣기</button><button type="button" class="btn" id="c_src_copy" style="padding:5px 12px;font-size:12px">복사</button></div>
+        <textarea id="c_src_desc" rows="4" placeholder="링크를 정리하면 원문 상세설명이 여기에 들어옵니다 (직접 붙여 넣어도 됩니다)" style="margin-top:6px"></textarea>
+      </div>
       <div class="wide" id="c_phr" style="margin-top:-6px">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:13px">자주 쓰는 문구</b><span class="hint" style="margin:0;flex:1">[넣기]를 누르면 설명 끝에 붙습니다 · 문구는 여기서 바로 고치면 저장됩니다 (이 브라우저에 보관)</span><label style="display:flex;align-items:center;gap:5px;margin:0;font-size:12.5px;font-weight:700;color:#1d4ed8"><input type="checkbox" id="c_phr_all" style="width:auto;margin:0"> 전체 넣기 <span style="font-weight:400;color:var(--dim);font-size:12px">(켜 두면 매물을 넣을 때마다 문구 전부가 설명 끝에 붙습니다)</span></label><button type="button" class="btn" id="c_phr_add" style="padding:4px 10px;font-size:12px">+ 문구 추가</button></div>
         <div id="c_phr_list"></div>
@@ -1745,12 +1829,13 @@ function paintCreate() {
         <div class="row-acts" style="margin-top:8px;align-items:center"><button type="button" class="btn" id="c_photo950_zip">전부 zip 으로 저장</button><span class="hint" id="c_photo950_msg" style="margin:0"></span></div>
       </div>
       <label class="wide">사진 주소 (한 줄에 하나, 선택)<textarea id="c_photos" rows="2" placeholder="https://..."></textarea>
-        <span style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13px;color:var(--dim)"><input type="checkbox" id="c_photos_import" style="width:auto;margin:0"> 붙여넣은 링크의 사진도 가져오기 (기본 꺼짐 · 원본 사이트 워터마크가 있는 사진이 그대로 들어옵니다)</span></label>
+        <div id="c_photo_strip" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
+        <span style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13px;color:var(--dim)"><input type="checkbox" id="c_photos_import" style="width:auto;margin:0"> 붙여넣은 링크의 사진도 가져오기 (기본 꺼짐 · 링크의 원본 사진이 그대로 들어옵니다. 워터마크가 찍힌 사진이 섞여 있으면 아래 사진 950 에서 확인해 ✕로 빼세요)</span></label>
       <label style="display:none">중개유형<select id="c_hq_kind"><option value="joint" selected>당근 전용</option></select></label>
       <div class="wide" id="c_missing" style="display:none"></div>
       <div class="actions">
         <button type="submit" class="btn b" id="csubmit">승인대기로 등록</button>
-        <button type="button" class="btn b" id="cdaangn" style="background:#ff6f0f;border-color:#ff6f0f" title="라운지 승인대기로 등록한 뒤 바로 당근부동산에도 올립니다 (사진 포함)">🥕 라운지 + 당근</button>
+        <button type="button" class="btn b" id="cdaangn" style="background:#ff6f0f;border-color:#ff6f0f" title="기록한 뒤 바로 당근부동산에 올립니다 (사진 포함)">🥕 등록 + 당근</button>
         <button type="button" class="btn b" id="cdaangnonly" style="background:#ff6f0f;border-color:#ff6f0f" title="연결된 당근 계정으로 당근부동산에 올립니다 (사진 포함)">🥕 당근에 올리기</button>
         <button type="button" class="btn" id="creset">비우기</button>
         <span class="hint" id="cstat"></span>
@@ -1771,7 +1856,7 @@ function paintCreate() {
   $('c_owner_phone').oninput = e => { const d = e.target.value.replace(/[^0-9]/g, '').slice(0, 11); const a = d.startsWith('02') ? 2 : 3   // 02 는 2자리 국번
     e.target.value = d.length <= a ? d : d.length < a + 5 ? d.slice(0, a) + '-' + d.slice(a) : d.slice(0, a) + '-' + d.slice(a, d.length - 4) + '-' + d.slice(-4) }
 
-  /* 주소 자동완성 — 라운지 서버의 주소 창구(/address?q=) */
+  /* 주소 자동완성 — 포털 서버의 주소 창구(/address?q=) */
   let sugT, sugReq = 0
   const drawSug = items => {
     const box = $('c_addr_list'); if (!box) return   // 폼이 이미 새로 그려졌으면 무시
@@ -1823,10 +1908,11 @@ function paintCreate() {
     setV('c_room_count', got.room_count, '방수'); setV('c_bathroom_count', got.bathroom_count, '욕실'); setV('c_is_parking', got.is_parking, '주차'); setV('c_is_pet', got.is_pet, '반려동물'); setV('c_parking_total', got.parking_total, '총 주차대수'); setV('c_available_date', got.available_date, '입주가능일'); if ($('c_available_date').value) $('c_move_now').checked = $('c_available_date').value === todayStr()
     if (got.direction && DIRS.includes(got.direction) && !$('c_direction').value) { $('c_direction').value = got.direction; filled.push('향') }
     setV('c_owner_phone', got.owner_phone, '연락처'); if (got.contact_role) { $('c_contact_role').value = got.contact_role; filled.push('연락처 구분') } setV('c_headline', got.headline, '제목'); setV('c_description', got.description, '설명')
+    if (got.source_text) { $('c_src_desc').value = got.source_text; $('c_src_desc').classList.add('filled'); filled.push('원문 상세설명') }   // 원문은 늘 덮어쓴다
     if (got.source_url) F.source_url = got.source_url
     // 사진은 '사진도 가져오기' 체크(기본 꺼짐)일 때만 채운다. 링크에 사진이 있었는데 건너뛰면 안내 문구만 남긴다
     if (Array.isArray(got.photos) && got.photos.length && !$('c_photos').value) {
-      if ($('c_photos_import').checked) { $('c_photos').value = got.photos.slice(0, 10).join('\n'); $('c_photos').classList.add('filled'); filled.push('사진') }
+      if ($('c_photos_import').checked) { $('c_photos').value = got.photos.slice(0, 10).join('\n'); $('c_photos').classList.add('filled'); filled.push('사진'); if (window.paintPhotoStrip) paintPhotoStrip() }
       else got.note = [got.note, `링크에 사진 ${got.photos.length}장이 있었지만 가져오지 않았습니다 (사진 칸 아래 체크를 켜면 가져옵니다)`].filter(Boolean).join(' · ')
     }
     if (got.address_q && !$('c_road_addr').value) { $('c_addr_q').value = got.address_q; filled.push('주소'); setTimeout(() => { if ($('c_road_addr').value) return; $('c_addr_q').focus(); runSug(true) }, 0) }
@@ -1844,9 +1930,10 @@ function paintCreate() {
       el.classList.remove('filled', 'miss')
     })
     $('c_addr_pick').textContent = '아직 고르지 않았습니다'; $('c_addr_list').hidden = true
-    const pb = $('c_photo950'); if (pb) { pb.style.display = 'none'; $('c_photo950_list').innerHTML = ''; $('c_photo950_msg').textContent = '' } P950.items = []; P950.srcUrls = []
+    const pb = $('c_photo950'); if (pb) { pb.style.display = 'none'; $('c_photo950_list').innerHTML = ''; $('c_photo950_msg').textContent = '' } P950.items = []; P950.srcUrls = []; P950.cache = new Map(); P950.run = (P950.run || 0) + 1; P950.edited = false
     const mb = $('c_missing'); if (mb) { mb.style.display = 'none'; mb.innerHTML = '' }
     F.daangn = false; F.force = false; F.source_url = ''
+    if (window.paintPhotoStrip) paintPhotoStrip()
     if (typeof BLDG === 'object') { BLDG.key = ''; BLDG.data = null }
     if (typeof paintBldg === 'function') paintBldg(`<div class="bnote">주소를 고르면(또는 일괄 목록의 [폼에 넣기]) 이 자리에 대장 요약 · 해당 호실 면적 · 층별 현황 · 주변 정보가 뜹니다.</div>`)
   }
@@ -1862,7 +1949,8 @@ function paintCreate() {
     g.bd_nm = tx('c_bd_nm'); g.dong_nm = tx('c_dong_nm'); g.ho_nm = tx('c_ho_nm'); g.property_type = tx('c_property_type')
     g.floor_no = nn('c_floor_no'); g.total_floors = nn('c_total_floors'); g.area_exclusive = nn('c_area_exclusive'); g.area_supply = nn('c_area_supply')
     g.room_count = nn('c_room_count'); g.bathroom_count = nn('c_bathroom_count'); g.direction = tx('c_direction'); g.available_date = tx('c_available_date'); g.room_type = tx('c_room_type'); g.building_use = BLDG.floorUse || undefined
-    g.headline = tx('c_headline'); g.description = tx('c_description'); g.owner_phone = tx('c_owner_phone'); g.address_q = v('c_addr_q') || g.address_q
+    g.headline = tx('c_headline'); g.description = tx('c_description'); g.source_text = tx('c_src_desc'); g.owner_phone = tx('c_owner_phone'); g.address_q = v('c_addr_q') || g.address_q
+    { const cur = v('c_photos') ? v('c_photos').split('\n').map(x => x.trim()).filter(x => /^https?:\/\//.test(x)) : (P950.srcUrls || []); if (P950.edited || cur.length) g.photos = cur.slice() }   // 사진 순서·삭제도 그 줄에 저장 (2026-10-11)
     g.is_parking = tx('c_is_parking'); g.is_pet = tx('c_is_pet'); g.contact_role = $('c_contact_role').value || 'landlord'; g.parking_total = nn('c_parking_total')
     if (v('c_road_addr')) { r.addrItems = [{ roadAddr: v('c_road_addr'), jibunAddr: v('c_jibun_addr'), bdNm: v('c_bd_nm') }]; r.addrIdx = 0; r.addrState = 'ok'; r.addrQ = v('c_addr_q') }
     paintBulk()
@@ -1875,11 +1963,11 @@ function paintCreate() {
   $('c_move_now').onchange = () => { const d = $('c_available_date'); if ($('c_move_now').checked) { d.value = todayStr(); d.classList.add('filled'); d.classList.remove('miss') } else d.value = ''; fire(d); paintMissing(false) }
   $('c_available_date').addEventListener('input', () => { $('c_move_now').checked = $('c_available_date').value === todayStr() })
   /* 사진 950: 워커 /img 중계로 받아 캔버스에서 가로 950 으로 → 한 장씩 저장 / 전부 zip */
-  const P950 = { items: [] }
+  const P950 = { items: [], srcUrls: [], cache: new Map(), run: 0, edited: false }
   const imgBase = () => String(CONFIG.PARSE_API || '').trim().replace(/\/parse\/?(\?.*)?$/, '')
   const refererFor = u => /zigbang\.com|cloudfront\.net|onhouse\.com/.test(u) ? 'https://www.onhouse.com/' : /pstatic\.net/.test(u) ? 'https://new.land.naver.com/' : /karroter\.net|daangn\.com/.test(u) ? 'https://realty.daangn.com/' : ''
   const imgFrom = src => new Promise((ok, bad) => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => ok(im); im.onerror = () => bad(new Error('load')); im.src = src })
-  const koOnly = u => /cloudfront\.net/i.test(u)   // 온하우스 건물 사진 CDN 은 한국 밖 요청을 막는다 → Cloudflare 워커 대신 라운지 서버(한국)가 받아준다
+  const koOnly = u => /cloudfront\.net/i.test(u)   // 온하우스 건물 사진 CDN 은 한국 밖 요청을 막는다 → Cloudflare 워커 대신 포털 서버(한국)가 받아준다
   const viaLounge = async u => { const r = await fetch(String(CONFIG.API_BASE || '').replace(/\/$/, '') + '/img?u=' + encodeURIComponent(u) + '&r=' + encodeURIComponent(refererFor(u)), { headers: { 'x-intranet-token': token() }, cache: 'no-store' }); if (!r.ok) throw new Error('사진 ' + r.status); return imgFrom(URL.createObjectURL(await r.blob())) }
   const loadImg = async u => {
     if (!koOnly(u)) { try { return await imgFrom(imgBase() + '/img?u=' + encodeURIComponent(u) + '&r=' + encodeURIComponent(refererFor(u))) } catch (_) { /* 워커가 못 받으면 서버로 */ } }
@@ -1887,18 +1975,52 @@ function paintCreate() {
   }
   const to950 = (im, w = 950) => new Promise(ok => { const h = Math.max(1, Math.round(im.naturalHeight * w / im.naturalWidth)); const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(im, 0, 0, w, h); c.toBlob(b => ok({ blob: b, w, h }), 'image/jpeg', 0.92) })
   const saveBlob = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove() }, 2000) }
+  /* 사진 950 패널 — P950.srcUrls 순서가 기준(당근 업로드·zip·일괄 목록 줄). 끌어서 순서 변경 · ‹ › · ✕ 빼기 · 첫 장이 대표 (2026-10-11) */
+  const sync950Items = () => { P950.items = P950.srcUrls.map(u => P950.cache.get(u)).filter(c => c && c !== 'fail').map((c, i) => ({ name: String(i + 1).padStart(2, '0') + '.jpg', blob: c.blob })) }
+  const paint950 = () => {
+    const list = $('c_photo950_list'); if (!list) return
+    const n = P950.srcUrls.length
+    list.innerHTML = P950.srcUrls.map((u, i) => {
+      const c = P950.cache.get(u); const nm = String(i + 1).padStart(2, '0')
+      const inner = !c ? `<div style="aspect-ratio:1;background:#eef1f6;border-radius:8px;display:grid;place-items:center">…</div>`
+        : c === 'fail' ? `<div style="aspect-ratio:1;background:#fde8e8;border-radius:8px;display:grid;place-items:center;color:#b42318">실패</div>`
+        : `<img src="${c.url || (c.url = URL.createObjectURL(c.blob))}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block">`
+      return `<div class="p950" draggable="true" data-i="${i}" title="끌어서 순서 변경" style="position:relative;text-align:center;font-size:11px;color:var(--dim);cursor:grab">${inner}${i === 0 ? '<span style="position:absolute;left:0;top:0;background:var(--blue);color:#fff;font-size:10px;padding:1px 6px;border-radius:8px 0 6px 0">대표</span>' : ''}<button type="button" data-prm950="${i}" title="이 사진 빼기" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:1px solid #fecaca;background:#fff;color:#dc2626;font-weight:900;line-height:1;padding:0;cursor:pointer">×</button><div style="display:flex;justify-content:center;gap:3px;margin-top:4px"><button type="button" class="btn" data-pmv950="-1" data-i="${i}" ${i === 0 ? 'disabled' : ''} title="앞으로" style="padding:3px 7px;font-size:12px">‹</button>${c && c !== 'fail' ? `<button type="button" class="btn" data-p950="${i}" title="이 사진 저장" style="padding:3px 7px;font-size:11px">⬇ ${nm}</button>` : ''}<button type="button" class="btn" data-pmv950="1" data-i="${i}" ${i === n - 1 ? 'disabled' : ''} title="뒤로" style="padding:3px 7px;font-size:12px">›</button></div>${c && c !== 'fail' ? `<div>${c.w}×${c.h}</div>` : ''}</div>`
+    }).join('')
+    const move = (from, to) => { if (from === to || from < 0 || to < 0 || from >= n || to >= n) return; const a = P950.srcUrls.slice(); const [x] = a.splice(from, 1); a.splice(to, 0, x); set950(a) }
+    list.querySelectorAll('[data-prm950]').forEach(b => b.onclick = () => { const a = P950.srcUrls.slice(); a.splice(Number(b.dataset.prm950), 1); set950(a) })
+    list.querySelectorAll('[data-pmv950]').forEach(b => b.onclick = () => { const i = Number(b.dataset.i); move(i, i + Number(b.dataset.pmv950)) })
+    list.querySelectorAll('[data-p950]').forEach(b => b.onclick = () => { const i = Number(b.dataset.p950); const c = P950.cache.get(P950.srcUrls[i]); if (c && c !== 'fail') saveBlob(c.blob, String(i + 1).padStart(2, '0') + '.jpg') })
+    list.querySelectorAll('.p950').forEach(th => {
+      th.addEventListener('dragstart', e => { list._drag = Number(th.dataset.i); th.style.opacity = '.4'; try { e.dataTransfer.setData('text/plain', String(list._drag)); e.dataTransfer.effectAllowed = 'move' } catch (_) {} })
+      th.addEventListener('dragend', () => { th.style.opacity = '' })
+      th.addEventListener('dragover', e => { e.preventDefault(); th.style.outline = '3px solid var(--blue)'; th.style.borderRadius = '8px' })
+      th.addEventListener('dragleave', () => { th.style.outline = '' })
+      th.addEventListener('drop', e => { e.preventDefault(); th.style.outline = ''; const from = list._drag; list._drag = undefined; if (from === undefined) return; move(from, Number(th.dataset.i)) })
+    })
+  }
+  /* 순서·삭제 반영: 패널 다시 그림 + 사진 칸(값이 있을 때만) 같은 순서로 + 일괄 목록 줄에 저장 */
+  const set950 = urls => {
+    P950.srcUrls = urls.slice(); P950.edited = true; sync950Items(); paint950()
+    const ta = $('c_photos'); if (ta && ta.value.trim()) { ta.value = P950.srcUrls.slice(0, 10).join('\n'); if (window.paintPhotoStrip) paintPhotoStrip(); fire(ta) }
+    else if (typeof syncRow === 'function') syncRow()
+    const msg = $('c_photo950_msg'); if (msg && !P950.srcUrls.length) msg.textContent = '사진을 전부 뺐습니다 — 사진 없이 올라갑니다'
+    else if (msg) msg.textContent = `사진 ${P950.items.length}/${P950.srcUrls.length}장 · 첫 장이 대표 · 끌어서 순서 변경, ✕ 빼기 — 이 순서대로 당근에 올라갑니다`
+  }
   const photo950 = async (urls) => {
-    const box = $('c_photo950'), list = $('c_photo950_list'), msg = $('c_photo950_msg'); if (!box) return
-    box.style.display = ''; list.innerHTML = ''; P950.items = []; P950.srcUrls = urls.slice(); msg.textContent = `사진 ${urls.length}장 변환 중…`
-    let done = 0
-    for (let i = 0; i < urls.length; i++) {
-      const u = urls[i]; const cell = document.createElement('div'); cell.style.cssText = 'text-align:center;font-size:11px;color:var(--dim)'; cell.innerHTML = `<div style="aspect-ratio:1;background:#eef1f6;border-radius:8px;display:grid;place-items:center">…</div>`; list.appendChild(cell)
-      try { const im = await loadImg(u); const r = await to950(im); const name = String(i + 1).padStart(2, '0') + '.jpg'; P950.items.push({ name, blob: r.blob })
-        cell.innerHTML = `<img src="${URL.createObjectURL(r.blob)}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--line)"><button type="button" class="btn" style="margin-top:4px;padding:4px 8px;font-size:11px" data-p950="${P950.items.length - 1}">⬇ ${name}</button><div>${r.w}×${r.h}</div>`
-        cell.querySelector('[data-p950]').onclick = e => { const it = P950.items[+e.currentTarget.dataset.p950]; saveBlob(it.blob, it.name) }
-        done++ }
-      catch (_) { cell.innerHTML = `<div style="aspect-ratio:1;background:#fde8e8;border-radius:8px;display:grid;place-items:center;color:#b42318">실패</div>` }
-      msg.textContent = `사진 ${done}/${urls.length}장 준비됨 — 아래 버튼으로 한 장씩, 또는 전부 zip`
+    const box = $('c_photo950'), msg = $('c_photo950_msg'); if (!box) return
+    const run = (P950.run = (P950.run || 0) + 1)
+    box.style.display = ''; P950.srcUrls = urls.slice(); P950.cache = new Map(); P950.items = []; P950.edited = false; paint950()
+    if (window.paintPhotoStrip) paintPhotoStrip()
+    msg.textContent = `사진 ${urls.length}장 변환 중…`
+    let done = 0, fail = 0
+    for (const u of urls) {
+      if (run !== P950.run) return   // 그 사이 다른 링크를 정리했으면 중단
+      if (!P950.srcUrls.includes(u)) continue   // 변환 중에 ✕로 뺀 사진
+      try { const im = await loadImg(u); const r = await to950(im); if (run !== P950.run) return; P950.cache.set(u, { blob: r.blob, w: r.w, h: r.h }); done++ }
+      catch (_) { if (run !== P950.run) return; P950.cache.set(u, 'fail'); fail++ }
+      sync950Items(); paint950()
+      msg.textContent = `사진 ${done}/${urls.length}장 준비됨${fail ? ` · 실패 ${fail}장` : ''} — 끌어서 순서 변경 · ✕ 빼기 · 첫 장이 대표 — 이 순서대로 당근에 올라갑니다 (⬇ 한 장씩, 또는 전부 zip)`
     }
   }
   $('c_photo950_zip').onclick = async () => {
@@ -1957,11 +2079,11 @@ function paintCreate() {
     }
     if (BLDG.areaDiff) box.insertAdjacentHTML('beforeend', `<div style="margin-top:8px;padding-top:6px;border-top:1px dashed #fde68a;color:#b45309"><b>⚠️ 면적 상이</b> — ${esc(BLDG.areaDiff)}. 어느 쪽이 맞는지 확인하고 고친 뒤 올리세요(오른쪽 대장 패널의 [이 면적을 폼에 넣기]).</div>`)
     if (BLDG.key && !BLDG.busy && !BLDG.usage && $('c_road_addr').value) {
-      box.insertAdjacentHTML('beforeend', `<div style="margin-top:8px;padding-top:6px;border-top:1px dashed #fde68a;color:#b45309"><b>⚠️ 건축물 용도 미확인</b> — ${BLDG.err ? '건축물대장을 못 읽었습니다(' + esc(BLDG.err) + ')' : '건축물대장에 이 건물의 주용도가 없습니다'}. 당근에 올릴 때는 당근 쪽 건물 정보로 시도하고, 그래도 없으면 <b>"건축물 용도를 알 수 없습니다"</b>로 거절됩니다. 그때는 라운지 어드민 라운지매물에서 용도를 골라 올려주세요.</div>`)
+      box.insertAdjacentHTML('beforeend', `<div style="margin-top:8px;padding-top:6px;border-top:1px dashed #fde68a;color:#b45309"><b>⚠️ 건축물 용도 미확인</b> — ${BLDG.err ? '건축물대장을 못 읽었습니다(' + esc(BLDG.err) + ')' : '건축물대장에 이 건물의 주용도가 없습니다'}. 당근에 올릴 때는 당근 쪽 건물 정보로 시도하고, 그래도 없으면 <b>"건축물 용도를 알 수 없습니다"</b>로 거절됩니다. 그때는 건축물 용도를 직접 골라 주세요.</div>`)
     }
     box.querySelectorAll('[data-miss]').forEach(b => b.onclick = () => { const el = $(b.dataset.miss); if (!el) return; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus() })
   }
-  /* 건축물대장 패널 — 라운지 /api/intranet/building (building 권한) : 대장 요약 · 해당 호실 면적 · 층별 현황 · 주변 정보 */
+  /* 건축물대장 패널 — 포털 /api/intranet/building (building 권한) : 대장 요약 · 해당 호실 면적 · 층별 현황 · 주변 정보 */
   const BLDG = { key: '', data: null, busy: false, usage: '', err: '', areaDiff: '', floorUse: '' }
   const fire = el => { if (el) el.dispatchEvent(new Event('input', { bubbles: true })) }   // 코드로 바꾼 값도 점검·일괄 줄 저장에 반영
   const bNum = v => { const x = Number(v); return Number.isFinite(x) && x > 0 ? x : 0 }
@@ -2054,9 +2176,22 @@ function paintCreate() {
     const dv = $('c_bldg_area_div'); if (dv) dv.onclick = () => {
       let a = parseFloat(dv.dataset.area || '')
       if (!(a > 0)) { const n = parseInt(($('c_bldg_div_n') || {}).value || '', 10); if (!(n > 0) || !(BLDG.floorArea > 0)) return toast('가구 수를 숫자로 넣어주세요'); a = +(BLDG.floorArea / n).toFixed(2) }
-      $('c_area_exclusive').value = String(a); $('c_area_exclusive').classList.add('filled'); $('c_area_exclusive').classList.remove('miss'); fire($('c_area_exclusive')); paintMissing(false); toast(`추천 전용면적 ${a}㎡ 를 넣었습니다 — 현장 확인 값으로 고쳐도 됩니다`)
+      $('c_area_exclusive').value = String(a); $('c_area_exclusive').classList.add('filled'); $('c_area_exclusive').classList.remove('miss'); fire($('c_area_exclusive')); paintMissing(false); toast(`추천 전용면적 ${a}㎡ 를 넣었습니다 — 현장 확인 값으로 고쳐도 됩니다`); bldgUpBtn(dv)
     }
-    const ab = $('c_bldg_area'); if (ab && hit) ab.onclick = () => { $('c_area_exclusive').value = String(+bNum(hit.exclusive).toFixed(2)); $('c_area_supply').value = String(+bNum(hit.supply).toFixed(2)); ['c_area_exclusive', 'c_area_supply'].forEach(id => { $(id).classList.add('filled'); $(id).classList.remove('miss'); fire($(id)) }); BLDG.areaDiff = ''; const w = $('c_bldg').querySelector('.bnote b'); paintMissing(false); toast('대장 면적을 넣었습니다 — 일괄 목록의 줄에도 반영됩니다'); loadBldg(true) }
+    const ab = $('c_bldg_area'); if (ab && hit) ab.onclick = () => { $('c_area_exclusive').value = String(+bNum(hit.exclusive).toFixed(2)); $('c_area_supply').value = String(+bNum(hit.supply).toFixed(2)); ['c_area_exclusive', 'c_area_supply'].forEach(id => { $(id).classList.add('filled'); $(id).classList.remove('miss'); fire($(id)) }); BLDG.areaDiff = ''; const w = $('c_bldg').querySelector('.bnote b'); paintMissing(false); toast('대장 면적을 넣었습니다 — 일괄 목록의 줄에도 반영됩니다'); loadBldg(true).then(() => bldgUpBtn($('c_bldg_area'))) }
+  }
+  /* 면적을 넣은 버튼 옆에 [⬆ 목록으로] — 일괄 목록의 그 줄(폼 입력중)로 스크롤 + 잠깐 강조 (2026-10-11) */
+  const bldgUpBtn = after => {
+    if (!BULK.formRow || !after || after.parentNode.querySelector('.bldg-up')) return
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn b bldg-up'; b.style.cssText = 'margin-left:6px'; b.textContent = `⬆ 목록 ${BULK.formRow}번으로`
+    b.onclick = () => {
+      if (typeof syncRow === 'function') syncRow()   // 줄을 먼저 최신으로 그리고
+      requestAnimationFrame(() => { const tr = document.querySelector(`[data-brow="${BULK.formRow}"]`); if (!tr) return toast('목록에서 그 줄을 찾지 못했습니다')
+        const top = Math.max(0, tr.getBoundingClientRect().top + window.scrollY - Math.round(window.innerHeight / 3))
+        window.scrollTo({ top, behavior: 'smooth' }); tr.style.transition = 'background .3s'; tr.style.background = '#fef3c7'
+        setTimeout(() => { const t2 = document.querySelector(`[data-brow="${BULK.formRow}"]`); if (t2) { t2.style.background = '#fef3c7'; setTimeout(() => { t2.style.background = '' }, 1500) } }, 700) })   // 다시 그려져도 강조 유지
+    }
+    after.insertAdjacentElement('afterend', b)
   }
   S.loadBldg = loadBldg
   let bldgT = null
@@ -2103,6 +2238,16 @@ function paintCreate() {
     })
     box.querySelectorAll('[data-phr-del]').forEach(b => b.onclick = () => { const l = loadPhr(); l.splice(+b.dataset.phrDel, 1); savePhr(l); paintPhr() })
   }
+  /* 원문 상세설명 → [넣기] 설명 끝에 붙임 · [복사] (2026-10-11) */
+  $('c_src_use').onclick = () => {
+    const t = $('c_src_desc').value.trim(); if (!t) return toast('원문 상세설명이 비어 있습니다 — 링크를 정리하면 들어옵니다')
+    const d = $('c_description'); if (normTxt(d.value).includes(normTxt(t))) return toast('이미 설명에 들어 있습니다')
+    d.value = (d.value.trim() ? d.value.replace(/\s+$/, '') + '\n' : '') + t; d.classList.add('filled'); d.focus(); d.scrollTop = d.scrollHeight; fire(d); toast('원문 상세설명을 설명 끝에 넣었습니다')
+  }
+  $('c_src_copy').onclick = async () => {
+    const t = $('c_src_desc').value.trim(); if (!t) return toast('원문 상세설명이 비어 있습니다')
+    try { await navigator.clipboard.writeText(t); toast('복사했습니다') } catch (_) { $('c_src_desc').select(); toast('자동 복사가 안 됩니다 — 선택해 두었으니 Ctrl+C') }
+  }
   $('c_phr_add').onclick = () => { const l = loadPhr(); l.push(''); savePhr(l); paintPhr(); const tas = $('c_phr_list').querySelectorAll('textarea'); if (tas.length) tas[tas.length - 1].focus() }
   paintPhr()
   /* 전체 넣기: 문구 전부를 설명 끝에(중복 없이) 붙이기 / 빼기. 상태 저장 → 매물이 들어올 때마다 자동 */
@@ -2146,21 +2291,44 @@ function paintCreate() {
   const dgNeedConn = () => { if (dgMine() && !(S.dg.daangn && S.dg.daangn.connected)) { toast('먼저 [당근 연결 (QR)] 로 본인 당근 계정을 연결해 주세요.'); const b = document.querySelector('.dgconn'); if (b) b.scrollIntoView({ behavior: 'smooth', block: 'center' }); return true } return false }
   $('cdaangnonly').onclick = () => { if (dgNeedConn()) return; F.daangnOnly = true; $('cdaangn').click() }
   paintDgConn()
+  /* 사진 주소 칸 아래 썸네일 띠 — 끌어서 순서 바꾸기 · ‹ › · ✕ 삭제 → 칸의 줄 순서가 그대로 바뀐다 (2026-10-11) */
+  const stripUrls = () => $('c_photos').value.split('\n').map(s => s.trim()).filter(s => /^https?:\/\//.test(s))
+  const stripSet = urls => { $('c_photos').value = urls.join('\n'); P950.edited = true; fire($('c_photos')) }
+  window.paintPhotoStrip = () => {
+    const box = $('c_photo_strip'); if (!box) return
+    if (P950.srcUrls && P950.srcUrls.length) { box.innerHTML = stripUrls().length ? '<span class="hint" style="margin:0">순서 바꾸기·빼기는 아래 📷 사진 950 에서 — 사진 칸은 그 순서를 따라갑니다</span>' : ''; return }
+    const urls = stripUrls(); if (!urls.length) { box.innerHTML = ''; return }
+    box.innerHTML = urls.map((u, i) => `<span class="pstrip" draggable="true" data-i="${i}" title="끌어서 순서 변경" style="position:relative;width:72px;height:72px;cursor:grab"><img src="${esc(u)}" referrerpolicy="no-referrer" loading="lazy" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line);background:#f3f4f6">${i === 0 ? '<span style="position:absolute;left:0;top:0;background:var(--blue);color:#fff;font-size:10px;padding:1px 5px;border-radius:8px 0 6px 0">대표</span>' : ''}<button type="button" data-prm="${i}" title="이 사진 빼기" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:1px solid #fecaca;background:#fff;color:#dc2626;font-weight:900;line-height:1;padding:0;cursor:pointer">×</button><span style="position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between"><button type="button" data-pmv="-1" data-i="${i}" ${i === 0 ? 'disabled' : ''} style="width:22px;height:20px;border-radius:6px;border:1px solid var(--line);background:rgba(255,255,255,.95);font-weight:900;padding:0">‹</button><button type="button" data-pmv="1" data-i="${i}" ${i === urls.length - 1 ? 'disabled' : ''} style="width:22px;height:20px;border-radius:6px;border:1px solid var(--line);background:rgba(255,255,255,.95);font-weight:900;padding:0">›</button></span></span>`).join('')
+      + `<span class="hint" style="margin:0;align-self:center">사진 ${urls.length}장 · 첫 사진이 대표 · 끌어서 순서 변경</span>`
+    const move = (from, to) => { const a = stripUrls(); if (from === to || from < 0 || to < 0 || from >= a.length || to >= a.length) return; const [x] = a.splice(from, 1); a.splice(to, 0, x); stripSet(a) }
+    box.querySelectorAll('[data-prm]').forEach(b => b.onclick = () => { const a = stripUrls(); a.splice(Number(b.dataset.prm), 1); stripSet(a) })
+    box.querySelectorAll('[data-pmv]').forEach(b => b.onclick = () => { const i = Number(b.dataset.i); move(i, i + Number(b.dataset.pmv)) })
+    box.querySelectorAll('.pstrip').forEach(th => {
+      th.addEventListener('dragstart', e => { box._drag = Number(th.dataset.i); th.style.opacity = '.4'; try { e.dataTransfer.setData('text/plain', String(box._drag)) } catch (_) {} })
+      th.addEventListener('dragend', () => { th.style.opacity = '' })
+      th.addEventListener('dragover', e => { e.preventDefault(); th.querySelector('img').style.outline = '3px solid var(--blue)' })
+      th.addEventListener('dragleave', () => { th.querySelector('img').style.outline = '' })
+      th.addEventListener('drop', e => { e.preventDefault(); th.querySelector('img').style.outline = ''; const from = box._drag; box._drag = undefined; if (from === undefined) return; move(from, Number(th.dataset.i)) })
+      th.querySelector('img').onerror = () => { const im = th.querySelector('img'); if (im.dataset.fb) return; im.dataset.fb = '1'; im.src = '/b/img?u=' + encodeURIComponent(im.src) }
+    })
+  }
+  $('c_photos').addEventListener('input', paintPhotoStrip)
+  paintPhotoStrip()
   $('cdaangn').onclick = () => {
     if (dgNeedConn()) return
-    const mm = dgMissing(); if (F.daangnOnly) mm.req = mm.req.filter(x => x[0] !== 'c_owner_phone')   // 당근만: 라운지 미노출이라 임대인 연락처 불필요(당근 연락처는 관리자 프로필)
+    const mm = dgMissing(); if (F.daangnOnly) mm.req = mm.req.filter(x => x[0] !== 'c_owner_phone')   // 당근만: 포털 미노출이라 임대인 연락처 불필요(당근 연락처는 관리자 프로필)
     if (mm.req.length) { F.daangnOnly = false; paintMissing(true); const first = $(mm.req[0][3] || mm.req[0][0]); if (first) { first.scrollIntoView({ behavior: 'smooth', block: 'center' }); first.focus() }; toast(`당근에 올리려면 먼저 채워주세요: ${mm.req.map(x => x[1]).join(' · ')}`); return }
     F.daangn = true; if (!$('c_photos').value.trim() && P950.srcUrls?.length) $('c_photos').value = P950.srcUrls.slice(0, 10).join('\n'); $('cform').requestSubmit() }
   const daangnPublish = async (row, body) => {
     $('cstat').textContent = '당근부동산에 올리는 중… (사진 업로드 포함, 20초 안팎)'
     try {
       DG.batch = Date.now(); dgStart(1); dgNow(`${row.road_addr || ''} — 당근에 올리는 중 (사진 포함 20초 안팎)`)
-      const r = await dgCallWait(() => dgMine() ? dapi('daangn-direct', { ...(body || {}), listing_id: row.id }) : api('daangn-publish', { listing_id: row.id }), s => { const el = document.getElementById('cstat'); if (el) el.textContent = s })   // 권한 있으면 본인 당근 계정으로(라이선스 서버), 아니면 라운지 공용 계정
+      const r = await dgCallWait(() => dgMine() ? dapi('daangn-direct', { ...(body || {}), listing_id: row.id }) : api('daangn-publish', { listing_id: row.id }), s => { const el = document.getElementById('cstat'); if (el) el.textContent = s })   // 권한 있으면 본인 당근 계정으로(라이선스 서버), 아니면 포털 공용 계정
       dgPush({ ok: true, label: [row.jibun_addr || row.road_addr || '', $('c_ho_nm').value].filter(Boolean).join(' '), url: r.url || '', no: dgArticleNo(r.url, r.articleId, r.articleNo), listing_id: row.id }); dgEnd()
       $('cmsg').innerHTML += ` <b style="color:#ff6f0f">🥕 당근 등록 완료${dgArticleNo(r.url, r.articleId, r.articleNo) ? ' (당근 매물번호 ' + esc(dgArticleNo(r.url, r.articleId, r.articleNo)) + ')' : ''}</b>${r.url ? ` — <a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url)}</a>` : ''}`
       toast('당근부동산에 올렸습니다')
     } catch (err) { if (err.code === 'daangn_dup') { dgPush({ ok: false, dup: true, no: dgArticleNo(err.data?.url, err.data?.articleId, err.data?.articleNo), url: err.data?.url || '', label: row.road_addr || '', msg: err.message }); dgEnd(); $('cmsg').innerHTML += ` <b style="color:#b45309">⏭ 당근 중복 — ${esc(err.message)}</b>`; return }
-      dgPush({ ok: false, label: row.road_addr || '', msg: err.message }); dgEnd(); $('cmsg').innerHTML += ` <span style="color:var(--warn)">당근 등록 실패: ${esc(err.message)} — 라운지 어드민의 당근 버튼으로 다시 시도할 수 있습니다</span>` }
+      dgPush({ ok: false, label: row.road_addr || '', msg: err.message }); dgEnd(); $('cmsg').innerHTML += ` <span style="color:var(--warn)">당근 등록 실패: ${esc(err.message)} — 잠시 뒤 다시 올려 주세요</span>` }
   }
 
   /* 등록 */
@@ -2169,7 +2337,7 @@ function paintCreate() {
     const num = id => { const v = $(id).value.replace(/[^0-9.-]/g, ''); return v === '' ? undefined : Number(v) }
     const txt = id => $(id).value.trim() || undefined
     if (!$('c_road_addr').value) { $('c_addr_q').focus(); return toast('주소를 검색해서 목록에서 골라주세요.') }
-    if ($('c_hq_kind').value === 'lounge' && !(F.daangn === true && F.daangnOnly === true) && $('c_owner_phone').value.replace(/[^0-9]/g, '').length < 9) { F.daangn = false; $('c_owner_phone').classList.add('miss'); $('c_owner_phone').scrollIntoView({ behavior: 'smooth', block: 'center' }); $('c_owner_phone').focus(); if (typeof paintMissing === 'function') paintMissing(true); return toast('라운지 직공급 매물은 임대인 연락처가 필수입니다. 연락처를 적어주세요.') }
+    if ($('c_hq_kind').value === 'lounge' && !(F.daangn === true && F.daangnOnly === true) && $('c_owner_phone').value.replace(/[^0-9]/g, '').length < 9) { F.daangn = false; $('c_owner_phone').classList.add('miss'); $('c_owner_phone').scrollIntoView({ behavior: 'smooth', block: 'center' }); $('c_owner_phone').focus(); if (typeof paintMissing === 'function') paintMissing(true); return toast('직공급 매물은 임대인 연락처가 필수입니다. 연락처를 적어주세요.') }
     const body = {
       road_addr: $('c_road_addr').value, jibun_addr: txt('c_jibun_addr'), bd_nm: txt('c_bd_nm'), dong_nm: txt('c_dong_nm'), ho_nm: txt('c_ho_nm'),
       deal_type: $('c_deal_type').value, sale_price: num('c_sale_price'), deposit: num('c_deposit'), monthly_rent: num('c_monthly_rent'), manage_prc: num('c_manage_prc'),
@@ -2181,17 +2349,17 @@ function paintCreate() {
       hq_kind: $('c_hq_kind').value, source_url: F.source_url, force: F.force === true,
     }
     if (body.area_exclusive !== undefined && !(body.area_exclusive > 0)) body.area_exclusive = undefined   // 0 은 없는 값
-    if (F.daangn === true && F.daangnOnly === true) {   // 🥕 당근만: 라운지에 저장하지 않고 당근에만 (라운지 매물과 별개)
+    if (F.daangn === true && F.daangnOnly === true) {   // 🥕 당근만: 포털에 저장하지 않고 당근에만 (포털 매물과 별개)
       F.daangn = false; F.daangnOnly = false
-      $('csubmit').disabled = true; $('cstat').textContent = '당근에만 올리는 중… (라운지 저장 없음, 20초 안팎)'
+      $('csubmit').disabled = true; $('cstat').textContent = '당근에 올리는 중… (20초 안팎)'
       DG.batch = Date.now(); dgStart(1); dgNow(`${body.road_addr} ${body.ho_nm || ''} — 당근에 올리는 중 (당근만)`)
       const label = [body.jibun_addr || body.road_addr, body.dong_nm, body.ho_nm].filter(Boolean).join(' ')
       try {
         const r = await dgCallWait(() => (dgMine() ? dapi : api)('daangn-direct', body), s => { $('cstat').textContent = s })
         const no = dgArticleNo(r.url, r.articleId, r.articleNo); dgPush({ ok: true, label, url: r.url || '', no, direct: true }); dgEnd()
-        toast('당근에 올렸습니다 (라운지에는 저장하지 않음)')
+        toast('당근에 올렸습니다')
         F.force = false; F.source_url = ''; S.data.create = null; paintCreate()
-        $('cmsg').innerHTML = `<b style="color:#ff6f0f">🥕 당근에만 등록 완료</b> ${esc(label)}${no ? ' (광고번호 ' + esc(no) + ')' : ''}${r.url ? ` — <a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url)}</a>` : ''} · 라운지 매물에는 저장하지 않았습니다.`
+        $('cmsg').innerHTML = `<b style="color:#ff6f0f">🥕 당근에만 등록 완료</b> ${esc(label)}${no ? ' (광고번호 ' + esc(no) + ')' : ''}${r.url ? ` — <a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url)}</a>` : ''}`
       } catch (err) {
         if (err.code === 'daangn_dup') { dgPush({ ok: false, dup: true, no: dgArticleNo(err.data?.url, err.data?.articleId, err.data?.articleNo), url: err.data?.url || '', label, msg: err.message }); dgEnd(); $('cmsg').innerHTML = `<b style="color:#b45309">⏭ 당근 중복</b> — ${esc(err.message)}${err.data?.url ? ` <a href="${esc(err.data.url)}" target="_blank" rel="noopener">보기</a>` : ''}`; toast('이미 당근에 올라간 매물이라 건너뜁니다') }
         else { dgPush({ ok: false, label, msg: err.message }); dgEnd(); $('cmsg').innerHTML = `<span style="color:var(--warn)">당근 등록 실패: ${esc(err.message)}</span>`; if (err.message !== '401') toast('당근 등록 실패') }
@@ -2202,19 +2370,19 @@ function paintCreate() {
     try {
       const r = await api('listing-create', body)
       const wantDaangn = F.daangn === true, onlyDaangn = wantDaangn && F.daangnOnly === true; F.daangn = false; F.daangnOnly = false
-      toast(onlyDaangn ? '라운지에는 보관용으로만 저장했습니다(미노출). 당근에 올립니다…' : '승인대기로 등록했습니다. 검수·승인 탭 맨 위(직원 등록)에 뜹니다.')
+      toast(onlyDaangn ? '당근에 올립니다…' : '승인대기로 등록했습니다. 검수·승인 탭 맨 위(직원 등록)에 뜹니다.')
       S.data.review = null
       if (BULK.formRow) { const br = BULK.rows.find(x => x.n === BULK.formRow); if (br) { br.status = 'done'; br.msg = '폼에서 등록'; if (r.row?.id) br.id = r.row.id } BULK.formRow = null }
       F.force = false; F.source_url = ''; S.data.create = null; paintCreate()
-      $('cmsg').innerHTML = onlyDaangn ? `<b>당근 전용</b> ${esc(r.row?.road_addr || '')} — 라운지에는 보관용(미노출)으로만 저장` : `<b>등록 완료</b> ${esc(r.row?.road_addr || '')} → 승인대기 (검수·승인 탭 맨 위 '직원 등록', 라운지 어드민 hq-listings 승인 대기 상자에도 뜸). 이어서 다른 매물을 붙여넣으세요.`
+      $('cmsg').innerHTML = onlyDaangn ? `<b>당근 전용</b> ${esc(r.row?.road_addr || '')}` : `<b>등록 완료</b> ${esc(r.row?.road_addr || '')} → 승인대기 (검수·승인 탭 맨 위 '직원 등록', 포털 어드민 hq-listings 승인 대기 상자에도 뜸). 이어서 다른 매물을 붙여넣으세요.`
       if (wantDaangn && r.row?.id) await daangnPublish(r.row, body)
       refresh()
     } catch (err) {
       const m = String(err.message || '')
       if (!/이미 있습니다/.test(m)) { F.daangn = false; F.daangnOnly = false }
       if (/이미 있습니다/.test(m) && !F.force) {
-        $('cstat').innerHTML = `${esc(m)} <button type="button" class="btn no" id="cforce">중복이어도 등록</button>`
-        document.getElementById('cforce').onclick = () => { F.force = true; $('cform').requestSubmit() }
+        $('cstat').innerHTML = `${esc(m)} `
+        void 0
       } else $('cstat').textContent = m
     } finally { $('csubmit').disabled = false; if (!/이미 있습니다/.test($('cstat').textContent)) setTimeout(() => { if ($('cstat')) $('cstat').textContent = '' }, 6000) }
   }
@@ -2450,13 +2618,13 @@ function paintDb() {
   $d('db_q').focus()
 }
 
-/* ── 엑셀DB대조 (기능 db): 수집 엑셀을 끌어다 놓으면 줄마다 지번(+호수)으로 DB 를 대조해 링크 옆에 하늘색 '임대인 연락처(DB)' 칸을 끼우고 [내려받기] 버튼으로 받는다 (2026-10-09) */
+/* ── 매물중복DB대조 (기능 db): 수집 엑셀을 끌어다 놓으면 줄마다 지번(+호수)으로 DB 를 대조해 링크 옆에 하늘색 '임대인 연락처(DB)' 칸을 끼우고 [내려받기] 버튼으로 받는다 (2026-10-09) */
 function paintFill() {
   S.painted = 'fill'
   if (document.getElementById('fl_box')) return
   document.getElementById('body').innerHTML = `
     <div class="paste" id="fl_box" style="border:2px dashed #4fc3f7;background:#eef7ff">
-      <div style="font-weight:800;color:#0277bd">📎 엑셀DB대조 <span style="font-weight:400;color:var(--dim);font-size:12px">매일 뽑는 수집 엑셀(네이버·당근·온하우스)을 여기에 끌어다 놓거나 고르세요. 줄마다 지번(+호수)으로 DB 를 대조해 <b>링크 바로 옆에 하늘색 "임대인 연락처(DB)" 칸</b>을 끼워 넣습니다. 나머지 칸은 그대로, 없으면 빈칸. 끝나면 [내려받기] 버튼이 생깁니다.</span></div>
+      <div style="font-weight:800;color:#0277bd">📎 매물중복DB대조 <span style="font-weight:400;color:var(--dim);font-size:12px">매일 뽑는 수집 엑셀(네이버·당근·온하우스)을 여기에 끌어다 놓거나 고르세요. 줄마다 지번(+호수)으로 DB 를 대조해 <b>링크 바로 옆에 하늘색 "임대인 연락처(DB)" 칸</b>을 끼워 넣습니다. 나머지 칸은 그대로, 없으면 빈칸. 끝나면 [내려받기] 버튼이 생깁니다.</span></div>
       <div class="row-acts" style="align-items:center;margin-top:8px"><input type="file" id="fl_file" accept=".xlsx,.xlsm" multiple style="font:inherit"><button class="btn b" id="fl_go" style="background:#29b6f6;border-color:#29b6f6">DB 대조하기</button><span class="hint" id="fl_msg" style="margin:0"></span></div>
       <div class="row-acts" style="align-items:center;margin-top:8px"><textarea id="fl_text" rows="2" placeholder="또는 지번을 글로 — 한 줄에 하나 (예: 석촌동 1-1 302호)" style="flex:1;min-width:220px;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:10px"></textarea><button class="btn" id="fl_txt">글로 찾기</button></div>
       <div id="fl_out" style="margin-top:10px;overflow-x:auto"></div>
@@ -2599,12 +2767,23 @@ function brPaintStation(it) {
   inp.placeholder = it.stState === 'busy' ? '가까운 역을 찾는 중…' : it.stState === 'fail' ? '역 정보를 못 찾음 — 직접 적어도 됩니다' : it.stState === 'none' && !it.station ? '못 찾음 — 예: 강남역 도보 5분' : '예: 강남역 도보 5분'
 }
 const oxOf = n => { const r = BR.response; if (!r) return ''; if ((r.picks || []).includes(n)) return '<span class="bf-ox o">손님 O</span>'; if ((r.rejects || []).includes(n)) return '<span class="bf-ox x">손님 X</span>'; return '' }
-const brPhotosHtml = it => (it.photos.length ? it.photos.map((u, k) => `<span class="bf-th ${u.startsWith('/b/p/') ? 'own' : ''}"><img src="${esc(u)}" referrerpolicy="no-referrer" loading="lazy" alt=""><button type="button" data-rm="${k}" title="이 사진 빼기">×</button></span>`).join('') : '<span class="bf-hint">사진 없음</span>')
+const brPhotosHtml = it => (it.photos.length ? it.photos.map((u, k) => `<span class="bf-th ${u.startsWith('/b/p/') ? 'own' : ''} ${k === 0 ? 'first' : ''}" draggable="true" data-i="${k}" title="끌어서 순서를 바꿀 수 있습니다"><img src="${esc(u)}" referrerpolicy="no-referrer" loading="lazy" alt=""><button type="button" data-rm="${k}" title="이 사진 빼기">×</button><span class="bf-mv"><button type="button" data-pmv="-1" data-i="${k}" title="앞으로" ${k === 0 ? 'disabled' : ''}>‹</button><button type="button" data-pmv="1" data-i="${k}" title="뒤로" ${k === it.photos.length - 1 ? 'disabled' : ''}>›</button></span></span>`).join('') : '<span class="bf-hint">사진 없음</span>')
   + `<label class="bf-drop" title="사진을 여기에 끌어다 놓거나 눌러서 고르세요 (여러 장 가능, 1280px 로 줄여 올립니다)">📷 사진 올리기 <small>(끌어다 놓기 · 여러 장)</small><input type="file" accept="image/*" multiple data-up="1"></label>`
   + `<span class="bf-hint" style="margin-left:4px" data-phmsg>사진 ${it.photos.length}장 · 첫 사진이 대표</span>`
 function brBindPhotos(card, it) {
   const ph = card.querySelector('.bf-ph'); if (!ph) return
-  ph.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { it.photos.splice(Number(b.dataset.rm), 1); ph.innerHTML = brPhotosHtml(it); brBindPhotos(card, it) })
+  const repaint = () => { ph.innerHTML = brPhotosHtml(it); brBindPhotos(card, it) }
+  const move = (from, to) => { if (from === to || from < 0 || to < 0 || from >= it.photos.length || to >= it.photos.length) return; const [x] = it.photos.splice(from, 1); it.photos.splice(to, 0, x); repaint() }
+  ph.querySelectorAll('[data-rm]').forEach(b => b.onclick = e => { e.stopPropagation(); it.photos.splice(Number(b.dataset.rm), 1); repaint() })
+  ph.querySelectorAll('[data-pmv]').forEach(b => b.onclick = e => { e.stopPropagation(); const i = Number(b.dataset.i); move(i, i + Number(b.dataset.pmv)) })
+  // 끌어서 순서 바꾸기
+  ph.querySelectorAll('.bf-th').forEach(th => {
+    th.addEventListener('dragstart', e => { ph._drag = Number(th.dataset.i); th.classList.add('dragging'); try { e.dataTransfer.setData('text/plain', String(ph._drag)); e.dataTransfer.effectAllowed = 'move' } catch (_) {} })
+    th.addEventListener('dragend', () => th.classList.remove('dragging'))
+    th.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); th.classList.add('over') })
+    th.addEventListener('dragleave', () => th.classList.remove('over'))
+    th.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); th.classList.remove('over'); const from = ph._drag; ph._drag = undefined; if (from === undefined) return; move(from, Number(th.dataset.i)) })
+  })
   ph.querySelectorAll('img').forEach(im => im.onerror = () => { if (im.dataset.fb || !/^https?:/.test(im.src)) return; im.dataset.fb = '1'; im.src = '/b/img?u=' + encodeURIComponent(im.src) })
   const up = ph.querySelector('[data-up]'); if (up) up.onchange = () => { brUpload(card, it, [...up.files]); up.value = '' }
   const over = e => { e.preventDefault(); card.classList.add('drag') }, leave = () => card.classList.remove('drag')
@@ -2949,7 +3128,7 @@ function naMount(){
 if(!(window.NA_CFG&&NA_CFG.deferred)) naMount();
 /*NA_JS_END*/
 const NA_MARKUP = "<div class=\"page-head\"><h1>네이버 광고정리</h1><span class=\"small muted\">위: 링크 넣으면 광고용 정보 자동 정리 · 아래: 지번으로 우리 DB + 지금 네이버에 걸린 매물 찾기 (줄을 누르면 그 매물이 바로 정리됩니다)</span></div>\n<div class=\"na-stack\">\n  <section class=\"panel green\">\n    <h2>⚡ 링크 자동 정리</h2>\n    <textarea id=\"na_links\" rows=\"4\" placeholder=\"아무 링크나 넣어주세요. 정리해드릴게요!  여러 개면 줄바꿈·쉼표·공백으로 구분&#10;https://new.land.naver.com/houses?articleNo=2653867465\"></textarea>\n    <div class=\"na-bar\"><button class=\"btn btn-primary\" id=\"na_go\">자동 정리</button><button class=\"btn\" id=\"na_clip\">📋 클립보드에서</button><span class=\"small muted\" id=\"na_msg\"></span></div>\n    <div class=\"na-bar\" id=\"na_tools\" style=\"display:none\"><button class=\"btn btn-primary\" id=\"na_save\">체크한 줄 DB에 저장</button><button class=\"btn\" id=\"na_dgbulk\" style=\"display:none\" title=\"체크한 줄의 링크를 당근 올리기 탭의 '여러 매물 한 번에' 목록에 넣습니다\">🥕 체크한 줄 당근 일괄 목록으로</button><button class=\"btn\" id=\"na_clear\" title=\"정리한 목록을 비웁니다 (DB 에 저장한 것은 그대로)\">목록 지우기</button><button class=\"btn\" id=\"na_xl\">엑셀 다운로드</button><button class=\"btn\" id=\"na_copyall\">전체 광고문구 복사</button><label class=\"small\"><input type=\"checkbox\" id=\"na_all\" checked> 전체 선택</label></div>\n    <div id=\"na_out\" class=\"na-out\"></div>\n  </section>\n  <section class=\"panel pink\">\n    <h2><span class=\"nlogo\">N</span>🔍 지번으로 매물 찾기</h2>\n    <div class=\"na-bar\"><input type=\"text\" id=\"na_q\" placeholder=\"예: 양재동 17-27 (구 이름을 붙이면 더 정확: 서초구 양재동 17-27)\" style=\"flex:1;min-width:240px\"><button class=\"btn btn-primary\" id=\"na_find\">찾기</button><label class=\"small\" style=\"display:flex;align-items:center;gap:5px;margin:0;white-space:nowrap\" title=\"같은 매물(종류·거래·금액·층·면적이 같은 것)을 여러 부동산이 올렸으면 한 줄로 묶어 'N곳' 으로 보여줍니다\"><input type=\"checkbox\" id=\"na_group\" checked style=\"width:16px;height:16px;margin:0\"> 중복매물 묶기</label></div>\n    <div class=\"small muted\" id=\"na_fmsg\">우리 DB 에 쌓인 줄은 바로, 네이버는 그 지번 자리(60m 안)의 매물을 모아 지번을 확인합니다 (5~15초). 줄을 누르면 오른쪽에 바로 정리됩니다.</div>\n    <div class=\"na-split\">\n      <div id=\"na_fout\" class=\"na-out\"></div>\n      <div class=\"na-pick\"><div id=\"na_pick\"><div class=\"small muted\" style=\"padding:14px\">← 결과 줄을 누르면 그 매물의 광고 정보가 여기에 정리됩니다 (위 링크 자동 정리와는 별개)</div></div><div id=\"na_bldg\" class=\"na-bldg\"></div></div>\n    </div>\n  </section>\n</div>"
-const BUILD = '2026-10-11 00:24 당근'
+const BUILD = '2026-10-11 21:11 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()
