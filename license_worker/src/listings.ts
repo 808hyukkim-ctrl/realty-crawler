@@ -158,6 +158,18 @@ function withHo(addr: string, row: Record<string, any>): string {
   return addr + " " + (/^\d+$/.test(ho) ? ho + "호" : ho);
 }
 
+/** 지번 모양("논현동 124-12", "양재동 산 3") 이 들어 있는지 */
+export const JIBUN_RE = /[가-힣]{1,10}(?:동|리|가|읍|면)\s*(?:산\s*)?\d{1,4}(?:-\d{1,4})?(?![\d-])/;
+/** 뽑은 주소에 지번이 없으면(열 이름과 값이 밀린 파일) 행의 모든 값 중 지번 모양이 든 가장 긴 글을 주소로 쓴다. 링크·번호·긴 설명은 제외 */
+export function addrFallback(addr: string, row: Record<string, any>): string {
+  if (JIBUN_RE.test(addr)) return addr;
+  const cands = Object.entries(row)
+    .map(([k, v]) => [k, s(v).replace(/\s+/g, " ")] as [string, string])
+    .filter(([k, v]) => v && v.length <= 120 && JIBUN_RE.test(v) && !/^https?:/i.test(v) && !/메모|비고|설명|특이|상세|내용/.test(k) && !new RegExp(PHONE_RE.source).test(v))
+    .map(([, v]) => v);
+  if (!cands.length) return addr;
+  return cands.sort((a, b) => b.length - a.length)[0];
+}
 /** 사이트별로 번호·링크·지번(주소+호수)·임대인 연락처·종류·거래·금액·이름을 뽑는다 (목록·검색용, 원본 행은 data 에 통째로 보관) */
 export function summarize(site: string, row: Record<string, any>) {
   let no = "", url = "", addr = "", kind = "", deal = "", price = "", title = "";
@@ -202,6 +214,7 @@ export function summarize(site: string, row: Record<string, any>) {
     if (!deal && parts.length) deal = parts[0].split(" ")[0].replace("보증금", "월세");
     title = first(row, "임대인", "이름", "성명", "소유자", "성함", "이름/메모", "건물명", "제목", "매물명") || byWord(row, ["임대인", "이름", "성명", "소유자", "건물명", "제목"], ["연락처", "전화"]);
   }
+  addr = addrFallback(addr, row);   // 열이 밀린 파일(열 이름과 값이 어긋남) → 값 중에서 지번 모양을 찾는다 (2026-10-13, 은주2 온하우스정리.xlsx 가 '상가, 1990년' 을 지번으로 저장)
   const phone = landlordPhone(row);
   const memo = first(row, "메모", "비고", "특이사항");
   const contacts = first(row, "기타 연락처", "임차인·관리 등") || extractContacts(row, phone);   // 수기 입력은 적은 그대로, 엑셀은 번호 패턴으로
