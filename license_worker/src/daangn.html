@@ -1732,7 +1732,7 @@ function paintBulk() {
     if (S.clearCreate) S.clearCreate()   // 이전 매물 값이 남지 않게 먼저 비운다
     BULK.formRow = r.n
     const it = r.addrItems[r.addrIdx]; const pi = document.getElementById('c_photos_import'); if (pi) pi.checked = !!r.photosOn
-    const filled = S.fillCreate(r.photosOn ? { ...r.got } : { ...r.got, photos: undefined })
+    const filled = S.fillCreate(r.photosOn ? { ...r.got } : { ...r.got, photos: undefined, photos_skipped: (Array.isArray(r.got.photos) ? r.got.photos.length : 0) || r.photoCount || 0 })   // 📷 꺼진 줄: 사진은 읽혔지만 폼에 안 넣은 것 — '못 읽음' 경고와 구분 (2026-10-13)
     if (it && S.pickCreateAddr) S.pickCreateAddr(it)
     paintBulk()
     document.getElementById('cmsg').innerHTML = `<b>${r.n}번 매물</b>을 폼에 넣었습니다${filled.length ? ': ' + filled.map(esc).join(' · ') : ''} — 여기서 고치는 값은 <b>${r.n}번 줄에 바로 저장</b>됩니다. [승인대기로 등록]하면 그 줄은 등록됨으로 바뀝니다.`
@@ -1918,6 +1918,7 @@ function paintCreate() {
     }
     if (got.address_q && !$('c_road_addr').value) { $('c_addr_q').value = got.address_q; filled.push('주소'); setTimeout(() => { if ($('c_road_addr').value) return; $('c_addr_q').focus(); runSug(true) }, 0) }
     if (Array.isArray(got.photos) && got.photos.length) photo950(got.photos, got.source_url || '')
+    else if (got.photos_skipped > 0) { const box = $('c_photo950'), msg = $('c_photo950_msg'); if (box) { box.style.display = ''; $('c_photo950_list').innerHTML = ''; msg.innerHTML = `📷 링크의 사진 ${got.photos_skipped}장은 읽어 두었고 폼에만 넣지 않았습니다 — <b>당근에 올릴 때는 자동으로 포함</b>됩니다. 미리 보거나 순서를 바꾸려면 목록 줄의 사진 체크를 켜고 다시 [폼에 넣기].` } }   // 📷 꺼진 줄에서 폼에 넣은 경우 (2026-10-13: '읽지 못했습니다' 로 잘못 떴던 것)
     else if (got.photo_total > 0) { const box = $('c_photo950'), msg = $('c_photo950_msg'); if (box) { box.style.display = ''; $('c_photo950_list').innerHTML = ''; msg.innerHTML = `<b style="color:var(--bad)">⚠️ 원본 페이지에 사진 ${got.photo_total}장이 있는데 읽지 못했습니다 — 사진 없이 올리지 말고 알려주세요.</b>` } }
     if (S.applyAllPhrases) setTimeout(S.applyAllPhrases, 0)   // '전체 넣기'가 켜져 있으면 문구 전부 자동으로
     return filled
@@ -2350,6 +2351,10 @@ function paintCreate() {
       hq_kind: $('c_hq_kind').value, source_url: F.source_url, force: F.force === true,
     }
     if (body.area_exclusive !== undefined && !(body.area_exclusive > 0)) body.area_exclusive = undefined   // 0 은 없는 값
+    if (F.daangn === true && !body.photos.length && BULK.formRow) {   // 📷 꺼진 줄을 폼에 넣고 당근에 올리면 링크 사진을 자동 포함 (일괄 🥕 와 같은 규칙, 2026-10-13)
+      const br = BULK.rows.find(x => x.n === BULK.formRow); const ph = br && br.got && Array.isArray(br.got.photos) ? br.got.photos.filter(s => /^https?:\/\//.test(s)).slice(0, 10) : []
+      if (ph.length) { body.photos = ph; $('cstat').textContent = `당근은 사진이 필요해 링크 사진 ${ph.length}장을 포함합니다` }
+    }
     if (F.daangn === true && F.daangnOnly === true) {   // 🥕 당근만: 포털에 저장하지 않고 당근에만 (포털 매물과 별개)
       F.daangn = false; F.daangnOnly = false
       $('csubmit').disabled = true; $('cstat').textContent = '당근에 올리는 중… (20초 안팎)'
@@ -3231,7 +3236,7 @@ function naMount(){
 if(!(window.NA_CFG&&NA_CFG.deferred)) naMount();
 /*NA_JS_END*/
 const NA_MARKUP = "<div class=\"page-head\"><h1>네이버 광고정리</h1><span class=\"small muted\">위: 링크 넣으면 광고용 정보 자동 정리 · 아래: 지번으로 우리 DB + 지금 네이버에 걸린 매물 찾기 (줄을 누르면 그 매물이 바로 정리됩니다)</span></div>\n<div class=\"na-stack\">\n  <section class=\"panel green\">\n    <h2>⚡ 링크 자동 정리</h2>\n    <textarea id=\"na_links\" rows=\"4\" placeholder=\"아무 링크나 넣어주세요. 정리해드릴게요!  여러 개면 줄바꿈·쉼표·공백으로 구분&#10;https://new.land.naver.com/houses?articleNo=2653867465\"></textarea>\n    <div class=\"na-bar\"><button class=\"btn btn-primary\" id=\"na_go\">자동 정리</button><button class=\"btn\" id=\"na_clip\">📋 클립보드에서</button><span class=\"small muted\" id=\"na_msg\"></span></div>\n    <div class=\"na-bar\" id=\"na_tools\" style=\"display:none\"><button class=\"btn btn-primary\" id=\"na_save\">체크한 줄 DB에 저장</button><button class=\"btn\" id=\"na_dgbulk\" style=\"display:none\" title=\"체크한 줄의 링크를 당근 올리기 탭의 '여러 매물 한 번에' 목록에 넣습니다\">🥕 체크한 줄 당근 일괄 목록으로</button><button class=\"btn\" id=\"na_clear\" title=\"정리한 목록을 비웁니다 (DB 에 저장한 것은 그대로)\">목록 지우기</button><button class=\"btn\" id=\"na_xl\">엑셀 다운로드</button><button class=\"btn\" id=\"na_copyall\">전체 광고문구 복사</button><label class=\"small\"><input type=\"checkbox\" id=\"na_all\" checked> 전체 선택</label></div>\n    <div id=\"na_out\" class=\"na-out\"></div>\n  </section>\n  <section class=\"panel pink\">\n    <h2><span class=\"nlogo\">N</span>🔍 지번으로 매물 찾기</h2>\n    <div class=\"na-bar\"><input type=\"text\" id=\"na_q\" placeholder=\"예: 양재동 17-27 (구 이름을 붙이면 더 정확: 서초구 양재동 17-27)\" style=\"flex:1;min-width:240px\"><button class=\"btn btn-primary\" id=\"na_find\">찾기</button><label class=\"small\" style=\"display:flex;align-items:center;gap:5px;margin:0;white-space:nowrap\" title=\"같은 매물(종류·거래·금액·층·면적이 같은 것)을 여러 부동산이 올렸으면 한 줄로 묶어 'N곳' 으로 보여줍니다\"><input type=\"checkbox\" id=\"na_group\" checked style=\"width:16px;height:16px;margin:0\"> 중복매물 묶기</label></div>\n    <div class=\"small muted\" id=\"na_fmsg\">우리 DB 에 쌓인 줄은 바로, 네이버는 그 지번 자리(60m 안)의 매물을 모아 지번을 확인합니다 (5~15초). 줄을 누르면 오른쪽에 바로 정리됩니다.</div>\n    <div class=\"na-split\">\n      <div id=\"na_fout\" class=\"na-out\"></div>\n      <div class=\"na-pick\"><div id=\"na_pick\"><div class=\"small muted\" style=\"padding:14px\">← 결과 줄을 누르면 그 매물의 광고 정보가 여기에 정리됩니다 (위 링크 자동 정리와는 별개)</div></div><div id=\"na_bldg\" class=\"na-bldg\"></div></div>\n    </div>\n  </section>\n</div>"
-const BUILD = '2026-10-13 15:24 당근'
+const BUILD = '2026-10-13 16:20 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()
