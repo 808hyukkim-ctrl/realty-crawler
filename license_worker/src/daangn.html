@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>부동산 포털 — 손님 브리핑·당근 광고·사진950</title>
+<title>부동산치트키 — 손님 브리핑·당근 광고·사진950</title>
 <style>
   :root{
     --bg:#f4f6fa; --card:#fff; --line:#e3e8f0; --ink:#111827; --dim:#6b7280;
@@ -405,7 +405,7 @@ function renderGate(err) {
   clearInterval(timer); dgcStop(false)
   el.innerHTML = `
     <div class="wrap"><div class="gate">
-      <div class="brand" style="font-size:20px">당근 <span>광고자동화</span></div>
+      <div class="brand" style="font-size:20px">부동산 <span>치트키</span></div>
       <p style="margin-top:6px">매물수집기 계정(아이디·비밀번호)으로 로그인하세요. 수집기와 같은 아이디·비밀번호입니다. 탭은 관리자가 켜 준 기능만 보이고, 관리자 아이디로 들어오면 관리 화면으로 갑니다.</p>
       ${err ? `<div class="err">${esc(err)}</div>` : ''}
       <input id="lg_id" placeholder="아이디" autocomplete="username" spellcheck="false" style="margin-bottom:8px">
@@ -459,7 +459,7 @@ function renderShell(order) {
   el.innerHTML = `
     <header>
       <div class="hbar">
-        <div class="brand">부동산 <span>포털</span></div>
+        <div class="brand">부동산 <span>치트키</span></div>
         <div class="who">${esc(S.me.label)}</div><span id="hconn" style="font-size:12px;margin-left:8px"></span>
         <div class="grow"></div>
         <span id="stamp" style="font-size:12px;color:var(--dim)"></span>
@@ -3242,7 +3242,7 @@ function naMount(){
 if(!(window.NA_CFG&&NA_CFG.deferred)) naMount();
 /*NA_JS_END*/
 const NA_MARKUP = "<div class=\"page-head\"><h1>네이버 광고정리</h1><span class=\"small muted\">위: 링크 넣으면 광고용 정보 자동 정리 · 아래: 지번으로 우리 DB + 지금 네이버에 걸린 매물 찾기 (줄을 누르면 그 매물이 바로 정리됩니다)</span></div>\n<div class=\"na-stack\">\n  <section class=\"panel green\">\n    <h2>⚡ 링크 자동 정리</h2>\n    <textarea id=\"na_links\" rows=\"4\" placeholder=\"아무 링크나 넣어주세요. 정리해드릴게요!  여러 개면 줄바꿈·쉼표·공백으로 구분&#10;https://new.land.naver.com/houses?articleNo=2653867465\"></textarea>\n    <div class=\"na-bar\"><button class=\"btn btn-primary\" id=\"na_go\">자동 정리</button><button class=\"btn\" id=\"na_clip\">📋 클립보드에서</button><span class=\"small muted\" id=\"na_msg\"></span></div>\n    <div class=\"na-bar\" id=\"na_tools\" style=\"display:none\"><button class=\"btn btn-primary\" id=\"na_save\">체크한 줄 DB에 저장</button><button class=\"btn\" id=\"na_dgbulk\" style=\"display:none\" title=\"체크한 줄의 링크를 당근 올리기 탭의 '여러 매물 한 번에' 목록에 넣습니다\">🥕 체크한 줄 당근 일괄 목록으로</button><button class=\"btn\" id=\"na_clear\" title=\"정리한 목록을 비웁니다 (DB 에 저장한 것은 그대로)\">목록 지우기</button><button class=\"btn\" id=\"na_xl\">엑셀 다운로드</button><button class=\"btn\" id=\"na_copyall\">전체 광고문구 복사</button><label class=\"small\"><input type=\"checkbox\" id=\"na_all\" checked> 전체 선택</label></div>\n    <div id=\"na_out\" class=\"na-out\"></div>\n  </section>\n  <section class=\"panel pink\">\n    <h2><span class=\"nlogo\">N</span>🔍 지번으로 매물 찾기</h2>\n    <div class=\"na-bar\"><input type=\"text\" id=\"na_q\" placeholder=\"예: 양재동 17-27 (구 이름을 붙이면 더 정확: 서초구 양재동 17-27)\" style=\"flex:1;min-width:240px\"><button class=\"btn btn-primary\" id=\"na_find\">찾기</button><label class=\"small\" style=\"display:flex;align-items:center;gap:5px;margin:0;white-space:nowrap\" title=\"같은 매물(종류·거래·금액·층·면적이 같은 것)을 여러 부동산이 올렸으면 한 줄로 묶어 'N곳' 으로 보여줍니다\"><input type=\"checkbox\" id=\"na_group\" checked style=\"width:16px;height:16px;margin:0\"> 중복매물 묶기</label></div>\n    <div class=\"small muted\" id=\"na_fmsg\">우리 DB 에 쌓인 줄은 바로, 네이버는 그 지번 자리(60m 안)의 매물을 모아 지번을 확인합니다 (5~15초). 줄을 누르면 오른쪽에 바로 정리됩니다.</div>\n    <div class=\"na-split\">\n      <div id=\"na_fout\" class=\"na-out\"></div>\n      <div class=\"na-pick\"><div id=\"na_pick\"><div class=\"small muted\" style=\"padding:14px\">← 결과 줄을 누르면 그 매물의 광고 정보가 여기에 정리됩니다 (위 링크 자동 정리와는 별개)</div></div><div id=\"na_bldg\" class=\"na-bldg\"></div></div>\n    </div>\n  </section>\n</div>"
-const BUILD = '2026-10-14 10:03 당근'
+const BUILD = '2026-10-14 11:57 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()
