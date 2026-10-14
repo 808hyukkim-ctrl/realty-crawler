@@ -1225,7 +1225,11 @@ const rowPhrApply = r => { const g = r.got || (r.got = {}); const list = phrList
 const rowPhrRemove = r => { const g = r.got || {}; g.description = phrRemoveText(g.description, phrList()) }
 /* 당근 올리기 진행·결과 패널 */
 const DG_LOG_KEY = 'lounge_intranet_dg_log'
-const DG = { running: false, total: 0, done: 0, cur: '', wait: '', startedAt: 0, items: [], timer: null }
+const DG = { running: false, total: 0, done: 0, cur: '', wait: '', startedAt: 0, items: [], timer: null, title0: '' }
+// 올리는 동안은 브라우저 탭 제목에 진행 건수를 보여 다른 탭에 가 있어도 알 수 있게, 탭을 닫으려 하면 경고 (2026-10-14 사용자: "올라가고 있으면 표시해 줬으면")
+const dgTitle = () => { if (!DG.title0) DG.title0 = document.title.replace(/^(🥕|✅)[^·]*· /, ''); if (DG.running) document.title = `🥕 ${DG.done}/${DG.total} 올리는 중 · ${DG.title0}`; else if (DG.items.some(i => i.batch === DG.batch) && DG.batch) document.title = `✅ 당근 올리기 끝 · ${DG.title0}`; else document.title = DG.title0 }
+window.addEventListener('beforeunload', e => { if (DG.running) { e.preventDefault(); e.returnValue = '당근에 올리는 중입니다. 지금 닫으면 남은 매물은 올라가지 않습니다.' } })
+document.addEventListener('visibilitychange', () => { if (DG.running) paintDgPanel() })
 const dgLoad = () => { try { const v = JSON.parse(localStorage.getItem(DG_LOG_KEY) || 'null'); if (v && Array.isArray(v.items)) { DG.items = v.items.slice(-200) } } catch (_) {} }
 const dgSave = () => { try { localStorage.setItem(DG_LOG_KEY, JSON.stringify({ items: DG.items.slice(-200), at: Date.now() })) } catch (_) {} }
 const dgArticleNo = (url, id, no) => { const m = (String(url || '').match(/articles\/(\d+)/) || [])[1]; const n = String(no || ''); const i = String(id || ''); return (/^\d+$/.test(n) ? n : '') || m || (/^\d+$/.test(i) ? i : '') || '' }   // 당근 매물번호(숫자) 만
@@ -1247,6 +1251,7 @@ function dgResultText() {
 function paintDgPanel() {
   let p = document.getElementById('dgpanel')
   const items = DG.items.filter(i => i.batch === DG.batch)
+  dgTitle()
   if (!DG.running && !items.length) { if (p) p.remove(); return }
   if (!p) { p = document.createElement('div'); p.id = 'dgpanel'; document.body.appendChild(p) }
   const okN = items.filter(i => i.ok).length, dupN = items.filter(i => i.dup).length, failN = items.length - okN - dupN
@@ -1256,10 +1261,10 @@ function paintDgPanel() {
     <div class="dgbar"><i style="width:${pct}%"></i></div>
     ${DG.running ? `<div style="padding:8px 12px;background:#fffbeb;border-bottom:1px solid #fde68a">${DG.cur ? `⏳ ${esc(DG.cur)}` : '준비 중…'}${DG.wait ? `<div style="color:var(--dim);font-size:12px;margin-top:2px">${esc(DG.wait)}</div>` : ''}</div>` : ''}
     <div class="dgbody">${items.length ? items.map((i, k) => `<div class="dgi"><span>${i.ok ? '✅' : i.dup ? '⏭' : '❌'}</span><div><b>${k + 1}.</b> ${i.ok ? `당근 매물번호 <b>${esc(i.no || '?')}</b>` : i.dup ? `<span style="color:#b45309">중복 건너뜀 (이미 당근 ${esc(i.no || '')})</span>` : '<span style="color:var(--bad)">실패</span>'} / ${esc(i.label)}${i.ok && i.url ? ` <a href="${esc(i.url)}" target="_blank" rel="noopener">보기</a>` : ''}${!i.ok && i.msg ? `<div class="memo" style="color:var(--bad)">${esc(i.msg)}</div>` : ''}</div></div>`).join('') : '<div class="memo">아직 결과가 없습니다</div>'}</div>
-    <div class="dgf">${DG.running ? `<button class="btn no" id="dgp_stop" style="padding:5px 10px">중지</button>` : `<button class="btn" id="dgp_copy" style="padding:5px 10px">결과 복사</button><button class="btn" id="dgp_close" style="padding:5px 10px">닫기</button>`}<span class="hint" style="margin:0;margin-left:auto">${DG.running ? '이 창을 닫지 마세요' : '결과는 이 브라우저에 남습니다'}</span></div>`
+    <div class="dgf">${DG.running ? `<button class="btn no" id="dgp_stop" style="padding:5px 10px">중지</button>` : `<button class="btn" id="dgp_copy" style="padding:5px 10px">결과 복사</button><button class="btn" id="dgp_close" style="padding:5px 10px">닫기</button>`}<span class="hint" style="margin:0;margin-left:auto">${DG.running ? (document.hidden ? '다른 탭에 가 있어도 계속 올라갑니다 (조금 느려질 수 있음) — 이 탭은 닫지 마세요' : '이 탭을 닫지 마세요 — 포털 안 다른 메뉴로 가도 계속 올라갑니다') : '결과는 이 브라우저에 남습니다'}</span></div>`
   const st = document.getElementById('dgp_stop'); if (st) st.onclick = () => { BULK.dgRun = false; DG.cur = '중지합니다 — 지금 올리는 건이 끝나면 멈춥니다'; paintDgPanel() }
   const cp = document.getElementById('dgp_copy'); if (cp) cp.onclick = async () => { try { await navigator.clipboard.writeText(dgResultText()); toast('결과를 복사했습니다') } catch (_) { toast('복사 실패 — 직접 드래그해서 복사하세요') } }
-  const cl = document.getElementById('dgp_close'); if (cl) cl.onclick = () => { DG.batch = 0; p.remove() }
+  const cl = document.getElementById('dgp_close'); if (cl) cl.onclick = () => { DG.batch = 0; p.remove(); dgTitle() }
 }
 dgLoad()   // formRow: 지금 폼에 들어가 있는 줄 번호 · dgRun: 당근 일괄 진행 중
 /* 위 안내 줄: 등록 가능/확인 필요 건수 — 주소를 고르거나 고치면 다시 계산 */
@@ -1432,12 +1437,13 @@ async function dgCallWait(call, status) {
     catch (err) {
       if (!(err.code === 'wait' && err.data && err.data.wait > 0)) throw err
       const w = Math.min(900, Math.ceil(err.data.wait))
-      for (let s = w; s > 0; s--) { status(`안전 간격 — ${s}초 뒤 당근에 올립니다 (당근 제한을 피하려고 등록 사이에 간격을 둡니다)`); await new Promise(res => setTimeout(res, 1000)) }
+      const until = Date.now() + w * 1000; while (Date.now() < until) { const s = Math.max(1, Math.ceil((until - Date.now()) / 1000)); status(`안전 간격 — ${s}초 뒤 당근에 올립니다 (당근 제한을 피하려고 등록 사이에 간격을 둡니다)`); await new Promise(res => setTimeout(res, 1000)) }   // 시각 기준 대기 (숨긴 탭에서도 안 늘어짐)
     }
   }
   throw new Error('안전 간격 대기가 너무 길어 중단했습니다. 잠시 뒤 다시 눌러주세요.')
 }
-const sleepTick = async (sec, label) => { for (let i = sec; i > 0 && BULK.dgRun; i--) { BULK.msg = `${label} — 다음 건까지 ${i}초 대기 (당근 제한을 피하려고 간격을 둡니다)`; const el = document.getElementById('bmsg'); if (el) el.textContent = BULK.msg; dgNow(DG.cur && /대기/.test(DG.cur) ? DG.cur : `${label}`, `다음 건까지 ${i}초 대기 (당근 제한을 피하려고 간격을 둡니다)`); await new Promise(r => setTimeout(r, 1000)) } }
+// 대기는 시각 기준(타이머 횟수 아님): 브라우저가 숨긴 탭의 타이머를 1분에 한 번으로 늦춰도 대기가 30초→30분으로 늘어나지 않는다 (2026-10-14)
+const sleepTick = async (sec, label) => { const until = Date.now() + sec * 1000; while (Date.now() < until && BULK.dgRun) { const i = Math.max(1, Math.ceil((until - Date.now()) / 1000)); BULK.msg = `${label} — 다음 건까지 ${i}초 대기 (당근 제한을 피하려고 간격을 둡니다)`; const el = document.getElementById('bmsg'); if (el) el.textContent = BULK.msg; dgNow(DG.cur && /대기/.test(DG.cur) ? DG.cur : `${label}`, `다음 건까지 ${i}초 대기 (당근 제한을 피하려고 간격을 둡니다)`); await new Promise(r => setTimeout(r, 1000)) } }
 /** 올리기 전 당근 중복 미리 확인 — 주소가 맞춰진 줄들을 라이선스 서버 daangn-precheck 로 (엔진이 당근에 같은 호실 판매중인지 묻고, 내가 올린 기록도 대조). 중복 줄은 🥕 체크를 끈다 */
 async function bulkPrecheck(manual) {
   if (!dgMine() || BULK.preRun) return
@@ -3236,7 +3242,7 @@ function naMount(){
 if(!(window.NA_CFG&&NA_CFG.deferred)) naMount();
 /*NA_JS_END*/
 const NA_MARKUP = "<div class=\"page-head\"><h1>네이버 광고정리</h1><span class=\"small muted\">위: 링크 넣으면 광고용 정보 자동 정리 · 아래: 지번으로 우리 DB + 지금 네이버에 걸린 매물 찾기 (줄을 누르면 그 매물이 바로 정리됩니다)</span></div>\n<div class=\"na-stack\">\n  <section class=\"panel green\">\n    <h2>⚡ 링크 자동 정리</h2>\n    <textarea id=\"na_links\" rows=\"4\" placeholder=\"아무 링크나 넣어주세요. 정리해드릴게요!  여러 개면 줄바꿈·쉼표·공백으로 구분&#10;https://new.land.naver.com/houses?articleNo=2653867465\"></textarea>\n    <div class=\"na-bar\"><button class=\"btn btn-primary\" id=\"na_go\">자동 정리</button><button class=\"btn\" id=\"na_clip\">📋 클립보드에서</button><span class=\"small muted\" id=\"na_msg\"></span></div>\n    <div class=\"na-bar\" id=\"na_tools\" style=\"display:none\"><button class=\"btn btn-primary\" id=\"na_save\">체크한 줄 DB에 저장</button><button class=\"btn\" id=\"na_dgbulk\" style=\"display:none\" title=\"체크한 줄의 링크를 당근 올리기 탭의 '여러 매물 한 번에' 목록에 넣습니다\">🥕 체크한 줄 당근 일괄 목록으로</button><button class=\"btn\" id=\"na_clear\" title=\"정리한 목록을 비웁니다 (DB 에 저장한 것은 그대로)\">목록 지우기</button><button class=\"btn\" id=\"na_xl\">엑셀 다운로드</button><button class=\"btn\" id=\"na_copyall\">전체 광고문구 복사</button><label class=\"small\"><input type=\"checkbox\" id=\"na_all\" checked> 전체 선택</label></div>\n    <div id=\"na_out\" class=\"na-out\"></div>\n  </section>\n  <section class=\"panel pink\">\n    <h2><span class=\"nlogo\">N</span>🔍 지번으로 매물 찾기</h2>\n    <div class=\"na-bar\"><input type=\"text\" id=\"na_q\" placeholder=\"예: 양재동 17-27 (구 이름을 붙이면 더 정확: 서초구 양재동 17-27)\" style=\"flex:1;min-width:240px\"><button class=\"btn btn-primary\" id=\"na_find\">찾기</button><label class=\"small\" style=\"display:flex;align-items:center;gap:5px;margin:0;white-space:nowrap\" title=\"같은 매물(종류·거래·금액·층·면적이 같은 것)을 여러 부동산이 올렸으면 한 줄로 묶어 'N곳' 으로 보여줍니다\"><input type=\"checkbox\" id=\"na_group\" checked style=\"width:16px;height:16px;margin:0\"> 중복매물 묶기</label></div>\n    <div class=\"small muted\" id=\"na_fmsg\">우리 DB 에 쌓인 줄은 바로, 네이버는 그 지번 자리(60m 안)의 매물을 모아 지번을 확인합니다 (5~15초). 줄을 누르면 오른쪽에 바로 정리됩니다.</div>\n    <div class=\"na-split\">\n      <div id=\"na_fout\" class=\"na-out\"></div>\n      <div class=\"na-pick\"><div id=\"na_pick\"><div class=\"small muted\" style=\"padding:14px\">← 결과 줄을 누르면 그 매물의 광고 정보가 여기에 정리됩니다 (위 링크 자동 정리와는 별개)</div></div><div id=\"na_bldg\" class=\"na-bldg\"></div></div>\n    </div>\n  </section>\n</div>"
-const BUILD = '2026-10-13 16:20 당근'
+const BUILD = '2026-10-14 10:03 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()
