@@ -15,6 +15,9 @@
   header{background:#fff; border-bottom:1px solid var(--line)}
   header .wrap{padding:18px 14px 14px}
   .eyebrow{font-size:12px; font-weight:800; color:var(--acc); letter-spacing:.3px}
+  .hdtop{display:flex; align-items:center; justify-content:space-between; gap:10px}
+  .office{flex:none; max-width:62%; font-size:12px; font-weight:800; color:#fff; background:var(--acc); padding:4px 11px; border-radius:999px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  @media (min-width:600px){ .office{font-size:13px; padding:5px 14px} }
   h1{font-size:22px; margin:2px 0 0; letter-spacing:-.4px}
   .sub{font-size:13px; color:var(--dim); margin-top:4px}
   .memo{white-space:pre-wrap; background:var(--acc-weak); border:1px solid #dbe4ff; border-radius:12px; padding:10px 12px; margin-top:12px; font-size:14px}
@@ -203,7 +206,8 @@
     DATA = d
     document.title = `${d.customer}님 추천 매물`
     const staff = [d.staff.name, d.staff.phone ? fmtPhone(d.staff.phone) : ''].filter(Boolean).join(' · ')
-    $('#hd').innerHTML = `<div class="eyebrow">추천 매물 브리핑</div><h1>${esc(d.customer)}님, 이 매물들을 추천드려요</h1>
+    const office = d.opts && d.opts.office ? String(d.opts.office) : ''
+    $('#hd').innerHTML = `<div class="hdtop"><div class="eyebrow">추천 매물 브리핑</div>${office ? `<div class="office" title="${esc(office)}">${esc(office)}</div>` : ''}</div><h1>${esc(d.customer)}님, 이 매물들을 추천드려요</h1>
       <div class="sub">${staff ? '담당 ' + esc(staff) + ' · ' : ''}${esc(ymd(d.updated_at))} 기준 · 매물 ${d.items.length}건</div>
       ${d.memo ? `<div class="memo">${esc(d.memo)}</div>` : ''}
       ${ST.submitted ? `<div class="done">✅ ${esc(hm(ST.submitted.at))} 에 제출하셨습니다${ST.submitted.picks.length ? ' — O ' + ST.submitted.picks.map(n => n + '번').join(', ') : ''}. 다시 고르고 [다시 제출하기]를 누르면 바뀝니다.</div>` : ''}`

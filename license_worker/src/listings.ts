@@ -12,6 +12,7 @@
 import { Hono } from "hono";
 import { html, raw } from "hono/html";
 import { layout } from "./layout";
+import { prepareSchema } from "./schema";   // 표 준비를 한 번에 (2026-10-14)
 
 type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string; OWNER_KEY?: string };
 // 대표 키: 엑셀 내려받기(rows.json)·매물중복DB대조(match) 같은 '통째로 가져가는' 요청은 어드민 비밀번호 외에 이 키가 또 있어야 한다 (직원이 어드민에 들어와도 긁어가지 못하게, 2026-10-09)
@@ -26,25 +27,24 @@ let ready = false;
 export { ensure as ensureListings };
 async function ensure(db: D1Database) {
   if (ready) return;
-  await db.prepare(`CREATE TABLE IF NOT EXISTS listings (
+  // 2026-10-14: 아홉 번 왕복하던 것을 batch 하나 + PRAGMA 로. 휴지통 30일 비우기도 같은 batch 에
+  await prepareSchema(db, [
+    `CREATE TABLE IF NOT EXISTS listings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     site TEXT NOT NULL, listing_no TEXT NOT NULL, url TEXT,
     username TEXT NOT NULL, file TEXT,
     addr TEXT, kind TEXT, deal TEXT, price TEXT, title TEXT,
     data TEXT NOT NULL,
     first_at TEXT NOT NULL, last_at TEXT NOT NULL, seen INTEGER NOT NULL DEFAULT 1,
-    UNIQUE(site, listing_no, deal))`).run();
-  for (const col of ["phone TEXT NOT NULL DEFAULT ''", "memo TEXT NOT NULL DEFAULT ''", "contacts TEXT NOT NULL DEFAULT ''"]) {   // 10-08 추가 열 (이미 있으면 무시)
-    try { await db.prepare("ALTER TABLE listings ADD COLUMN " + col).run(); } catch (e) { /* 있음 */ }
-  }
-  await db.prepare("CREATE INDEX IF NOT EXISTS listings_last ON listings(last_at DESC)").run();
-  await db.prepare("CREATE INDEX IF NOT EXISTS listings_site_last ON listings(site, last_at DESC)").run();
-  await db.prepare("CREATE INDEX IF NOT EXISTS listings_file ON listings(file)").run();
-  // 되돌리기 (2026-10-09): 지운 줄은 휴지통에 30일 보관, 작업(삭제·붙여넣기·엑셀) 기록
-  await db.prepare("CREATE TABLE IF NOT EXISTS listings_trash (id INTEGER PRIMARY KEY AUTOINCREMENT, batch TEXT NOT NULL, deleted_at TEXT NOT NULL, orig_id INTEGER, row TEXT NOT NULL)").run();
-  await db.prepare("CREATE INDEX IF NOT EXISTS listings_trash_batch ON listings_trash(batch)").run();
-  await db.prepare("CREATE TABLE IF NOT EXISTS listings_ops (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, kind TEXT NOT NULL, label TEXT, count INTEGER NOT NULL DEFAULT 0, batch TEXT, ids TEXT, undone INTEGER NOT NULL DEFAULT 0)").run();
-  try { await db.prepare("DELETE FROM listings_trash WHERE deleted_at < ?").bind(new Date(Date.now() - 30 * 86400e3).toISOString()).run(); } catch { /* */ }
+    UNIQUE(site, listing_no, deal))`,
+    "CREATE INDEX IF NOT EXISTS listings_last ON listings(last_at DESC)",
+    "CREATE INDEX IF NOT EXISTS listings_site_last ON listings(site, last_at DESC)",
+    "CREATE INDEX IF NOT EXISTS listings_file ON listings(file)",
+    "CREATE TABLE IF NOT EXISTS listings_trash (id INTEGER PRIMARY KEY AUTOINCREMENT, batch TEXT NOT NULL, deleted_at TEXT NOT NULL, orig_id INTEGER, row TEXT NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS listings_trash_batch ON listings_trash(batch)",
+    "CREATE TABLE IF NOT EXISTS listings_ops (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, kind TEXT NOT NULL, label TEXT, count INTEGER NOT NULL DEFAULT 0, batch TEXT, ids TEXT, undone INTEGER NOT NULL DEFAULT 0)",
+    db.prepare("DELETE FROM listings_trash WHERE deleted_at < ?").bind(new Date(Date.now() - 30 * 86400e3).toISOString()),
+  ], { listings: ["phone TEXT NOT NULL DEFAULT ''", "memo TEXT NOT NULL DEFAULT ''", "contacts TEXT NOT NULL DEFAULT ''"] });   // 10-08 추가 열
   ready = true;
 }
 const nowIso = () => new Date().toISOString();
@@ -506,12 +506,17 @@ listings.get("/admin/listings", async (c) => {
   const page = Math.max(1, parseInt(c.req.query("page") ?? "1", 10) || 1);
   const PER = 100;
   const [where, binds] = whereOf(f);
-  const total = (await c.env.DB.prepare("SELECT COUNT(*) n FROM listings" + where).bind(...binds).first<{ n: number }>())?.n ?? 0;
-  const { results } = await c.env.DB.prepare("SELECT * FROM listings" + where + " ORDER BY last_at DESC, id DESC LIMIT ? OFFSET ?").bind(...binds, PER, (page - 1) * PER).all();
-  const bySite = (await c.env.DB.prepare("SELECT site, COUNT(*) n FROM listings GROUP BY site ORDER BY n DESC").all()).results ?? [];
-  const recent = (await c.env.DB.prepare("SELECT file, site, username, COUNT(*) n, MAX(last_at) t FROM listings GROUP BY file, site, username ORDER BY t DESC LIMIT 8").all()).results ?? [];
-  const users = (await c.env.DB.prepare("SELECT DISTINCT username FROM listings ORDER BY username").all()).results ?? [];
-  const ops = (await c.env.DB.prepare("SELECT at, kind, label, count, batch, undone FROM listings_ops WHERE kind IN ('delete','ingest','restore') ORDER BY id DESC LIMIT 6").all()).results ?? [];
+  // 2026-10-14: 여섯 조회를 동시에 (순서대로 기다리면 2~4초)
+  const [totalR, listR, bySiteR, recentR, usersR, opsR] = await Promise.all([
+    c.env.DB.prepare("SELECT COUNT(*) n FROM listings" + where).bind(...binds).first<{ n: number }>(),
+    c.env.DB.prepare("SELECT * FROM listings" + where + " ORDER BY last_at DESC, id DESC LIMIT ? OFFSET ?").bind(...binds, PER, (page - 1) * PER).all(),
+    c.env.DB.prepare("SELECT site, COUNT(*) n FROM listings GROUP BY site ORDER BY n DESC").all(),
+    c.env.DB.prepare("SELECT file, site, username, COUNT(*) n, MAX(last_at) t FROM listings GROUP BY file, site, username ORDER BY t DESC LIMIT 8").all(),
+    c.env.DB.prepare("SELECT DISTINCT username FROM listings ORDER BY username").all(),
+    c.env.DB.prepare("SELECT at, kind, label, count, batch, undone FROM listings_ops WHERE kind IN ('delete','ingest','restore') ORDER BY id DESC LIMIT 6").all(),
+  ]);
+  const total = totalR?.n ?? 0; const { results } = listR;
+  const bySite = bySiteR.results ?? []; const recent = recentR.results ?? []; const users = usersR.results ?? []; const ops = opsR.results ?? [];
   const siteKeys = Array.from(new Set([...bySite.map((r: any) => String(r.site)), ...(f.site ? [f.site] : [])]));
   const pages = Math.max(1, Math.ceil(total / PER));
   const notice = c.req.query("restored") != null ? `되돌렸습니다: 복원 ${c.req.query("restored")}건${Number(c.req.query("undeleted")) ? ` · 지움 ${c.req.query("undeleted")}건` : ""}` : c.req.query("deleted") != null ? `삭제했습니다: ${c.req.query("deleted")}건 (위 "최근 작업"에서 되돌릴 수 있습니다)` : c.req.query("added") != null ? (c.req.query("added") === "1" ? "한 줄 추가했습니다." : "이미 있는 줄이라 갱신했습니다.") : c.req.query("err") || "";

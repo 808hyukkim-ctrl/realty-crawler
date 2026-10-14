@@ -32,8 +32,11 @@ const ONHOUSE_HOST = "https://www.onhouse.com";
 const OH = { cookie: "", at: 0, id: "" };
 
 // ---------------------------------------------------------------- settings (D1)
+let settingsReady = false;   // 2026-10-14: getSetting 마다 CREATE 를 보내 왕복이 하나씩 더 들던 것 → 워커당 한 번
 async function ensureSettings(db: D1Database) {
+  if (settingsReady) return;
   await db.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)").run();
+  settingsReady = true;
 }
 export async function getSetting(db: D1Database, key: string): Promise<string> {
   await ensureSettings(db);

@@ -12,6 +12,7 @@ import { cors } from "hono/cors";
 import { setCookie } from "hono/cookie";
 import DAANGN_HTML from "./daangn.html";
 import { layout } from "./layout";
+import { prepareSchema } from "./schema";   // 표 준비를 한 번에 (2026-10-14)
 import { verifyPassword } from "./auth";
 import { collectPhotos, proxyImage, getSetting, setSetting } from "./photos";
 import { matchUnits, parsePastedText, ingest, kst } from "./listings";   // 은주루틴 탭(routine-*)은 재원루틴과 같은 대조·저장 함수를 쓴다 (2026-10-13)
@@ -30,23 +31,26 @@ const PORTAL_FEATURES = ["daangn", "photo"];   // 이 중 하나라도 있으면
 let ready = false;
 export async function ensure(db: D1Database) {
   if (ready) return;
-  await db.prepare(`CREATE TABLE IF NOT EXISTS daangn_web_sessions (token TEXT PRIMARY KEY, username TEXT NOT NULL, created_at TEXT NOT NULL, last_at TEXT NOT NULL)`).run();
-  await db.prepare(`CREATE TABLE IF NOT EXISTS daangn_sessions (username TEXT PRIMARY KEY, blob TEXT NOT NULL, phone TEXT, name TEXT, broker TEXT, connected_at TEXT NOT NULL)`).run();
-  await db.prepare(`CREATE TABLE IF NOT EXISTS daangn_uploads (
+  // 2026-10-14: 열네 번 왕복하던 것을 batch 하나 + PRAGMA 로
+  await prepareSchema(db, [
+    `CREATE TABLE IF NOT EXISTS daangn_web_sessions (token TEXT PRIMARY KEY, username TEXT NOT NULL, created_at TEXT NOT NULL, last_at TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS daangn_sessions (username TEXT PRIMARY KEY, blob TEXT NOT NULL, phone TEXT, name TEXT, broker TEXT, connected_at TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS daangn_uploads (
     id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, key TEXT NOT NULL, created_at TEXT NOT NULL,
     addr TEXT, ho TEXT, deal TEXT, price TEXT, phone TEXT, role TEXT, source TEXT,
-    status TEXT NOT NULL, article_no TEXT, url TEXT, reason TEXT, closed INTEGER NOT NULL DEFAULT 0, closed_at TEXT, data TEXT)`).run();
-  await db.prepare(`CREATE INDEX IF NOT EXISTS daangn_uploads_user ON daangn_uploads(username, created_at DESC)`).run();
-  await db.prepare(`CREATE INDEX IF NOT EXISTS daangn_uploads_key ON daangn_uploads(key)`).run();
-  for (const col of ["src_state TEXT", "src_checked_at TEXT", "src_gone_at TEXT", "close_reason TEXT"]) { try { await db.prepare(`ALTER TABLE daangn_uploads ADD COLUMN ${col}`).run(); } catch { /* 이미 있음 */ } }   // 원문 자동 확인 (2026-10-10)
-  await db.prepare(`CREATE TABLE IF NOT EXISTS daangn_throttle (username TEXT PRIMARY KEY, next_at TEXT NOT NULL, last_at TEXT NOT NULL)`).run();   // 안전장치: 다음 등록 가능 시각
-  try { await db.prepare("ALTER TABLE users ADD COLUMN daangn_guard TEXT").run(); } catch { /* 이미 있음 */ }   // 계정별 안전장치 {daily,min,max} (비면 공통 설정)
-  await db.prepare(`CREATE TABLE IF NOT EXISTS user_prefs (username TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (username, key))`).run();   // 계정별 설정(자주 쓰는 문구 등)
-  await db.prepare(`CREATE TABLE IF NOT EXISTS intranet_users (label TEXT PRIMARY KEY, first_at TEXT NOT NULL, last_at TEXT NOT NULL, daangn INTEGER NOT NULL DEFAULT 0)`).run();   // 라운지 인트라넷 토큰 라벨별 당근 권한 (어드민 사용자 관리에서 체크)
-  await db.prepare(`CREATE TABLE IF NOT EXISTS admin_sessions (token TEXT PRIMARY KEY, created_at TEXT NOT NULL, last_at TEXT NOT NULL)`).run();   // 포털 로그인창으로 들어온 관리자 쿠키 세션 (2026-10-11)
-  // index.ts 의 activity_log 와 같은 정의 (먼저 만들어져 있어도 무해)
-  await db.prepare("CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, username TEXT NOT NULL, app TEXT NOT NULL, action TEXT NOT NULL, detail TEXT, count INTEGER, mac TEXT)").run();
-  await db.prepare("CREATE INDEX IF NOT EXISTS activity_log_at ON activity_log(at DESC)").run();
+    status TEXT NOT NULL, article_no TEXT, url TEXT, reason TEXT, closed INTEGER NOT NULL DEFAULT 0, closed_at TEXT, data TEXT)`,
+    `CREATE INDEX IF NOT EXISTS daangn_uploads_user ON daangn_uploads(username, created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS daangn_uploads_key ON daangn_uploads(key)`,
+    `CREATE TABLE IF NOT EXISTS daangn_throttle (username TEXT PRIMARY KEY, next_at TEXT NOT NULL, last_at TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS user_prefs (username TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (username, key))`,
+    `CREATE TABLE IF NOT EXISTS intranet_users (label TEXT PRIMARY KEY, first_at TEXT NOT NULL, last_at TEXT NOT NULL, daangn INTEGER NOT NULL DEFAULT 0)`,
+    `CREATE TABLE IF NOT EXISTS admin_sessions (token TEXT PRIMARY KEY, created_at TEXT NOT NULL, last_at TEXT NOT NULL)`,
+    "CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, username TEXT NOT NULL, app TEXT NOT NULL, action TEXT NOT NULL, detail TEXT, count INTEGER, mac TEXT)",
+    "CREATE INDEX IF NOT EXISTS activity_log_at ON activity_log(at DESC)",
+  ], {
+    daangn_uploads: ["src_state TEXT", "src_checked_at TEXT", "src_gone_at TEXT", "close_reason TEXT"],   // 원문 자동 확인 (2026-10-10)
+    users: ["daangn_guard TEXT"],   // 계정별 안전장치 {daily,min,max} (비면 공통 설정)
+  });
   ready = true;
 }
 const nowIso = () => new Date().toISOString();
@@ -250,11 +254,14 @@ async function apiHandler(c: any) {
   const hasDaangn = me.features.includes("daangn"), hasPhoto = me.features.includes("photo");
 
   if (action === "summary") {
-    const s: any = hasDaangn ? await db.prepare("SELECT phone, name, broker, connected_at FROM daangn_sessions WHERE username = ?").bind(me.username).first() : null;
-    const cnt: any = hasDaangn ? await db.prepare("SELECT COUNT(*) n FROM daangn_uploads WHERE username = ? AND status = 'ok' AND closed = 0").bind(me.username).first() : null;
+    // 2026-10-14: 다섯 조회를 동시에 (탭 전환·새로고침이 느리던 원인 중 하나)
+    const [s, cnt, g, todayN, waitS]: any[] = hasDaangn ? await Promise.all([
+      db.prepare("SELECT phone, name, broker, connected_at FROM daangn_sessions WHERE username = ?").bind(me.username).first(),
+      db.prepare("SELECT COUNT(*) n FROM daangn_uploads WHERE username = ? AND status = 'ok' AND closed = 0").bind(me.username).first(),
+      guardFor(db, me.username), todayCount(db, me.username), guardWait(db, me.username)]) : [null, null, null, 0, 0];
     return json(c, { label: me.username, features: me.features, scopes: hasDaangn ? ["create", "building"] : [], create: { pending: 0 }, review: { listings: 0, signups: 0 },
       daangn: s ? { connected: true, phone: s.phone ?? "", name: s.name ?? "", broker: s.broker ?? "", connected_at: s.connected_at } : { connected: false }, uploads_active: cnt?.n ?? 0,
-      guard: hasDaangn ? { ...(await guardFor(db, me.username)), today: await todayCount(db, me.username), wait: await guardWait(db, me.username) } : null });
+      guard: hasDaangn ? { ...g, today: todayN, wait: waitS } : null });
   }
   if (action.startsWith("naverad-")) {   // 네이버 광고정리 탭 (기능 naverad) → naverad 서브앱의 /admin/naverad/<sub> 로 내부 전달 (기본 인증 없이, 계정은 x-account)
     if (!me.features.includes("naverad")) return json(c, { error: "이 계정에는 '네이버 광고정리' 권한이 없습니다. 관리자(사용자 관리)에게 요청하세요." }, 403);
@@ -594,6 +601,10 @@ async function adminUploadRows(db: D1Database, pickUser: string, live: boolean) 
   return (await q.all()).results ?? [];
 }
 const srcBadge = (r: any) => r.src_state === "gone" ? html`<span style="color:#b42318" title="원문 내려감 · 확인 ${r.src_checked_at ?? ""}">⚠️ 내려감</span>` : r.src_state === "ok" ? html`<span style="color:#15803d" title="확인 ${r.src_checked_at ?? ""}">✓</span>` : r.src_state === "unknown" ? html`<span class="muted" title="확인 못함">?</span>` : "";
+daangn.get("/admin/daangn/engine-health", async (c) => {   // 어드민 당근 페이지의 엔진 상태 글자 (2026-10-14)
+  try { const r = await engine(c, "/health", { method: "GET" }); const j: any = await r.json(); return c.text(r.ok ? `정상 (QR 세션 ${j.sessions ?? 0}개, 키 vworld:${j.keys?.vworld ? "O" : "X"} juso:${j.keys?.juso ? "O" : "X"} hub:${j.keys?.hub ? "O" : "X"})` : `응답 ${r.status}`); }
+  catch (e) { return c.text("연결 실패: " + (e instanceof Error ? e.message : String(e))); }
+});
 daangn.get("/admin/daangn/csv", async (c) => {   // 직원 전체 당근 리스트 CSV (엑셀용 BOM)
   await ensure(c.env.DB);
   const pickUser = String(c.req.query("user") ?? "").trim(); const live = String(c.req.query("live") ?? "") === "1";
@@ -610,22 +621,26 @@ daangn.get("/admin/daangn", async (c) => {
   await ensure(c.env.DB);
   const { results: users } = await c.env.DB.prepare("SELECT u.username, u.features, u.is_active, u.expires_at, u.daangn_guard, s.phone, s.name, s.broker, s.connected_at, (SELECT COUNT(*) FROM daangn_uploads d WHERE d.username = u.username AND d.status = 'ok') ok_n, (SELECT COUNT(*) FROM daangn_uploads d WHERE d.username = u.username AND d.status != 'ok') fail_n, (SELECT MAX(created_at) FROM daangn_uploads d WHERE d.username = u.username) last_at FROM users u LEFT JOIN daangn_sessions s ON s.username = u.username ORDER BY u.username").all();
   const pickUser = String(c.req.query("user") ?? "").trim(); const live = String(c.req.query("live") ?? "") === "1";
-  const recent: any[] = await adminUploadRows(c.env.DB, pickUser, live);
-  const liveN: any = await c.env.DB.prepare("SELECT COUNT(*) n FROM daangn_uploads WHERE status = 'ok' AND closed = 0").first();
+  // 독립 조회는 한꺼번에 띄워 두고 받는다 (2026-10-14: 순서대로 7번 기다리던 것)
+  const recentP = adminUploadRows(c.env.DB, pickUser, live); const liveNP = c.env.DB.prepare("SELECT COUNT(*) n FROM daangn_uploads WHERE status = 'ok' AND closed = 0").first();
+  const ovP = getSetting(c.env.DB, "office_overlap_last"); const guardP = loadGuard(c.env.DB); const srcLastP = getSetting(c.env.DB, "src_check_last");
+  const todaysP = c.env.DB.prepare("SELECT username, COUNT(*) n FROM daangn_uploads WHERE status = 'ok' AND created_at >= ? GROUP BY username").bind(kstDayStart()).all();
+  const recent: any[] = await recentP;
+  const liveN: any = await liveNP;
   const qs = (o: Record<string, string>) => { const p = new URLSearchParams(); if (o.user) p.set("user", o.user); if (o.live) p.set("live", o.live); const t = p.toString(); return t ? "?" + t : ""; };
-  let ov: any = null; try { ov = JSON.parse((await getSetting(c.env.DB, "office_overlap_last")) || "null"); } catch { /* */ }
+  let ov: any = null; try { ov = JSON.parse((await ovP) || "null"); } catch { /* */ }
   const scanMsg = String(c.req.query("scan") ?? "").trim();
   const wantDg = String(c.req.query("daangn") ?? "") === "1"; const od = wantDg ? await officeDaangnList(c, String(c.req.query("refresh") ?? "") === "1") : null;
   const { results: liveAll } = wantDg ? await c.env.DB.prepare("SELECT username, article_no, addr, ho FROM daangn_uploads WHERE status = 'ok' AND article_no != ''").all() : { results: [] as any[] };
   const byNo = new Map<string, any>((liveAll ?? []).map((r: any) => [String(r.article_no), r]));
   const dt = (s: unknown) => (s ? new Date(String(s)).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }) : "");
-  const guard = await loadGuard(c.env.DB);
-  const { results: todays } = await c.env.DB.prepare("SELECT username, COUNT(*) n FROM daangn_uploads WHERE status = 'ok' AND created_at >= ? GROUP BY username").bind(kstDayStart()).all();
+  const guard = await guardP;
+  const { results: todays } = await todaysP;
   const todayMap = new Map<string, number>((todays ?? []).map((r: any) => [String(r.username), Number(r.n)]));
-  let srcLast: any = null; try { srcLast = JSON.parse((await getSetting(c.env.DB, "src_check_last")) || "null"); } catch { /* */ }
+  let srcLast: any = null; try { srcLast = JSON.parse((await srcLastP) || "null"); } catch { /* */ }
   const srcMsg = String(c.req.query("src") ?? "").trim();
-  let engineOk = "확인 안 됨";
-  try { const r = await engine(c, "/health", { method: "GET" }); const j: any = await r.json(); engineOk = r.ok ? `정상 (QR 세션 ${j.sessions ?? 0}개, 키 vworld:${j.keys?.vworld ? "O" : "X"} juso:${j.keys?.juso ? "O" : "X"} hub:${j.keys?.hub ? "O" : "X"})` : `응답 ${r.status}`; } catch (e) { engineOk = "연결 실패: " + (e instanceof Error ? e.message : String(e)); }
+  // 엔진(한국 서버) 상태는 페이지가 기다리지 않고 화면이 따로 묻는다 (2026-10-14) → /admin/daangn/engine-health
+  const engineOk = html`<span id="eng_ok">확인 중…</span><script>fetch('/admin/daangn/engine-health',{credentials:'same-origin'}).then(r=>r.text()).then(t=>{document.getElementById('eng_ok').textContent=t}).catch(()=>{document.getElementById('eng_ok').textContent='확인 안 됨'})</script>`;
   return c.html(layout("당근 광고자동화", html`
     <h1>🥕 당근 광고자동화</h1>
     <p class="muted">직원 화면: <a href="/daangn" target="_blank">/daangn</a> (라이선스 계정으로 로그인 · 기능 '당근 광고' 또는 '사진950' 권한이 있는 계정만, 탭은 가진 기능만 보임) · 엔진: ${engineOk}</p>

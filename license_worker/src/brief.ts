@@ -12,6 +12,7 @@ import { html, raw } from "hono/html";
 import BRIEF_HTML from "./brief.html";
 import BRIEF_ADMIN_HTML from "./brief_admin.html";
 import { layout } from "./layout";
+import { prepareSchema } from "./schema";   // 표 준비를 한 번에 (2026-10-14)
 import { proxyImage } from "./photos";
 import { addLog, engineJson } from "./daangn";
 
@@ -28,14 +29,15 @@ const OWN_PHOTO = /^\/b\/p\/[a-z0-9]{10,}$/;
 let ready = false;
 async function ensure(db: D1Database) {
   if (ready) return;
-  await db.prepare(`CREATE TABLE IF NOT EXISTS briefs (
+  await prepareSchema(db, [
+    `CREATE TABLE IF NOT EXISTS briefs (
     id TEXT PRIMARY KEY, username TEXT NOT NULL, customer TEXT NOT NULL, memo TEXT, staff_name TEXT, staff_phone TEXT,
-    data TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, views INTEGER NOT NULL DEFAULT 0, last_view_at TEXT)`).run();
-  await db.prepare("CREATE INDEX IF NOT EXISTS briefs_user ON briefs(username, updated_at DESC)").run();
-  try { await db.prepare("ALTER TABLE briefs ADD COLUMN response TEXT").run(); } catch { /* 이미 있음 */ }   // 손님 O/X 제출 {picks, rejects, at}
-  try { await db.prepare("ALTER TABLE briefs ADD COLUMN opts TEXT").run(); } catch { /* 이미 있음 */ }       // 보기 옵션 {wm: 사진 가운데 워터마크 가리기(기본 켬)}
-  await db.prepare("CREATE TABLE IF NOT EXISTS brief_station (addr TEXT PRIMARY KEY, station TEXT NOT NULL, at TEXT NOT NULL)").run();
-  await db.prepare("CREATE TABLE IF NOT EXISTS brief_photos (id TEXT PRIMARY KEY, username TEXT NOT NULL, ct TEXT NOT NULL, size INTEGER NOT NULL, data BLOB NOT NULL, created_at TEXT NOT NULL)").run();
+    data TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, views INTEGER NOT NULL DEFAULT 0, last_view_at TEXT)`,
+    "CREATE INDEX IF NOT EXISTS briefs_user ON briefs(username, updated_at DESC)",
+    "CREATE TABLE IF NOT EXISTS brief_station (addr TEXT PRIMARY KEY, station TEXT NOT NULL, at TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS brief_photos (id TEXT PRIMARY KEY, username TEXT NOT NULL, ct TEXT NOT NULL, size INTEGER NOT NULL, data BLOB NOT NULL, created_at TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS user_prefs (username TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (username, key))",
+  ], { briefs: ["response TEXT", "opts TEXT"] });   // response: 손님 O/X 제출 {picks, rejects, at} · opts: {wm}
   ready = true;
 }
 const nowIso = () => new Date().toISOString();
@@ -114,8 +116,8 @@ async function stationOf(c: any, address: string, bdNm: string, lat: number | nu
   return { station, by };
 }
 /** 보기 옵션 — wm: 외부 사이트 사진 가운데(워터마크 자리)를 손님 페이지에서 흐리게 가린다(기본 켬). 올린 사진(/b/p/)은 가리지 않는다 */
-const optsOut = (r: any) => { const v = parseJson(r?.opts, null) || {}; return { wm: v.wm !== false }; };
-const optsIn = (body: any) => JSON.stringify({ wm: body?.opts?.wm !== false });
+const optsOut = (r: any) => { const v = parseJson(r?.opts, null) || {}; return { wm: v.wm !== false, office: typeof v.office === "string" ? v.office : "" }; };
+const optsIn = (body: any) => JSON.stringify({ wm: body?.opts?.wm !== false, office: str(body?.opts?.office, 60) });   // office: 부동산 이름 (손님 페이지 오른쪽 위, 2026-10-14)
 const respOut = (r: any) => { const v = parseJson(r.response, null); return v && typeof v === "object" ? { picks: Array.isArray(v.picks) ? v.picks : [], rejects: Array.isArray(v.rejects) ? v.rejects : [], at: v.at || null, note: v.note || "" } : null; };
 
 // ---------------------------------------------------------------- 어드민 API
@@ -127,8 +129,11 @@ export async function briefApi(c: any, me: { username: string; features: string[
     created_at: r.created_at, updated_at: r.updated_at, views: r.views || 0, last_view_at: r.last_view_at || null, response: respOut(r), opts: optsOut(r), url: briefUrl(c, r.id) });
 
   if (action === "brief-list") {
-    const { results } = await db.prepare("SELECT id, customer, memo, staff_name, staff_phone, data, created_at, updated_at, views, last_view_at, response, opts FROM briefs WHERE username = ? ORDER BY updated_at DESC").bind(me.username).all();
-    return json(c, { rows: (results ?? []).map(rowOut), max: BRIEF_MAX_LINKS, max_items: BRIEF_MAX_ITEMS });
+    const [{ results }, pref] = await Promise.all([
+      db.prepare("SELECT id, customer, memo, staff_name, staff_phone, data, created_at, updated_at, views, last_view_at, response, opts FROM briefs WHERE username = ? ORDER BY updated_at DESC").bind(me.username).all(),
+      db.prepare("SELECT value FROM user_prefs WHERE username = ? AND key = 'brief_office'").bind(me.username).first<{ value: string }>(),
+    ]);
+    return json(c, { rows: (results ?? []).map(rowOut), max: BRIEF_MAX_LINKS, max_items: BRIEF_MAX_ITEMS, office: pref?.value ?? "" });
   }
   if (action === "brief-get") {
     const r: any = await db.prepare("SELECT * FROM briefs WHERE id = ? AND username = ?").bind(q("id"), me.username).first();
@@ -162,6 +167,8 @@ export async function briefApi(c: any, me: { username: string; features: string[
     const data = JSON.stringify(items);
     if (data.length > 400_000) return json(c, { error: "내용이 너무 큽니다(사진 주소가 너무 많음). 사진을 줄여주세요." }, 413);
     const now = nowIso();
+    const office = str(body?.opts?.office, 60);   // 부동산 이름은 계정에 기억해 다음 브리핑에도 채운다 (2026-10-14)
+    await db.prepare("INSERT INTO user_prefs (username, key, value, updated_at) VALUES (?, 'brief_office', ?, ?) ON CONFLICT(username, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").bind(me.username, office, now).run();
     if (id) {
       const r: any = await db.prepare("SELECT id FROM briefs WHERE id = ? AND username = ?").bind(id, me.username).first();
       if (!r) return json(c, { error: "갱신할 링크가 없습니다(지워졌거나 다른 계정의 링크). [새로 시작] 뒤 다시 만들어주세요." }, 404);

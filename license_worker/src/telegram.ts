@@ -4,6 +4,7 @@
 import { Hono } from "hono";
 import { html, raw } from "hono/html";
 import { layout } from "./layout";
+import { prepareSchema } from "./schema";   // 표 준비를 한 번에 (2026-10-14)
 import { getSetting, setSetting } from "./photos";
 
 type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string };
@@ -17,8 +18,10 @@ const daysKo = (days: any) => Array.isArray(days) ? (days.includes("daily") ? "�
 let ready = false;
 async function ensure(db: D1Database) {
   if (ready) return;
-  await db.prepare("CREATE TABLE IF NOT EXISTS app_schedules (username TEXT NOT NULL, program TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, last_seen TEXT, PRIMARY KEY (username, program))").run();
-  await db.prepare("CREATE TABLE IF NOT EXISTS app_commands (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, program TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL, taken_at TEXT, done_at TEXT, result TEXT)").run();
+  await prepareSchema(db, [
+    "CREATE TABLE IF NOT EXISTS app_schedules (username TEXT NOT NULL, program TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, last_seen TEXT, PRIMARY KEY (username, program))",
+    "CREATE TABLE IF NOT EXISTS app_commands (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, program TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL, taken_at TEXT, done_at TEXT, result TEXT)",
+  ]);
   ready = true;
 }
 const nowIso = () => new Date().toISOString();
@@ -147,10 +150,9 @@ telegram.post("/api/v1/commands/:id/done", async (c) => {
 // ---------------------------------------------------------------- 어드민 설정
 telegram.get("/admin/telegram", async (c) => {
   await ensure(c.env.DB);
-  const token = await getSetting(c.env.DB, "tg_token"), chat = await getSetting(c.env.DB, "tg_chat"), hook = await getSetting(c.env.DB, "tg_webhook");
+  // 2026-10-14: 다섯 조회를 동시에
+  const [token, chat, hook, rows, { results }] = await Promise.all([getSetting(c.env.DB, "tg_token"), getSetting(c.env.DB, "tg_chat"), getSetting(c.env.DB, "tg_webhook"), allSchedules(c.env.DB), c.env.DB.prepare("SELECT * FROM app_commands ORDER BY id DESC LIMIT 30").all()]);
   const note = c.req.query("note") || "";
-  const rows = await allSchedules(c.env.DB);
-  const { results } = await c.env.DB.prepare("SELECT * FROM app_commands ORDER BY id DESC LIMIT 30").all();
   const kst = (iso: any) => iso ? new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }) : "";
   const body = html`
     <div class="page-head"><h1>텔레그램 봇</h1><span class="small" style="color:var(--muted)">프로그램이 꺼져 있어도 '목록'에 답하고, '실행 &lt;이름&gt;'은 대기열에 넣어 프로그램이 켜지면 돌립니다</span></div>

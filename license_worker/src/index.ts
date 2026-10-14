@@ -13,6 +13,7 @@ import { hosu } from "./hosu";
 import { daangn, ensure as ensureDaangn, loadGuard, parseUserGuard, mergeGuard, checkSources, scanOfficeOverlaps } from "./daangn";   // 당근 광고자동화 (2026-10-08) + 안전장치 설정(사용자 관리, 2026-10-09)
 import { brief } from "./brief";     // 손님 브리핑 /b/<id> (2026-10-09)
 import { layout } from "./layout";
+import { prepareSchema } from "./schema";   // 표 준비를 한 번에 (2026-10-14)
 
 type Bindings = {
   DB: D1Database;
@@ -39,16 +40,14 @@ const FEATURES: [string, string][] = [["crawl", "매물 수집"], ["photo", "사
 let featuresReady = false;
 async function ensureFeatures(db: D1Database) {
   if (featuresReady) return;
-  try { await db.prepare("ALTER TABLE users ADD COLUMN features TEXT NOT NULL DEFAULT 'crawl'").run(); } catch (e) { /* 이미 있음 */ }
-  try { await db.prepare("ALTER TABLE users ADD COLUMN no_lock INTEGER NOT NULL DEFAULT 0").run(); } catch (e) { /* 이미 있음 */ }   // 1 이면 기기(MAC) 잠금 없이 어느 PC 에서나 (2026-10-09, 진식2·admin)
+  await prepareSchema(db, [], { users: ["features TEXT NOT NULL DEFAULT 'crawl'", "no_lock INTEGER NOT NULL DEFAULT 0"] });   // no_lock=1: 기기(MAC) 잠금 없이 어느 PC 에서나 (2026-10-02)
   featuresReady = true;
 }
 // 활동 기록: 누가(아이디) 어느 프로그램(app)으로 무엇을(action) 했는지 (2026-10-02)
 let logReady = false;
 async function ensureLog(db: D1Database) {
   if (logReady) return;
-  await db.prepare("CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, username TEXT NOT NULL, app TEXT NOT NULL, action TEXT NOT NULL, detail TEXT, count INTEGER, mac TEXT)").run();
-  await db.prepare("CREATE INDEX IF NOT EXISTS activity_log_at ON activity_log(at DESC)").run();
+  await prepareSchema(db, ["CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, username TEXT NOT NULL, app TEXT NOT NULL, action TEXT NOT NULL, detail TEXT, count INTEGER, mac TEXT)", "CREATE INDEX IF NOT EXISTS activity_log_at ON activity_log(at DESC)"]);
   logReady = true;
 }
 async function addLog(db: D1Database, username: string, app: string, action: string, detail: string, count: number | null, mac: string) {
@@ -157,14 +156,14 @@ app.route("/", brief);      // 손님 브리핑 공개 페이지 /b/<id> (src/br
 app.get("/", (c) => c.redirect("/daangn"));   // 사이트 하나: 직원·고객은 포털(아이디/비번), 관리자는 상단 메뉴 → 사용자 관리 (2026-10-10)
 
 app.get("/admin/dashboard", async (c) => {
-  await ensureFeatures(c.env.DB);
-  await ensureDaangn(c.env.DB); const guard = await loadGuard(c.env.DB);   // 당근 자동 등록 안전장치(공통값 + 계정별 칸)
+  await Promise.all([ensureFeatures(c.env.DB), ensureDaangn(c.env.DB)]); const guardP = loadGuard(c.env.DB);   // 당근 자동 등록 안전장치(공통값 + 계정별 칸) — 사용자 목록과 동시에 (2026-10-14)
   const q = c.req.query("q")?.trim() ?? "";
   const { results } = q
     ? await c.env.DB.prepare("SELECT * FROM users WHERE username LIKE ? ORDER BY created_at DESC")
         .bind(`%${q}%`)
         .all()
     : await c.env.DB.prepare("SELECT * FROM users ORDER BY created_at DESC").all();
+  const guard = await guardP;
 
   const rows = (results ?? []).map((u: any) => {
     const [label, cls] = userStatus(u);
@@ -441,11 +440,24 @@ app.get("/admin/logs", async (c) => {
   await ensureLog(c.env.DB);
   const q = c.req.query("q")?.trim() ?? "";
   const appF = c.req.query("app")?.trim() ?? "";
-  const where: string[] = []; const binds: any[] = [];
+  // 날짜별 페이지 (2026-10-14): ?d=YYYY-MM-DD (KST). 기본 오늘. 전날/다음날 + 최근 14일 칩(건수)
+  const kstDate = (t: number) => new Date(t + 9 * 3600e3).toISOString().slice(0, 10);
+  const today = kstDate(Date.now());
+  const dq = c.req.query("d")?.trim() ?? "";
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(dq) ? dq : today;
+  const start = new Date(d + "T00:00:00+09:00"); const end = new Date(start.getTime() + 86400e3);
+  const prev = kstDate(start.getTime() - 86400e3 + 9 * 3600e3 - 9 * 3600e3), next = kstDate(end.getTime());
+  const where: string[] = ["at >= ?", "at < ?"]; const binds: any[] = [start.toISOString(), end.toISOString()];
   if (q) { where.push("username LIKE ?"); binds.push(`%${q}%`); }
   if (appF) { where.push("app = ?"); binds.push(appF); }
-  const sql = "SELECT * FROM activity_log" + (where.length ? " WHERE " + where.join(" AND ") : "") + " ORDER BY at DESC LIMIT 500";
-  const { results } = await c.env.DB.prepare(sql).bind(...binds).all();
+  const sql = "SELECT * FROM activity_log WHERE " + where.join(" AND ") + " ORDER BY at DESC LIMIT 3000";
+  const daysWhere: string[] = ["at >= ?"]; const daysBinds: any[] = [new Date(Date.now() - 14 * 86400e3).toISOString()];
+  if (q) { daysWhere.push("username LIKE ?"); daysBinds.push(`%${q}%`); }
+  if (appF) { daysWhere.push("app = ?"); daysBinds.push(appF); }
+  const [{ results }, { results: dayRows }] = await Promise.all([
+    c.env.DB.prepare(sql).bind(...binds).all(),
+    c.env.DB.prepare("SELECT substr(datetime(at, '+9 hours'), 1, 10) d, COUNT(*) n FROM activity_log WHERE " + daysWhere.join(" AND ") + " GROUP BY d ORDER BY d DESC").bind(...daysBinds).all(),
+  ]);
   const kst = (iso: string) => { try { return new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }); } catch { return iso; } };
   const rows = (results ?? []).map((r: any) => html`<tr>
     <td class="mono small">${kst(r.at)}</td>
@@ -456,9 +468,18 @@ app.get("/admin/logs", async (c) => {
     <td class="mono">${r.count ?? ""}</td>
     <td class="mono small">${r.mac ?? ""}</td>
   </tr>`);
+  const link = (day: string) => { const p = new URLSearchParams(); p.set("d", day); if (q) p.set("q", q); if (appF) p.set("app", appF); return "/admin/logs?" + p.toString(); };
+  const dayMap = new Map<string, number>((dayRows ?? []).map((r: any) => [String(r.d), Number(r.n)]));
+  const chips: string[] = []; for (let i = 0; i < 14; i++) chips.push(kstDate(Date.now() - i * 86400e3));
+  const n = (results ?? []).length;
   const body = html`
-    <div class="page-head"><h1>활동 기록</h1><span class="small" style="color:var(--muted)">최근 500건 · 로그인과 수집/사진 작업이 남습니다 (프로그램이 끝날 때 보냄)</span></div>
-    <form class="search-form" method="get">
+    <div class="page-head"><h1>활동 기록</h1><span class="small" style="color:var(--muted)">날짜별로 봅니다 · 로그인과 수집/사진 작업이 남습니다 (프로그램이 끝날 때 보냄)</span></div>
+    <form class="search-form" method="get" style="flex-wrap:wrap;align-items:center;gap:8px">
+      <a class="btn btn-sm" href="${link(prev)}">◀ 전날</a>
+      <input type="date" name="d" value="${d}" max="${today}" onchange="this.form.submit()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text)">
+      <a class="btn btn-sm" href="${link(next)}" ${d >= today ? 'style="visibility:hidden"' : ""}>다음날 ▶</a>
+      ${d !== today ? html`<a class="btn btn-sm" href="${link(today)}">오늘</a>` : ""}
+      <span class="small" style="color:var(--muted);margin-right:8px"><b>${d}</b> · ${n}건${n >= 3000 ? " (3000건까지만 표시)" : ""}</span>
       <input type="text" name="q" placeholder="아이디 검색" value="${q}">
       <select name="app" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text)">
         <option value="" ${appF === "" ? "selected" : ""}>전체 프로그램</option>
@@ -469,9 +490,12 @@ app.get("/admin/logs", async (c) => {
       </select>
       <button type="submit" class="btn">검색</button>
     </form>
+    <div class="small" style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px">
+      ${chips.map((day) => html`<a href="${link(day)}" class="badge ${day === d ? "status-active" : ""}" style="text-decoration:none">${day.slice(5)} <b>${dayMap.get(day) ?? 0}</b></a>`)}
+    </div>
     <table class="user-table">
       <thead><tr><th>시각</th><th>아이디</th><th>프로그램</th><th>작업</th><th>내용</th><th>건수</th><th>기기</th></tr></thead>
-      <tbody>${rows.length ? rows : html`<tr><td colspan="7" class="empty">기록이 없습니다.</td></tr>`}</tbody>
+      <tbody>${rows.length ? rows : html`<tr><td colspan="7" class="empty">${d} 에는 기록이 없습니다.</td></tr>`}</tbody>
     </table>`;
   return c.html(layout("활동 기록", body));
 });

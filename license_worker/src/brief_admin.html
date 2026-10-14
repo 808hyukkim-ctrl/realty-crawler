@@ -20,6 +20,10 @@
   .bf-card input{font-size:13.5px;padding:7px 9px}
   .bf-g3{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:6px 10px;margin-top:8px}
   .bf-ph{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+  .bf-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;padding:8px 10px;border:1px dashed var(--border);border-radius:10px;background:var(--card)}
+  .bf-tools label{display:flex;align-items:center;gap:6px;margin:0;font-size:13px}
+  .bf-sel{display:flex;align-items:center;margin:0}.bf-sel input{width:18px;height:18px;margin:0;accent-color:var(--accent)}
+  select[data-to]{padding:4px 6px;border:1px solid var(--border);border-radius:8px;font:inherit;font-size:13px;background:var(--input);color:var(--text)}
   .bf-th{position:relative;width:64px;height:64px}
   .bf-th img{width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border);background:#f3f4f6}
   .bf-th button{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:1px solid #f5c9db;background:#fff;color:var(--danger);font-weight:900;line-height:1;padding:0;cursor:pointer}
@@ -59,7 +63,7 @@
 <div id="brief_root"></div>
 <script>
 /*BRIEF_JS_START*/
-const BRIEF_MARKUP = "<div class=\"bf-head\"><h1>🧾 손님 브리핑</h1><div class=\"bf-hint\">링크든 글이든 엑셀 줄이든 넣으면 사진·주소·금액·역 도보를 손님용 카드로 정리하고, 손님에게 보낼 링크를 만듭니다. 손님은 번호를 누르면 사진과 내용이 펼쳐지고, O/X 를 골라 제출하면 아래 목록에 <b style=\"color:#b91c1c\">제출완료</b>로 뜹니다.</div></div>\n\n<div class=\"bf-box\" id=\"bf_box\">\n  <div class=\"bf-grid3\">\n    <label class=\"bf-lb\">손님 이름·호칭 <span style=\"color:var(--danger)\">*</span><input id=\"br_customer\" placeholder=\"예: 김민수 고객\" autocomplete=\"off\"></label>\n    <label class=\"bf-lb\">담당자 이름<input id=\"br_sname\" placeholder=\"예: 홍길동 공인중개사\"></label>\n    <label class=\"bf-lb\">담당자 연락처 (손님 페이지 '전화' 버튼)<input id=\"br_sphone\" placeholder=\"010-0000-0000\" inputmode=\"tel\"></label>\n  </div>\n  <textarea id=\"br_memo\" rows=\"2\" placeholder=\"손님께 보일 인사말·안내 (선택) — 예: 요청하신 역삼동 원룸 3곳입니다. 편하신 시간에 연락 주세요.\" style=\"margin-top:10px\"></textarea>\n  <label style=\"display:flex;align-items:center;gap:6px;margin-top:8px;font-size:13px;color:var(--text);cursor:pointer\"><input type=\"checkbox\" id=\"br_wm\" checked style=\"width:auto;margin:0\"> 사진 가운데 워터마크 가리기 <span class=\"bf-hint\">(가져온 사진의 한가운데를 손님 페이지에서 흐리게 가립니다. 직접 올린 사진은 그대로)</span></label>\n  <div id=\"br_resp\"></div>\n  <h2 style=\"margin-top:16px\">매물 담기 <span id=\"br_cnt\" class=\"bf-hint\" style=\"font-weight:400\">0 / 10</span></h2>\n  <textarea id=\"br_in\" rows=\"4\" placeholder=\"링크를 넣어주세요. 여러 개는 줄바꿈으로 구분합니다. (글이나 엑셀 줄도 됩니다)\"></textarea>\n  <div class=\"bf-acts\"><button class=\"btn btn-primary\" id=\"br_add\">정리해서 담기</button><label class=\"btn\" style=\"margin:0;cursor:pointer\">엑셀·CSV 파일로 담기<input type=\"file\" id=\"br_file\" accept=\".xlsx,.xls,.csv\" style=\"display:none\"></label><button class=\"btn\" id=\"br_blank\" title=\"링크 없이 직접 적고 사진을 올릴 매물\">빈 매물 추가</button><span class=\"bf-msg\" id=\"br_msg\"></span></div>\n  <div id=\"br_items\"></div>\n  <div class=\"bf-acts\" style=\"margin-top:14px\"><button class=\"btn btn-primary\" id=\"br_make\" style=\"padding:11px 20px;font-size:14px\">🔗 손님 링크 만들기</button><button class=\"btn\" id=\"br_new\">새로 시작</button></div>\n  <div id=\"br_out\"></div>\n</div>\n\n<div class=\"bf-box\"><h2>내 손님 링크 <span id=\"br_lcnt\" class=\"bf-hint\" style=\"font-weight:400\"></span> <span class=\"bf-hint\" style=\"font-weight:400\">— 링크는 <span id=\"br_maxtxt\">5</span>개까지. 안 쓰는 링크는 지워서 자리를 비우세요. 손님이 O/X 를 제출하면 '손님 응답' 칸에 뜹니다(1분마다 새로 확인).</span></h2><div id=\"br_list\" class=\"bf-scroll\"><div class=\"bf-hint\">불러오는 중…</div></div></div>"
+const BRIEF_MARKUP = "<div class=\"bf-head\"><h1>🧾 손님 브리핑</h1><div class=\"bf-hint\">링크든 글이든 엑셀 줄이든 넣으면 사진·주소·금액·역 도보를 손님용 카드로 정리하고, 손님에게 보낼 링크를 만듭니다. 손님은 번호를 누르면 사진과 내용이 펼쳐지고, O/X 를 골라 제출하면 아래 목록에 <b style=\"color:#b91c1c\">제출완료</b>로 뜹니다.</div></div>\n\n<div class=\"bf-box\" id=\"bf_box\">\n  <div class=\"bf-grid3\">\n    <label class=\"bf-lb\">손님 이름·호칭 <span style=\"color:var(--danger)\">*</span><input id=\"br_customer\" placeholder=\"예: 김민수 고객\" autocomplete=\"off\"></label>\n    <label class=\"bf-lb\">담당자 이름<input id=\"br_sname\" placeholder=\"예: 홍길동 공인중개사\"></label>\n    <label class=\"bf-lb\">담당자 연락처 (손님 페이지 '전화' 버튼)<input id=\"br_sphone\" placeholder=\"010-0000-0000\" inputmode=\"tel\"></label><label class=\"bf-lb\">부동산 이름 (손님 페이지 오른쪽 위에 표시 · 한 번 적으면 다음에도 그대로)<input id=\"br_office\" placeholder=\"예: 더브릿지 공인중개사사무소\"></label>\n  </div>\n  <textarea id=\"br_memo\" rows=\"2\" placeholder=\"손님께 보일 인사말·안내 (선택) — 예: 요청하신 역삼동 원룸 3곳입니다. 편하신 시간에 연락 주세요.\" style=\"margin-top:10px\"></textarea>\n  <label style=\"display:flex;align-items:center;gap:6px;margin-top:8px;font-size:13px;color:var(--text);cursor:pointer\"><input type=\"checkbox\" id=\"br_wm\" checked style=\"width:auto;margin:0\"> 사진 가운데 워터마크 가리기 <span class=\"bf-hint\">(가져온 사진의 한가운데를 손님 페이지에서 흐리게 가립니다. 직접 올린 사진은 그대로)</span></label>\n  <div id=\"br_resp\"></div>\n  <h2 style=\"margin-top:16px\">매물 담기 <span id=\"br_cnt\" class=\"bf-hint\" style=\"font-weight:400\">0 / 10</span></h2>\n  <textarea id=\"br_in\" rows=\"4\" placeholder=\"링크를 넣어주세요. 여러 개는 줄바꿈으로 구분합니다. (글이나 엑셀 줄도 됩니다)\"></textarea>\n  <div class=\"bf-acts\"><button class=\"btn btn-primary\" id=\"br_add\">정리해서 담기</button><label class=\"btn\" style=\"margin:0;cursor:pointer\">엑셀·CSV 파일로 담기<input type=\"file\" id=\"br_file\" accept=\".xlsx,.xls,.csv\" style=\"display:none\"></label><button class=\"btn\" id=\"br_blank\" title=\"링크 없이 직접 적고 사진을 올릴 매물\">빈 매물 추가</button><span class=\"bf-msg\" id=\"br_msg\"></span></div>\n  <div id=\"br_items\"></div>\n  <div class=\"bf-acts\" style=\"margin-top:14px\"><button class=\"btn btn-primary\" id=\"br_make\" style=\"padding:11px 20px;font-size:14px\">🔗 손님 링크 만들기</button><button class=\"btn\" id=\"br_new\">새로 시작</button></div>\n  <div id=\"br_out\"></div>\n</div>\n\n<div class=\"bf-box\"><h2>내 손님 링크 <span id=\"br_lcnt\" class=\"bf-hint\" style=\"font-weight:400\"></span> <span class=\"bf-hint\" style=\"font-weight:400\">— 링크는 <span id=\"br_maxtxt\">5</span>개까지. 안 쓰는 링크는 지워서 자리를 비우세요. 손님이 O/X 를 제출하면 '손님 응답' 칸에 뜹니다(1분마다 새로 확인).</span></h2><div id=\"br_list\" class=\"bf-scroll\"><div class=\"bf-hint\">불러오는 중…</div></div></div>"
 function briefMount(root, cfg) {
 root.innerHTML = BRIEF_MARKUP
 const API = String(cfg.api || '/admin/brief/api/')                       // 어드민은 기본 인증(브라우저가 붙임), 포털은 토큰 헤더
@@ -77,7 +81,7 @@ async function api(path, body, raw) {
   if (!r.ok) { const e = new Error(j.error || ('요청 실패 (' + r.status + ')')); e.code = j.code || ''; throw e }
   return j
 }
-const BR = { items: [], customer: '', memo: '', staff_name: '', staff_phone: '', id: '', url: '', response: null, wm: true, busy: false, list: null, max: 5, maxItems: 10, stQ: 0 }
+const BR = { office: '', items: [], customer: '', memo: '', staff_name: '', staff_phone: '', id: '', url: '', response: null, wm: true, busy: false, list: null, max: 5, maxItems: 10, stQ: 0 }
 try { const v = JSON.parse(localStorage.getItem('brief_staff_v1') || 'null'); if (v) { BR.staff_name = v.name || ''; BR.staff_phone = v.phone || '' } } catch (_) {}
 const brHas = v => v !== null && v !== undefined && v !== ''
 const brMan = n => { if (!brHas(n)) return ''; n = Number(String(n).replace(/,/g, '')); if (!Number.isFinite(n)) return ''; const e = Math.floor(n / 10000), r = Math.round(n % 10000); return e ? `${e}억${r ? ' ' + r.toLocaleString('ko-KR') : ''}` : n.toLocaleString('ko-KR') }
@@ -162,10 +166,10 @@ async function brUpload(card, it, files) {
 function paintBrItems() {
   const box = $('br_items'); $('br_cnt').textContent = `${BR.items.length} / ${BR.maxItems}`
   if (!BR.items.length) { box.innerHTML = '<div class="bf-hint" style="margin-top:8px">아직 담긴 매물이 없습니다. 위 칸에 링크나 글을 넣고 [정리해서 담기]를 누르거나, [빈 매물 추가]로 직접 적고 사진을 올리세요.</div>'; return }
-  box.innerHTML = BR.items.map((it, i) => `
+  box.innerHTML = `<div class="bf-tools"><label><input type="checkbox" data-selall="1"> 전체 선택</label><button class="btn btn-sm btn-danger" data-delsel="1">선택 삭제</button><button class="btn btn-sm btn-danger" data-delall="1">전체 삭제</button><span class="bf-hint" style="margin:0">번호 옆 칸에서 "N번으로"를 고르면 그 자리로 옮겨집니다 · 사진은 × 로 빼고, ‹ › 나 끌어서 순서를 바꿉니다</span></div>` + BR.items.map((it, i) => `
     <div class="bf-card" data-i="${i}">
-      <div class="top"><span class="bf-no">${i + 1}</span>${oxOf(i + 1)}<input data-k="title" value="${esc(it.title)}" placeholder="손님께 보일 제목 (예: 역삼동 606 501호 원룸)" style="flex:1;min-width:160px;width:auto">
-        <span class="bf-acts" style="margin:0"><button class="btn btn-sm" data-mv="-1" ${i === 0 ? 'disabled' : ''} title="위로">↑</button><button class="btn btn-sm" data-mv="1" ${i === BR.items.length - 1 ? 'disabled' : ''} title="아래로">↓</button><button class="btn btn-sm btn-danger" data-del="1">삭제</button></span></div>
+      <div class="top"><label class="bf-sel" title="선택 (한꺼번에 지우기)"><input type="checkbox" data-sel="1"></label><span class="bf-no">${i + 1}</span>${oxOf(i + 1)}<input data-k="title" value="${esc(it.title)}" placeholder="손님께 보일 제목 (예: 역삼동 606 501호 원룸)" style="flex:1;min-width:160px;width:auto">
+        <span class="bf-acts" style="margin:0"><select data-to="1" title="이 매물을 몇 번 자리로 옮길지 고르세요">${BR.items.map((_, k) => `<option value="${k}" ${k === i ? 'selected' : ''}>${k + 1}번${k === i ? '' : '으로'}</option>`).join('')}</select><button class="btn btn-sm" data-mv="-1" ${i === 0 ? 'disabled' : ''} title="위로">↑</button><button class="btn btn-sm" data-mv="1" ${i === BR.items.length - 1 ? 'disabled' : ''} title="아래로">↓</button><button class="btn btn-sm btn-danger" data-del="1">삭제</button></span></div>
       <div class="bf-g3">
         <label class="bf-lb">📍 주소<input data-k="addr" value="${esc(it.addr)}" placeholder="손님께 보일 주소"></label>
         <label class="bf-lb">💰 금액<input data-k="price" value="${esc(it.price)}" placeholder="예: 월세 1,000 / 65"></label>
@@ -181,8 +185,14 @@ function paintBrItems() {
     card.querySelector('input[data-k="addr"]').onchange = () => { if (it.addr && !it.station && !(it.lat && it.lng)) { it.stState = 'todo'; brStations() } }   // 주소를 적으면 역을 다시 찾는다
     card.querySelectorAll('[data-mv]').forEach(b => b.onclick = () => { const j = i + Number(b.dataset.mv); if (j < 0 || j >= BR.items.length) return; BR.items.splice(i, 1); BR.items.splice(j, 0, it); paintBrItems() })
     card.querySelector('[data-del]').onclick = () => { if (!confirm(`${i + 1}번 매물을 목록에서 뺄까요?`)) return; BR.items.splice(i, 1); paintBrItems() }
+    card.querySelector('[data-to]').onchange = e => { const j = Number(e.target.value); if (j === i) return; BR.items.splice(i, 1); BR.items.splice(j, 0, it); paintBrItems(); toast(`${i + 1}번 매물을 ${j + 1}번으로 옮겼습니다`) }
     brBindPhotos(card, it)
   })
+  // 전체 선택 · 선택 삭제 · 전체 삭제 (2026-10-14)
+  const selected = () => [...box.querySelectorAll('[data-sel]:checked')].map(cb => Number(cb.closest('.bf-card').dataset.i))
+  box.querySelector('[data-selall]').onchange = e => box.querySelectorAll('[data-sel]').forEach(cb => { cb.checked = e.target.checked })
+  box.querySelector('[data-delsel]').onclick = () => { const idx = selected(); if (!idx.length) return toast('지울 매물을 먼저 체크하세요'); if (!confirm(`체크한 ${idx.length}건을 목록에서 뺄까요?`)) return; BR.items = BR.items.filter((_, k) => !idx.includes(k)); paintBrItems() }
+  box.querySelector('[data-delall]').onclick = () => { if (!confirm(`담긴 매물 ${BR.items.length}건을 모두 뺄까요? (만든 링크는 [이 링크 갱신]을 눌러야 바뀝니다)`)) return; BR.items = []; paintBrItems() }
   BR.items.forEach(brPaintStation)
 }
 function brSetMsg(t, warn) { const m = $('br_msg'); m.textContent = t || ''; m.className = 'bf-msg' + (warn ? ' warn' : '') }
@@ -216,6 +226,7 @@ async function brAdd(text, file) {
 }
 async function brLoadList(quiet) {
   try { const j = await api('brief-list'); BR.list = j.rows || []; BR.max = j.max || BR.max; BR.maxItems = j.max_items || BR.maxItems; $('br_maxtxt').textContent = BR.max
+    if (j.office && !BR.office) { BR.office = j.office; $('br_office').value = BR.office }   // 계정에 기억된 부동산 이름
     if (BR.id) { const cur = BR.list.find(r => r.id === BR.id); if (cur && JSON.stringify(cur.response) !== JSON.stringify(BR.response)) { BR.response = cur.response; brPaintResp(); paintBrItems(); if (cur.response) toast(`'${cur.customer}' 손님이 O/X 를 제출했습니다!`) } } }
   catch (e) { BR.list = BR.list || []; if (!quiet) brSetMsg(e.message, true) }
   paintBrList()
@@ -243,14 +254,14 @@ async function brEdit(id) {
   if (BR.items.length && BR.id !== id && !confirm('지금 편집 중인 목록을 버리고 이 링크를 불러올까요?')) return
   try {
     const j = await api('brief-get?id=' + encodeURIComponent(id))
-    BR.id = j.id; BR.url = j.url; BR.customer = j.customer; BR.memo = j.memo || ''; BR.response = j.response || null; BR.wm = !(j.opts && j.opts.wm === false); if (j.staff_name) BR.staff_name = j.staff_name; if (j.staff_phone) BR.staff_phone = j.staff_phone
+    BR.id = j.id; BR.url = j.url; BR.customer = j.customer; BR.memo = j.memo || ''; BR.response = j.response || null; BR.wm = !(j.opts && j.opts.wm === false); if (j.opts && j.opts.office) BR.office = j.opts.office; if (j.staff_name) BR.staff_name = j.staff_name; if (j.staff_phone) BR.staff_phone = j.staff_phone
     BR.items = (j.items || []).map(it => ({ title: it.title || '', addr: it.addr || '', price: it.price || '', station: it.station || '', stState: it.station ? 'ok' : ((it.addr || (it.lat && it.lng)) ? 'todo' : 'none'), memo: it.memo || '', photos: Array.isArray(it.photos) ? it.photos.slice() : [], spec: it.spec || {}, src: it.src || '', lat: it.lat || null, lng: it.lng || null }))
     brPaintHead(); brPaintResp(); paintBrItems(); brPaintOut(); paintBrList(); brStations()
     $('bf_box').scrollIntoView({ behavior: 'smooth', block: 'start' })
     toast(`'${j.customer}' 링크를 불러왔습니다. 고친 뒤 [이 링크 갱신]을 누르세요.`)
   } catch (e) { toast(e.message) }
 }
-function brPaintHead() { $('br_customer').value = BR.customer || ''; $('br_memo').value = BR.memo || ''; $('br_sname').value = BR.staff_name || ''; $('br_sphone').value = BR.staff_phone || ''; $('br_wm').checked = BR.wm !== false }
+function brPaintHead() { $('br_office').value = BR.office || ''; $('br_customer').value = BR.customer || ''; $('br_memo').value = BR.memo || ''; $('br_sname').value = BR.staff_name || ''; $('br_sphone').value = BR.staff_phone || ''; $('br_wm').checked = BR.wm !== false }
 function brPaintResp() { const r = BR.response; $('br_resp').innerHTML = r ? `<div class="bf-resp"><b class="done">제출완료 !!!!!</b> ${esc(BR.customer)} 손님이 ${esc(dt(r.at))} 에 골랐습니다 — <b>${esc(respText(r))}</b><div class="bf-hint">아래 카드의 '손님 O / 손님 X' 표시가 그 응답입니다.</div></div>` : '' }
 function brPaintOut() {
   const out = $('br_out'); $('br_make').textContent = BR.id ? '🔗 이 링크 갱신' : '🔗 손님 링크 만들기'
@@ -269,7 +280,7 @@ async function brMake() {
   $('br_make').disabled = true
   try { localStorage.setItem('brief_staff_v1', JSON.stringify({ name: BR.staff_name, phone: BR.staff_phone })) } catch (_) {}
   try {
-    const j = await api('brief-save', { id: BR.id || undefined, customer: BR.customer, memo: BR.memo, staff_name: BR.staff_name, staff_phone: BR.staff_phone, opts: { wm: BR.wm !== false }, items: BR.items.map(it => ({ title: it.title, addr: it.addr, price: it.price, station: it.station, memo: it.memo, photos: it.photos, spec: it.spec, src: it.src, lat: it.lat, lng: it.lng })) })
+    const j = await api('brief-save', { id: BR.id || undefined, customer: BR.customer, memo: BR.memo, staff_name: BR.staff_name, staff_phone: BR.staff_phone, opts: { wm: BR.wm !== false, office: String(BR.office || '').trim() }, items: BR.items.map(it => ({ title: it.title, addr: it.addr, price: it.price, station: it.station, memo: it.memo, photos: it.photos, spec: it.spec, src: it.src, lat: it.lat, lng: it.lng })) })
     BR.id = j.id; BR.url = j.url; brPaintOut(); toast(j.updated ? '링크 내용을 갱신했습니다' : '손님 링크를 만들었습니다'); brLoadList()
     $('br_out').scrollIntoView({ behavior: 'smooth', block: 'center' })
   } catch (e) { toast(e.message) }
@@ -282,6 +293,7 @@ function brReset(ask) {
 }
 brPaintHead(); paintBrItems(); brPaintOut()
 $('br_customer').oninput = () => { BR.customer = $('br_customer').value }
+$('br_office').oninput = () => { BR.office = $('br_office').value }
 $('br_memo').oninput = () => { BR.memo = $('br_memo').value }
 $('br_wm').onchange = () => { BR.wm = $('br_wm').checked }
 $('br_sname').oninput = () => { BR.staff_name = $('br_sname').value }
