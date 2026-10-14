@@ -462,6 +462,9 @@ class OnhouseWorker(QObject):
 # 네이버 호수 특정(건축물대장 조회) 기본값. False면 호수 컬럼은 빈칸이고 수집이 훨씬 빠르다(건물 첫 조회 약 10초 → 0.3초).
 # 파라미터 hosu_enabled 가 넘어오면(UI 체크박스) 그 값을 우선한다.
 NAVER_HOSU_ENABLED = True
+# 네이버 탭만 쓰는 단독 판(top.exe): 당근 탭 숨김 + 당근 예약 무시. 빌드 스크립트가 True 로 치환한다 (2026-10-14)
+NAVER_ONLY = False
+APP_TITLE = "top 네이버 매물 수집기" if NAVER_ONLY else "전국 부동산 매물 수집기 v1"
 
 # 네이버 상세 텍스트 필터 — 자주 쓰는 키워드 체크박스 (체크한 것 + 입력한 키워드를 OR 로 검색)
 NAVER_KEYWORD_PRESETS = ["LH", "SH", "보증보험", "전세대출", "HUG", "허그", "대출", "애완", "반려", "동물", "통임대", "통매매", "통건물", "건물전체"]
@@ -922,7 +925,8 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self._send_worker: SendWorker | None = None
         self._batch_mode: bool = False
         self._batch_queue: list = []
-        self.setWindowTitle("전국 부동산 매물 수집기 v1")
+        self.setWindowTitle(APP_TITLE)
+        self.DAANGN_ENABLED = not NAVER_ONLY   # schedule_mixin 이 당근 예약을 돌릴지 판단
         self.resize(1600, 1020)
         self.setMinimumSize(1280, 820)
         self._setup_ui()
@@ -932,7 +936,7 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self._load_send_config()
         # 텔레그램으로 "목록" / "실행 <예약이름>" 을 보내면 그 예약을 바로 돌리고 결과 엑셀을 텔레그램으로 보낸다
         self._force_tg = False
-        self.tg_cmd = auto_send.TelegramCommander(lambda: self._send_config(), "매물수집기", program="main")
+        self.tg_cmd = auto_send.TelegramCommander(lambda: self._send_config(), "top" if NAVER_ONLY else "매물수집기", program="main")
         self.tg_timer = QTimer(self)
         self.tg_timer.setInterval(10000)
         self.tg_timer.timeout.connect(self._poll_telegram)
@@ -946,7 +950,7 @@ class MainWindow(QMainWindow, ScheduleMixin):
         for cmd in cmds:
             kind, arg = auto_send.TelegramCommander.parse(cmd["text"])
             if kind == "list":
-                names = [f"{'[켜짐]' if j.enabled else '[꺼짐]'} {j.name} ({'당근' if j.site == 'daangn' else '네이버'} {j.schedule_time})" for j in self._schedule_manager.get_all()]
+                names = [f"{'[켜짐]' if j.enabled else '[꺼짐]'} {j.name} ({'당근' if j.site == 'daangn' else '네이버'} {j.schedule_time})" for j in self._visible_jobs()]
                 self.tg_cmd.reply_to(cmd, "[매물수집기] 예약 목록\n" + ("\n".join(names) if names else "(없음)") + "\n\n실행 <예약이름> 으로 바로 수집합니다")
             elif kind == "help":
                 self.tg_cmd.reply_to(cmd, "[매물수집기] " + auto_send.TelegramCommander.HELP)
@@ -954,9 +958,14 @@ class MainWindow(QMainWindow, ScheduleMixin):
                 self._send_log(f"텔레그램 명령: 실행 [{arg}]")
                 self.tg_cmd.reply_to(cmd, "[매물수집기] " + self._run_job_by_name_tg(arg))
 
+    def _visible_jobs(self) -> list:
+        """이 판에서 쓸 수 있는 예약만 (네이버 단독 판은 네이버 예약만)."""
+        jobs = self._schedule_manager.get_all()
+        return [j for j in jobs if j.site == "naver"] if NAVER_ONLY else list(jobs)
+
     def _run_job_by_name_tg(self, name: str) -> str:
         name = (name or "").strip()
-        jobs = self._schedule_manager.get_all()
+        jobs = self._visible_jobs()
         job = next((j for j in jobs if j.name == name), None) or next((j for j in jobs if name and name in j.name), None)
         if not job:
             return f"'{name}' 예약이 없습니다. '목록' 으로 이름을 확인하세요"
@@ -1083,6 +1092,9 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self.tabs.addTab(wrap_in_scroll(self._build_daangn_tab()), "당근")
         self.tabs.addTab(wrap_in_scroll(self._build_naver_tab()), "네이버")
         self.tabs.addTab(wrap_in_scroll(self._build_send_tab()), "자동 전송")
+        if NAVER_ONLY:
+            self.tabs.setTabVisible(0, False)
+            self.tabs.setCurrentIndex(1)
         ctrl = QHBoxLayout()
         self.btn_start = QPushButton("수집 시작")
         self.btn_stop = QPushButton("중단")
@@ -2517,7 +2529,7 @@ class MainWindow(QMainWindow, ScheduleMixin):
     # ---------- 무인 실행 (윈도우 작업 스케줄러) ----------
     def run_batch(self, job_name=None) -> None:
         self._batch_mode = True
-        jobs = [j for j in self._schedule_manager.get_all() if j.enabled]
+        jobs = [j for j in self._visible_jobs() if j.enabled]
         if job_name:
             jobs = [j for j in jobs if j.name == job_name]
         if not jobs:

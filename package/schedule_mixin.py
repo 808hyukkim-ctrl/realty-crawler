@@ -44,6 +44,13 @@ class ScheduleMixin:
     # ──────────────────────────────────────────────────────────────
 
     def _run_scheduled_job(self, job: ScheduledJob):
+        if job.site == "daangn" and not getattr(self, "DAANGN_ENABLED", True):
+            # 네이버 단독 판(top.exe): 당근 예약은 건너뛰고 다음 예약으로
+            self.progress_text.setText(f"예약 건너뜀: {job.name} — 이 프로그램은 네이버만 수집합니다")
+            step = getattr(self, "_batch_step", None)
+            if step:
+                step()
+            return
         if job.site == "daangn":
             params = self._scheduled_daangn_params(job.settings)
             if params:
