@@ -1400,3 +1400,167 @@ APP_STYLESHEET = """
                 border-radius: 6px;
             }
             """
+
+
+# ───────────── 활동 기록용 수집 조건 요약 (2026-10-14) ─────────────
+NAVER_TYPE_KO = {"JGC": "재건축", "IA01:IA02:IC01:IC02:IA04:IC03": "분양중/예정", "OBYG": "오피스텔분양권", "APT": "아파트",
+                 "ABYG": "아파트분양권", "JGB": "재개발", "OPST": "오피스텔", "VL": "빌라/연립", "DDDGG": "단독/다가구",
+                 "JWJT": "전원주택", "SGJT": "상가주택", "HOJT": "한옥주택", "OR": "원룸/투룸", "SG": "상가", "SMS": "사무실",
+                 "GJCG": "공장/창고", "APTHGJ": "지식산업센터", "GM": "건물", "TJ": "토지"}
+NAVER_TRADE_KO = {"A1": "매매", "B1": "전세", "B2": "월세", "B3": "단기"}
+DAANGN_TRADE_KO = {"month": "월세", "buy": "매매", "borrow": "전세", "short": "단기"}
+WRITER_KO = {"BROKER": "중개사", "DIRECT_USER": "직거래"}
+
+
+def _daangn_sales_ko(code: str) -> str:
+    try:
+        from daangn_realty_crawler import DaangnRealtyCrawler
+        return DaangnRealtyCrawler.SALES_TYPE_MAP.get(code, code)
+    except Exception:
+        return code
+
+
+def describe_params(p, max_len: int = 380) -> str:
+    """수집 파라미터 → 어드민 활동 기록에 남길 한 줄 조건 요약 (지역·유형·거래·기간·금액·세부·키워드·옵션).
+    통합(당근/네이버/온하우스/피터팬)·온하우스 단독·예약 파라미터의 키를 모두 알아본다. 모르는 키는 무시."""
+    if not isinstance(p, dict):
+        return ""
+    parts = []
+
+    def num(v):
+        if v is None or v == "":
+            return ""
+        try:
+            f = float(v)
+            return str(int(f)) if f == int(f) else f"{f:g}"
+        except Exception:
+            return str(v)
+
+    def rng(label, a, b, unit="", lo=None, hi=None, div=1):
+        if a is None and b is None:
+            return
+        try:
+            a2 = None if a is None else float(a) / div
+            b2 = None if b is None else float(b) / div
+        except Exception:
+            return
+        a_open = a2 is None or a2 <= (lo if lo is not None else 0)
+        b_open = b2 is None or (hi is not None and b2 >= hi)
+        if a_open and b_open:
+            return
+        if b_open:
+            parts.append(f"{label} {num(a2)}{unit} 이상")
+        elif a_open:
+            parts.append(f"{label} {num(b2)}{unit} 이하")
+        else:
+            parts.append(f"{label} {num(a2)}~{num(b2)}{unit}")
+
+    if p.get("schedule_name"):
+        parts.append(f"예약 '{p['schedule_name']}'")
+    # 지역
+    regions = p.get("region_names") or p.get("regions") or []
+    if isinstance(regions, (list, tuple)) and regions:
+        label = p.get("region_label") or p.get("region_for_file") or ""
+        label = str(label).replace("_", " ").strip()
+        first = str(regions[0])
+        if label and label != "전체":
+            parts.append(f"지역 {label} ({len(regions)}곳)")
+        elif len(regions) == 1:
+            parts.append(f"지역 {first}")
+        else:
+            parts.append(f"지역 {first} 외 {len(regions) - 1}곳")
+    # 매물 유형
+    kinds = []
+    rt = p.get("realestate_type")
+    if rt:
+        kinds += [NAVER_TYPE_KO.get(c, c) for c in str(rt).split(":") if c]
+    st = p.get("sales_type")
+    if st:
+        kinds += [_daangn_sales_ko(c) for c in str(st).split(",") if c]
+    if p.get("room_type") and p.get("room_type") != "all":
+        kinds.append(str(p["room_type"]))
+    bt = p.get("building_types") or p.get("building_type")
+    if bt:
+        kinds += [str(x) for x in (bt if isinstance(bt, (list, tuple)) else [bt]) if x]
+    if kinds:
+        parts.append("유형 " + ", ".join(dict.fromkeys(kinds)))
+    # 거래 방식
+    trades = []
+    tt = p.get("trade_type")
+    if tt:
+        for c in str(tt).replace(":", ",").split(","):
+            c = c.strip()
+            if c:
+                trades.append(DAANGN_TRADE_KO.get(c, NAVER_TRADE_KO.get(c, c)))
+    for key in ("trade_types", "contract_types"):
+        v = p.get(key)
+        if isinstance(v, (list, tuple)):
+            trades += [str(x).strip("'\"") for x in v if x]
+        elif isinstance(v, str) and v:
+            trades += [x.strip().strip("'\"") for x in v.split(",") if x.strip()]
+    if trades:
+        parts.append("거래 " + "/".join(dict.fromkeys(trades)))
+    # 기간
+    if p.get("date_start") or p.get("date_end"):
+        parts.append(f"등록 {p.get('date_start') or ''}~{p.get('date_end') or ''}")
+    elif p.get("min_date"):
+        parts.append(f"등록 {p['min_date']} 이후")
+    elif p.get("period_label"):
+        parts.append(f"{'등록일' if p.get('date_by') == 'reg' else '확인일'} {p['period_label']}")
+    elif p.get("date_from") or p.get("date_to"):
+        parts.append(f"{'등록일' if p.get('date_by') == 'reg' else '확인일'} {p.get('date_from') or ''}~{p.get('date_to') or ''}")
+    elif p.get("registered_date_start") or p.get("registered_date_end"):
+        parts.append(f"등록 {p.get('registered_date_start') or ''}~{p.get('registered_date_end') or ''}")
+    # 금액 (만원) — 슬라이더 전체 범위면 생략
+    rng("월세", p.get("monthly_min"), p.get("monthly_max"), "만", 0, 3000)
+    rng("보증금", p.get("deposit_min"), p.get("deposit_max"), "만", 0, 50000, div=(10000 if p.get("site_name") == "피터팬" else 1))
+    rng("매매", p.get("buy_min"), p.get("buy_max"), "만", 0, 1000000)
+    rng("전세", p.get("borrow_min"), p.get("borrow_max"), "만", 0, 1000000)
+    rng("면적", p.get("area_min"), p.get("area_max"), "㎡", 0, 200)
+    rng("매매", p.get("min_deal"), p.get("max_deal"), "만")
+    rng("보증금", p.get("min_warr"), p.get("max_warr"), "만")
+    rng("월세", p.get("min_rent"), p.get("max_rent"), "만")
+    rng("면적", p.get("min_area"), p.get("max_area"), "㎡")
+    rng("보증금", p.get("refer_min"), p.get("refer_max"), "만")
+    rng("매매/전세", p.get("price_min"), p.get("price_max"), "만", div=(10000 if p.get("site_name") == "피터팬" else 1))
+    rng("월세", p.get("month_min"), p.get("month_max"), "만", div=(10000 if p.get("site_name") == "피터팬" else 1))
+    rng("면적", p.get("size_min"), p.get("size_max"), "㎡")
+    # 세부 조건
+    for key, label, unit in (("detail_rooms", "방", "개"), ("post_rooms", "방", "개"), ("detail_floors", "층", "층"),
+                             ("post_floors", "층", "층"), ("detail_years", "준공", "년"), ("post_years", "준공", "년")):
+        v = p.get(key)
+        if isinstance(v, (list, tuple)) and len(v) == 2:
+            rng(label, v[0], v[1], unit)
+    uses = p.get("detail_uses")
+    if isinstance(uses, (list, tuple)) and uses:
+        parts.append("용도 " + "/".join(str(u) for u in uses))
+    kws = p.get("detail_keywords") or p.get("keywords")
+    if isinstance(kws, (list, tuple)) and kws:
+        parts.append("키워드 " + ",".join(str(k) for k in kws))
+    elif isinstance(kws, str) and kws.strip():
+        parts.append("키워드 " + kws.strip())
+    # 옵션
+    opts = []
+    wt = p.get("writer_types")
+    if isinstance(wt, (list, tuple)) and wt and len(set(wt)) < 2:
+        opts.append(WRITER_KO.get(list(wt)[0], str(list(wt)[0])) + "만")
+    if p.get("mode") == "share":
+        opts.append("공동중개")
+    if p.get("short_term"):
+        opts.append("단기만")
+    if p.get("hosu_enabled"):
+        opts.append("호수")
+    if p.get("contact"):
+        opts.append("연락처")
+    if p.get("sort_views"):
+        opts.append("조회수순")
+    if p.get("sort_pyeong"):
+        opts.append("평단가순")
+    if p.get("dedupe_same") or p.get("dedupe"):
+        opts.append("중복제거")
+    if p.get("max_pages"):
+        opts.append(f"최대 {p['max_pages']}쪽")
+    if opts:
+        parts.append("옵션 " + "/".join(opts))
+    s = " · ".join(parts)
+    return s if len(s) <= max_len else s[: max_len - 1] + "…"

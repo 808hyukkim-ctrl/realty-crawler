@@ -2567,9 +2567,13 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self._last_output_path = parse_saved_output_path_from_finish_message(msg)
         try:
             from license_gate import report_activity
-            site = self.tabs.tabText(self.tabs.currentIndex()) if hasattr(self, "tabs") else ""
+            from app_main_common import describe_params
+            p = getattr(self.worker, "params", None) or {}
+            site = p.get("site_name") or (self.tabs.tabText(self.tabs.currentIndex()) if hasattr(self, "tabs") else "")
             m = re.search(r"(\d+)건", msg)
-            report_activity("수집", f"{site} · {os.path.basename(self._last_output_path) if self._last_output_path else msg[:200]}", int(m.group(1)) if m else None)
+            cond = describe_params(p)   # 어떤 조건으로 뽑았는지도 활동 기록에 남긴다 (2026-10-14)
+            detail = f"{site} · {os.path.basename(self._last_output_path) if self._last_output_path else msg[:200]}"
+            report_activity("수집", detail + (f" · 조건: {cond}" if cond else ""), int(m.group(1)) if m else None)
         except Exception:
             pass
         self._auto_send_after_save()

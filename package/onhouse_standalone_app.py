@@ -1738,8 +1738,12 @@ class MainWindow(QMainWindow):
         self._append_log(msg)
         try:
             from license_gate import report_activity
+            from app_main_common import describe_params
             m = re.search(r"(\d+)건", msg)
-            report_activity("수집", f"온하우스 · {os.path.basename(msg.split(': ', 1)[-1].split(' (')[0]) if '저장' in msg else msg}", int(m.group(1)) if m else None)
+            p = getattr(self.worker, "params", None) or {}
+            cond = describe_params(p)   # 어떤 조건으로 뽑았는지도 활동 기록에 남긴다 (2026-10-14)
+            detail = f"{'온하우스공동' if p.get('mode') == 'share' else '온하우스'} · {os.path.basename(msg.split(': ', 1)[-1].split(' (')[0]) if '저장' in msg else msg}"
+            report_activity("수집", detail + (f" · 조건: {cond}" if cond else ""), int(m.group(1)) if m else None)
         except Exception:
             pass
         self.progress.setValue(100)
