@@ -940,7 +940,8 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self.tg_timer = QTimer(self)
         self.tg_timer.setInterval(10000)
         self.tg_timer.timeout.connect(self._poll_telegram)
-        self.tg_timer.start()
+        if not NAVER_ONLY:   # top 판은 자동 전송 탭이 없어 텔레그램 명령도 받지 않음
+            self.tg_timer.start()
 
     def _poll_telegram(self):
         try:
@@ -1093,7 +1094,8 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self.tabs.addTab(wrap_in_scroll(self._build_naver_tab()), "네이버")
         self.tabs.addTab(wrap_in_scroll(self._build_send_tab()), "자동 전송")
         if NAVER_ONLY:
-            self.tabs.setTabVisible(0, False)
+            self.tabs.setTabVisible(0, False)   # 당근
+            self.tabs.setTabVisible(2, False)   # 자동 전송 (top 판은 메일·텔레그램 전송 없음)
             self.tabs.setCurrentIndex(1)
         ctrl = QHBoxLayout()
         self.btn_start = QPushButton("수집 시작")
@@ -2506,6 +2508,9 @@ class MainWindow(QMainWindow, ScheduleMixin):
         QMessageBox.information(self, "테스트 전송", "결과를 아래 상태줄과 auto_send.log 에서 확인하세요.")
 
     def _auto_send_after_save(self) -> None:
+        if NAVER_ONLY:   # top 판: 전송 없이 바로 다음 예약으로
+            self._batch_step()
+            return
         cfg = self._send_config()
         if getattr(self, "_force_tg", False):   # 텔레그램 명령으로 시작한 수집은 결과를 텔레그램으로
             cfg = {**cfg, "tg_on": True}

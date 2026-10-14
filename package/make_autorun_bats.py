@@ -36,8 +36,7 @@ VARIANTS = {
         exe="top.exe", sched="schedules.json",
         task="top 네이버 매물수집 자동실행", title="top 네이버 매물수집기",
         prep=["라이선스 창에서 아이디/비밀번호 기억 체크",
-              "예약 탭에서 예약을 만들고 켜 두기 (시각·요일·수집 조건이 그대로 등록됩니다)",
-              "'자동 전송' 탭에 메일 또는 텔레그램 입력 후 저장"]),
+              "예약을 만들고 켜 두기 (시각·요일·수집 조건이 그대로 등록됩니다) — 결과 엑셀은 data 폴더에 쌓입니다"]),
     "onhouse": dict(
         prefix="온하우스", folder="온하우스매물수집기_260921",
         exe="온하우스매물수집기_독립버전.exe", sched="onhouse_schedules.json",
