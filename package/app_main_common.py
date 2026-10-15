@@ -451,6 +451,7 @@ class RangeInput(QWidget):
             e.setAlignment(Qt.AlignRight)
         self.edt_min.setPlaceholderText("0")
         self.edt_max.setPlaceholderText("제한없음")
+        self._default_min_text = str(default_min_text or "")
         if default_min_text:
             self.edt_min.setText(str(default_min_text))
         self.sep_label = QLabel("~")
@@ -504,6 +505,16 @@ class RangeInput(QWidget):
         self.btn_unit.setText(
             f"{self._base_unit}로 보기" if self._in_alt else f"{alt_unit}로 보기"
         )
+
+    def reset(self) -> None:
+        """처음 상태로: 최소=기본값(빈칸 또는 default_min_text), 최대=제한없음, 단위는 기본 단위."""
+        if self._alt and self._in_alt:
+            self._in_alt = False
+            self.unit_label.setText(self._base_unit)
+            if self.btn_unit is not None:
+                self.btn_unit.setText(f"{self._alt[0]}로 보기")
+        self.edt_min.setText(self._default_min_text)
+        self.edt_max.setText("")
 
     def set_enabled(self, enabled: bool):
         for w in (self.title_label, self.edt_min, self.edt_max, self.sep_label, self.unit_label):
@@ -959,11 +970,12 @@ class DetailFilters:
     건축물용도는 값이 있으면 선택 라벨과 부분일치해야 통과.
     """
 
-    def __init__(self, rooms=None, floors=None, years=None, uses=None):
+    def __init__(self, rooms=None, floors=None, years=None, uses=None, uses_strict: bool = False):
         self.rooms = rooms
         self.floors = floors
         self.years = years
         self.uses = [str(u) for u in (uses or []) if str(u).strip()]
+        self.uses_strict = bool(uses_strict)   # True: 용도를 체크했는데 매물에 용도 값이 없으면 제외 (네이버는 lawUsage 가 거의 항상 있음)
 
     @property
     def active(self) -> bool:
@@ -993,7 +1005,7 @@ class DetailFilters:
             return True
         val = re.sub(r"[\s/·,()\[\]]", "", str(s or ""))
         if not val:
-            return True  # 용도 값이 없으면 관대하게 통과(당근 목록에 값이 비는 경우 대비)
+            return not self.uses_strict  # 용도 값이 없으면 관대하게 통과(당근 목록에 값이 비는 경우 대비) · strict 면 제외
         for u in self.uses:
             uu = re.sub(r"[\s/·,()\[\]]", "", u)
             if uu and (uu in val or val in uu):

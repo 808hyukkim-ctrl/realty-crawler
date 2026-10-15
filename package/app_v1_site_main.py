@@ -524,7 +524,7 @@ def daangn_excel_row(row: dict, columns=None) -> dict:
 NAVER_SAME_KEY_COLUMNS = ["세부주소", "매물명", "아파트동", "호수", "해당층", "전용/연", "거래방식", "매매/전세금", "월세"]
 
 NAVER_EXCEL_COLUMNS = [
-    "매물번호", "등록/확인일", "세부주소", "호수", "종류", "거래방식", "매물명", "아파트동",
+    "매물번호", "등록/확인일", "세부주소", "호수", "종류", "건축물용도", "거래방식", "매물명", "아파트동",
     "공급/계약/대지", "전용/연", "해당층", "전체층", "매매/전세금", "월세", "관리비",
     "방수", "화장실수", "입주가능일", "간략설명", "설명", "사용승인일",
     "중개사무소", "중개사명", "중개사주소", "중개사전화", "중개사휴대폰",
@@ -601,6 +601,7 @@ class NaverWorker(QObject):
                 uses=self.params.get("detail_uses"),
             )
 
+            detail_filters.uses_strict = True   # 네이버: 용도를 체크했으면 용도 값이 없는 매물은 제외
             hosu_on = bool(self.params.get("hosu_enabled", NAVER_HOSU_ENABLED))
 
             def _detail_ok(row: Any) -> bool:
@@ -1454,6 +1455,15 @@ class MainWindow(QMainWindow, ScheduleMixin):
         w = QWidget()
         v = QVBoxLayout(w)
 
+        top_row = QHBoxLayout()
+        top_row.addStretch(1)
+        self.nv_btn_reset_all = QPushButton("전체 초기화")
+        self.nv_btn_reset_all.setObjectName("rangeResetBtn")
+        self.nv_btn_reset_all.setToolTip("매물유형·거래유형·금액·면적·등록일·옵션·방수/층수/사용승인일·키워드·건축물용도 체크를 처음 상태로 되돌립니다 (지역 선택은 그대로)")
+        self.nv_btn_reset_all.clicked.connect(self._reset_naver_filters)
+        top_row.addWidget(self.nv_btn_reset_all)
+        v.addLayout(top_row)
+
         region_box = QGroupBox("지역 (체크박스로 여러 곳 동시 선택 가능)")
         rr = QHBoxLayout(region_box)
         self.nv_cb_si = MultiSelectCombo()
@@ -1592,10 +1602,38 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self.nv_hosu_check = QCheckBox("호수 특정 (건축물대장 조회 · 후보 여러 개면 모두 표시 · 건물 첫 조회 시 수 초 소요)")
         self.nv_hosu_check.setChecked(NAVER_HOSU_ENABLED)
         v.addWidget(self.nv_hosu_check)
+        if NAVER_ONLY:   # top 판: 호수 기능이 없어 체크박스를 보이지 않게 (2026-10-15 사용자 요청)
+            self.nv_hosu_check.hide()
 
         self._refresh_trade_controls()
         v.addStretch(1)
         return w
+
+    def _reset_naver_filters(self) -> None:
+        """네이버 탭 [전체 초기화]: 지역만 두고 나머지 조건을 처음 상태로."""
+        for cb in self.nv_type_checks.values():
+            cb.setChecked(False)                      # 매물유형: 전부 해제 → 원하는 것만 다시 체크
+        self.nv_trade_buy.setChecked(False)
+        self.nv_trade_jeon.setChecked(False)
+        self.nv_trade_month.setChecked(True)           # 거래유형 기본: 월세
+        self.nv_trade_short.setChecked(False)
+        for r in (self.nv_sl_warr, self.nv_sl_rent, self.nv_sl_deal, self.nv_sl_jeon, self.nv_sl_area,
+                  self.nv_sl_rooms, self.nv_sl_floor, self.nv_sl_builtyear):
+            r.reset()
+        self.nv_date_preset.setCurrentIndex(0)         # 등록일: 전체
+        self.nv_dedupe.setChecked(True)
+        self.nv_sort_pyeong.setChecked(False)
+        self.nv_detail_filter.setText("")
+        for cb in getattr(self, "nv_kw_checks", {}).values():
+            cb.setChecked(False)
+        self.nv_use_group.set_selected([])
+        if hasattr(self, "nv_hosu_check"):
+            self.nv_hosu_check.setChecked(NAVER_HOSU_ENABLED)
+        self._refresh_trade_controls()
+        try:
+            self.progress_text.setText("네이버 조건을 초기화했습니다 (지역은 그대로)")
+        except Exception:
+            pass
 
     def _load_onhouse_credentials(self):
         if not os.path.exists(self.onhouse_cred_path):

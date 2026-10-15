@@ -2004,7 +2004,7 @@ class NaverCrawler:
                     nanbang = None
                     current_usage = None
                     recommend_usage = None
-                    building_usage = None # 건축물용도 
+                    building_usage = (article_detail.get("lawUsage") or None) if isinstance(article_detail, dict) else None   # 건축물용도 (법정 용도, 2026-10-15)
                     jisang_jiha_floor = None 
                     movein_possible_ymd = None
                     simple_description = None 
@@ -2607,7 +2607,7 @@ class NaverCrawler:
                        if article_detail.get("aptHeatMethodTypeName", "") else None)
         current_usage = article_detail.get("currentUsage", "")
         recommend_usage = article_detail.get("recommendUsage", "")
-        building_usage = None
+        building_usage = (article_detail.get("lawUsage") or None) if isinstance(article_detail, dict) else None   # 건축물용도 (법정 용도, 2026-10-15)
 
         article_floor = c_info.get("articleFloor", "")
         jisang_floor = article_floor.get("uppergroundFloorCount", "") if article_floor else None
