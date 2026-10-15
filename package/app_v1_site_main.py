@@ -1457,8 +1457,12 @@ class MainWindow(QMainWindow, ScheduleMixin):
 
         top_row = QHBoxLayout()
         top_row.addStretch(1)
-        self.nv_btn_reset_all = QPushButton("전체 초기화")
-        self.nv_btn_reset_all.setObjectName("rangeResetBtn")
+        self.nv_btn_reset_all = QPushButton("⟲ 전체 초기화 (지역 제외)")
+        self.nv_btn_reset_all.setObjectName("nvResetAllBtn")
+        self.nv_btn_reset_all.setMinimumHeight(36)
+        self.nv_btn_reset_all.setCursor(Qt.PointingHandCursor)
+        self.nv_btn_reset_all.setStyleSheet("QPushButton#nvResetAllBtn{background:#dc2626;color:#fff;font-weight:700;font-size:14px;padding:6px 20px;border:0;border-radius:8px;}"
+                                            "QPushButton#nvResetAllBtn:hover{background:#b91c1c;} QPushButton#nvResetAllBtn:pressed{background:#991b1b;}")
         self.nv_btn_reset_all.setToolTip("매물유형·거래유형·금액·면적·등록일·옵션·방수/층수/사용승인일·키워드·건축물용도 체크를 처음 상태로 되돌립니다 (지역 선택은 그대로)")
         self.nv_btn_reset_all.clicked.connect(self._reset_naver_filters)
         top_row.addWidget(self.nv_btn_reset_all)
@@ -1482,6 +1486,11 @@ class MainWindow(QMainWindow, ScheduleMixin):
         rr.addWidget(QLabel("읍·면·동"))
         rr.addWidget(self.nv_cb_gu)
         rr.addStretch(1)
+        self.nv_btn_reset_region = QPushButton("지역 초기화")
+        self.nv_btn_reset_region.setObjectName("rangeResetBtn")
+        self.nv_btn_reset_region.setToolTip("시/도=서울시, 시·군·구·읍·면·동=전체 로 되돌립니다 (다른 조건은 그대로)")
+        self.nv_btn_reset_region.clicked.connect(self._reset_naver_region)
+        rr.addWidget(self.nv_btn_reset_region)
         self.nv_cb_si.selection_changed.connect(self._on_nv_si_changed)
         self.nv_cb_gun.selection_changed.connect(self._on_nv_gun_changed)
         # 네이버 탭 기본값: 서울시 - 전체 - 전체 (naver_rls 키)
@@ -1608,6 +1617,16 @@ class MainWindow(QMainWindow, ScheduleMixin):
         self._refresh_trade_controls()
         v.addStretch(1)
         return w
+
+    def _reset_naver_region(self) -> None:
+        """[지역 초기화]: 시/도=서울시, 시·군·구/읍·면·동=전체. (selection_changed 가 아래 콤보를 다시 채운다)"""
+        self.nv_cb_si.set_checked_labels(["서울시"])
+        self.nv_cb_gun.set_checked_labels([])
+        self.nv_cb_gu.set_checked_labels([])
+        try:
+            self.progress_text.setText("지역을 서울시 · 전체로 되돌렸습니다")
+        except Exception:
+            pass
 
     def _reset_naver_filters(self) -> None:
         """네이버 탭 [전체 초기화]: 지역만 두고 나머지 조건을 처음 상태로."""
