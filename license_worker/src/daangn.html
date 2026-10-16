@@ -1417,7 +1417,7 @@ async function bulkRun(payload, isFile) {
     const j = await res.json().catch(() => null)
     if (!res.ok || !j || j.error) throw new Error((j && j.error) || `정리 서버 오류 (${res.status})`)
     const base = BULK.rows.length
-    const photosDefault = !!(document.getElementById('c_photos_import') || {}).checked
+    const photosDefault = true   // 포털: 당근은 사진 필수 → 일괄 목록 📷 기본 켬 (2026-10-16)
     const add = j.items.map((it, i) => ({ n: base + i + 1, input: it.input, ok: it.ok, error: it.error, got: it.got || {}, photoCount: it.photo_count || 0, photoTotal: it.photo_total || 0, photosOn: photosDefault && !!(it.photo_count), lgOn: false,
       addrItems: [], addrIdx: -1, addrState: 'pending', addrQ: undefined, status: it.ok ? 'ready' : 'fail', msg: '' }))
     if (BULK.phrAll) add.forEach(r => { if (r.ok) rowPhrApply(r) })
@@ -1841,7 +1841,7 @@ function paintCreate() {
       </div>
       <label class="wide">사진 주소 (한 줄에 하나, 선택)<textarea id="c_photos" rows="2" placeholder="https://..."></textarea>
         <div id="c_photo_strip" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
-        <span style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13px;color:var(--dim)"><input type="checkbox" id="c_photos_import" style="width:auto;margin:0"> 붙여넣은 링크의 사진도 가져오기 (기본 꺼짐 · 링크의 원본 사진이 그대로 들어옵니다. 워터마크가 찍힌 사진이 섞여 있으면 아래 사진 950 에서 확인해 ✕로 빼세요)</span></label>
+        <span style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13px;color:var(--dim)"><input type="checkbox" id="c_photos_import" checked style="width:auto;margin:0"> 붙여넣은 링크의 사진도 가져오기 (기본 켜짐 · 당근엔 사진이 꼭 들어가므로 아래 사진 950 에서 순서·빼기를 정하세요 · 링크의 원본 사진이 그대로 들어옵니다. 워터마크가 찍힌 사진이 섞여 있으면 아래 사진 950 에서 확인해 ✕로 빼세요)</span></label>
       <label style="display:none">중개유형<select id="c_hq_kind"><option value="joint" selected>당근 전용</option></select></label>
       <div class="wide" id="c_missing" style="display:none"></div>
       <div class="actions">
@@ -2026,14 +2026,16 @@ function paintCreate() {
     if (window.paintPhotoStrip) paintPhotoStrip()
     msg.textContent = `사진 ${urls.length}장 변환 중…`
     let done = 0, fail = 0
-    for (const u of urls) {
+    const one = async u => {   // 한 장 변환 — 4장씩 동시에 (2026-10-16: 사진 중계가 장당 1~2초라 한 장씩이면 10장에 20초 넘게 걸렸음)
       if (run !== P950.run) return   // 그 사이 다른 링크를 정리했으면 중단
-      if (!P950.srcUrls.includes(u)) continue   // 변환 중에 ✕로 뺀 사진
+      if (!P950.srcUrls.includes(u)) return   // 변환 중에 ✕로 뺀 사진
       try { const im = await loadImg(u); const r = await to950(im); if (run !== P950.run) return; P950.cache.set(u, { blob: r.blob, w: r.w, h: r.h }); done++ }
       catch (_) { if (run !== P950.run) return; P950.cache.set(u, 'fail'); fail++ }
       sync950Items(); paint950()
       msg.textContent = `사진 ${done}/${urls.length}장 준비됨${fail ? ` · 실패 ${fail}장` : ''} — 끌어서 순서 변경 · ✕ 빼기 · 첫 장이 대표 — 이 순서대로 당근에 올라갑니다 (⬇ 한 장씩, 또는 전부 zip)`
     }
+    const queue = urls.slice()
+    await Promise.all(Array.from({ length: Math.min(4, queue.length) }, async () => { while (queue.length) { if (run !== P950.run) return; await one(queue.shift()) } }))
   }
   $('c_photo950_zip').onclick = async () => {
     if (!P950.items.length) return toast('변환된 사진이 없습니다')
@@ -3254,7 +3256,7 @@ function naMount(){
 if(!(window.NA_CFG&&NA_CFG.deferred)) naMount();
 /*NA_JS_END*/
 const NA_MARKUP = "<div class=\"page-head\"><h1>네이버 광고정리</h1><span class=\"small muted\">위: 링크 넣으면 광고용 정보 자동 정리 · 아래: 지번으로 우리 DB + 지금 네이버에 걸린 매물 찾기 (줄을 누르면 그 매물이 바로 정리됩니다)</span></div>\n<div class=\"na-stack\">\n  <section class=\"panel green\">\n    <h2>⚡ 링크 자동 정리</h2>\n    <textarea id=\"na_links\" rows=\"4\" placeholder=\"아무 링크나 넣어주세요. 정리해드릴게요!  여러 개면 줄바꿈·쉼표·공백으로 구분&#10;https://new.land.naver.com/houses?articleNo=2653867465\"></textarea>\n    <div class=\"na-bar\"><button class=\"btn btn-primary\" id=\"na_go\">자동 정리</button><button class=\"btn\" id=\"na_clip\">📋 클립보드에서</button><span class=\"small muted\" id=\"na_msg\"></span></div>\n    <div class=\"na-bar\" id=\"na_tools\" style=\"display:none\"><button class=\"btn btn-primary\" id=\"na_save\">체크한 줄 DB에 저장</button><button class=\"btn\" id=\"na_dgbulk\" style=\"display:none\" title=\"체크한 줄의 링크를 당근 올리기 탭의 '여러 매물 한 번에' 목록에 넣습니다\">🥕 체크한 줄 당근 일괄 목록으로</button><button class=\"btn\" id=\"na_clear\" title=\"정리한 목록을 비웁니다 (DB 에 저장한 것은 그대로)\">목록 지우기</button><button class=\"btn\" id=\"na_xl\">엑셀 다운로드</button><button class=\"btn\" id=\"na_copyall\">전체 광고문구 복사</button><label class=\"small\"><input type=\"checkbox\" id=\"na_all\" checked> 전체 선택</label></div>\n    <div id=\"na_out\" class=\"na-out\"></div>\n  </section>\n  <section class=\"panel pink\">\n    <h2><span class=\"nlogo\">N</span>🔍 지번으로 매물 찾기</h2>\n    <div class=\"na-bar\"><input type=\"text\" id=\"na_q\" placeholder=\"예: 양재동 17-27 (구 이름을 붙이면 더 정확: 서초구 양재동 17-27)\" style=\"flex:1;min-width:240px\"><button class=\"btn btn-primary\" id=\"na_find\">찾기</button><label class=\"small\" style=\"display:flex;align-items:center;gap:5px;margin:0;white-space:nowrap\" title=\"같은 매물(종류·거래·금액·층·면적이 같은 것)을 여러 부동산이 올렸으면 한 줄로 묶어 'N곳' 으로 보여줍니다\"><input type=\"checkbox\" id=\"na_group\" checked style=\"width:16px;height:16px;margin:0\"> 중복매물 묶기</label></div>\n    <div class=\"small muted\" id=\"na_fmsg\">우리 DB 에 쌓인 줄은 바로, 네이버는 그 지번 자리(60m 안)의 매물을 모아 지번을 확인합니다 (5~15초). 줄을 누르면 오른쪽에 바로 정리됩니다.</div>\n    <div class=\"na-split\">\n      <div id=\"na_fout\" class=\"na-out\"></div>\n      <div class=\"na-pick\"><div id=\"na_pick\"><div class=\"small muted\" style=\"padding:14px\">← 결과 줄을 누르면 그 매물의 광고 정보가 여기에 정리됩니다 (위 링크 자동 정리와는 별개)</div></div><div id=\"na_bldg\" class=\"na-bldg\"></div></div>\n    </div>\n  </section>\n</div>"
-const BUILD = '2026-10-14 15:16 당근'
+const BUILD = '2026-10-16 23:06 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()
