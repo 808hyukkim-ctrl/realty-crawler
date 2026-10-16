@@ -1580,6 +1580,10 @@ const bulkMemoText = r => { const miss = dgMissBulk(r); const parts = []
   else if (r.pre && r.pre.state === 'same') parts.push('⚠️ 당근 중복매물 — 이 목록 ' + r.pre.n + '번과 같은 주소·호수')
   if (miss.length) parts.push('🥕 당근 빠짐: ' + miss.join(' · '))
   return parts.join('   ') }
+/* 이 줄이 당근에서 '원룸'으로 올라가는가 — 종류가 원룸이거나, 방 1개인데 빌라·주택·기타처럼 방 수로 원룸이 되는 경우 (폼의 syncRoomType 과 같은 규칙, 2026-10-16) */
+const isOneRoomRow = r => { const g = r.got || {}; const pt = String(g.property_type || '').trim(); const rc = Number(String(g.room_count ?? '').replace(/[^0-9]/g, ''))
+  if (/^(오픈형|분리형)/.test(pt)) return false
+  return pt === '원룸' || (/원룸/.test(pt) && rc <= 1) || (rc === 1 && ['', '빌라', '주택', '투룸', '기타'].includes(pt)) }
 const dgMissBulk = r => {   // 당근 등록에 꼭 필요한 칸 중 비어 있는 것
     const g = r.got || {}, it = r.addrItems[r.addrIdx] || {}; const n = v => { const x = parseFloat(String(v ?? '').replace(/,/g, '')); return isNaN(x) ? null : x }
     const out = []
@@ -1594,6 +1598,7 @@ const dgMissBulk = r => {   // 당근 등록에 꼭 필요한 칸 중 비어 있
     const noRooms = ['상가', '사무실', '토지', '건물', '공장', '창고'].includes(String(g.property_type || ''))
     if (!noRooms && (g.room_count == null || g.room_count === '')) out.push('방수')
     if (!noRooms && (g.bathroom_count == null || g.bathroom_count === '')) out.push('욕실수')
+    if (isOneRoomRow(r) && !/^(오픈형|분리형)/.test(String(g.room_type || ''))) out.push('원룸 유형(오픈형/분리형)')   // 2026-10-16: 원룸은 반드시 골라야 올라감 (엔진도 거부)
     if (!g.available_date) out.push('입주가능일')
     if (g.parking_total == null || g.parking_total === '') out.push('총 주차대수')
     if (!String(g.description || '').trim()) out.push('설명')
@@ -1646,6 +1651,7 @@ function paintBulk() {
       ${r.addrState === 'none' ? '<div class="memo" style="color:var(--warn)">주소를 못 찾았습니다 — 지번이나 도로명으로 다시 찾아주세요</div>' : ''}
       ${r.addrItems[r.addrIdx] ? `<small style="display:block;color:var(--dim)">${esc(r.addrItems[r.addrIdx].roadAddr || '')}</small>` : ''}
       <label style="display:flex;align-items:center;gap:5px;margin:6px 0 0;font-size:12px;font-weight:${r.photosOn ? 700 : 400};color:${r.photoCount ? 'inherit' : 'var(--dim)'}" title="체크하면 이 매물 등록에 링크의 사진이 들어갑니다 (원본 사이트 워터마크 포함)"><input type="checkbox" data-ph="${r.n}" ${r.photosOn ? 'checked' : ''} ${r.photoCount ? '' : 'disabled'} style="width:auto;margin:0"> 📷 사진 ${r.photoCount}장 가져오기</label>
+      ${r.ok && r.status !== 'done' && isOneRoomRow(r) ? `<label style="display:flex;align-items:center;gap:5px;margin:4px 0 0;font-size:12px;font-weight:700;color:${/^(오픈형|분리형)/.test(String((r.got || {}).room_type || '')) ? 'inherit' : 'var(--bad)'}" title="당근은 원룸을 오픈형/분리형으로 나눠 받습니다 — 고르지 않으면 올라가지 않습니다">원룸 유형 <select data-rt="${r.n}" style="width:auto;padding:2px 6px;font-size:12px"><option value="">선택 (당근 필수)</option><option value="오픈형" ${(r.got || {}).room_type === '오픈형' ? 'selected' : ''}>오픈형 (방·주방 한 공간)</option><option value="분리형" ${(r.got || {}).room_type === '분리형' ? 'selected' : ''}>분리형 (방과 주방 분리)</option></select></label>` : ''}
       ${dgLabel2}`
   }
   box.innerHTML = `
@@ -1714,6 +1720,7 @@ function paintBulk() {
   box.querySelectorAll('button[data-del]').forEach(b => b.onclick = () => { BULK.rows = BULK.rows.filter(r => r.n !== +b.dataset.del); paintBulk() })
   box.querySelectorAll('input[data-ph]').forEach(cb => cb.onchange = () => { const r = byN(cb.dataset.ph); r.photosOn = cb.checked; cb.parentElement.style.fontWeight = cb.checked ? 700 : 400; const all = document.getElementById('bphall'); if (all) { const cand = BULK.rows.filter(x => x.photoCount && x.status !== 'done'); all.checked = cand.length > 0 && cand.every(x => x.photosOn) } })
   box.querySelectorAll('input[data-dg]').forEach(cb => cb.onchange = () => { const r = byN(cb.dataset.dg); r.dgOn = cb.checked; paintBulk() })
+  box.querySelectorAll('select[data-rt]').forEach(s => s.onchange = () => { const r = byN(s.dataset.rt); r.got = r.got || {}; r.got.room_type = s.value; paintBulk() })   // 원룸 유형(오픈형/분리형) — 줄에 저장, 폼에 넣기·일괄 🥕 모두 이 값을 씀
   box.querySelectorAll('input[data-lg]').forEach(cb => cb.onchange = () => { const r = byN(cb.dataset.lg); r.lgOn = cb.checked; paintBulk() })
   const lgAll = document.getElementById('blgall'); if (lgAll) lgAll.onchange = () => { BULK.rows.forEach(r => { if (r.ok && r.status !== 'done') r.lgOn = lgAll.checked }); paintBulk() }
   const preBtn = document.getElementById('bdgpre'); if (preBtn) preBtn.onclick = () => bulkPrecheck(true)
@@ -1931,6 +1938,7 @@ function paintCreate() {
     else if (got.photos_skipped > 0) { const box = $('c_photo950'), msg = $('c_photo950_msg'); if (box) { box.style.display = ''; $('c_photo950_list').innerHTML = ''; msg.innerHTML = `📷 링크의 사진 ${got.photos_skipped}장은 읽어 두었고 폼에만 넣지 않았습니다 — <b>당근에 올릴 때는 자동으로 포함</b>됩니다. 미리 보거나 순서를 바꾸려면 목록 줄의 사진 체크를 켜고 다시 [폼에 넣기].` } }   // 📷 꺼진 줄에서 폼에 넣은 경우 (2026-10-13: '읽지 못했습니다' 로 잘못 떴던 것)
     else if (got.photo_total > 0) { const box = $('c_photo950'), msg = $('c_photo950_msg'); if (box) { box.style.display = ''; $('c_photo950_list').innerHTML = ''; msg.innerHTML = `<b style="color:var(--bad)">⚠️ 원본 페이지에 사진 ${got.photo_total}장이 있는데 읽지 못했습니다 — 사진 없이 올리지 말고 알려주세요.</b>` } }
     if (S.applyAllPhrases) setTimeout(S.applyAllPhrases, 0)   // '전체 넣기'가 켜져 있으면 문구 전부 자동으로
+    if (typeof syncRoomType === 'function') syncRoomType()   // 방 1개면 원룸 유형(오픈형/분리형) 칸을 바로 띄워 필수로 (2026-10-16)
     return filled
   }
   /* 폼 비우기 — [폼에 넣기]가 다른 매물을 넣기 전에 이전 값을 전부 지운다 (중개유형·사진 가져오기 체크는 유지) */
@@ -3256,7 +3264,7 @@ function naMount(){
 if(!(window.NA_CFG&&NA_CFG.deferred)) naMount();
 /*NA_JS_END*/
 const NA_MARKUP = "<div class=\"page-head\"><h1>네이버 광고정리</h1><span class=\"small muted\">위: 링크 넣으면 광고용 정보 자동 정리 · 아래: 지번으로 우리 DB + 지금 네이버에 걸린 매물 찾기 (줄을 누르면 그 매물이 바로 정리됩니다)</span></div>\n<div class=\"na-stack\">\n  <section class=\"panel green\">\n    <h2>⚡ 링크 자동 정리</h2>\n    <textarea id=\"na_links\" rows=\"4\" placeholder=\"아무 링크나 넣어주세요. 정리해드릴게요!  여러 개면 줄바꿈·쉼표·공백으로 구분&#10;https://new.land.naver.com/houses?articleNo=2653867465\"></textarea>\n    <div class=\"na-bar\"><button class=\"btn btn-primary\" id=\"na_go\">자동 정리</button><button class=\"btn\" id=\"na_clip\">📋 클립보드에서</button><span class=\"small muted\" id=\"na_msg\"></span></div>\n    <div class=\"na-bar\" id=\"na_tools\" style=\"display:none\"><button class=\"btn btn-primary\" id=\"na_save\">체크한 줄 DB에 저장</button><button class=\"btn\" id=\"na_dgbulk\" style=\"display:none\" title=\"체크한 줄의 링크를 당근 올리기 탭의 '여러 매물 한 번에' 목록에 넣습니다\">🥕 체크한 줄 당근 일괄 목록으로</button><button class=\"btn\" id=\"na_clear\" title=\"정리한 목록을 비웁니다 (DB 에 저장한 것은 그대로)\">목록 지우기</button><button class=\"btn\" id=\"na_xl\">엑셀 다운로드</button><button class=\"btn\" id=\"na_copyall\">전체 광고문구 복사</button><label class=\"small\"><input type=\"checkbox\" id=\"na_all\" checked> 전체 선택</label></div>\n    <div id=\"na_out\" class=\"na-out\"></div>\n  </section>\n  <section class=\"panel pink\">\n    <h2><span class=\"nlogo\">N</span>🔍 지번으로 매물 찾기</h2>\n    <div class=\"na-bar\"><input type=\"text\" id=\"na_q\" placeholder=\"예: 양재동 17-27 (구 이름을 붙이면 더 정확: 서초구 양재동 17-27)\" style=\"flex:1;min-width:240px\"><button class=\"btn btn-primary\" id=\"na_find\">찾기</button><label class=\"small\" style=\"display:flex;align-items:center;gap:5px;margin:0;white-space:nowrap\" title=\"같은 매물(종류·거래·금액·층·면적이 같은 것)을 여러 부동산이 올렸으면 한 줄로 묶어 'N곳' 으로 보여줍니다\"><input type=\"checkbox\" id=\"na_group\" checked style=\"width:16px;height:16px;margin:0\"> 중복매물 묶기</label></div>\n    <div class=\"small muted\" id=\"na_fmsg\">우리 DB 에 쌓인 줄은 바로, 네이버는 그 지번 자리(60m 안)의 매물을 모아 지번을 확인합니다 (5~15초). 줄을 누르면 오른쪽에 바로 정리됩니다.</div>\n    <div class=\"na-split\">\n      <div id=\"na_fout\" class=\"na-out\"></div>\n      <div class=\"na-pick\"><div id=\"na_pick\"><div class=\"small muted\" style=\"padding:14px\">← 결과 줄을 누르면 그 매물의 광고 정보가 여기에 정리됩니다 (위 링크 자동 정리와는 별개)</div></div><div id=\"na_bldg\" class=\"na-bldg\"></div></div>\n    </div>\n  </section>\n</div>"
-const BUILD = '2026-10-16 23:20 당근'
+const BUILD = '2026-10-16 23:45 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()
