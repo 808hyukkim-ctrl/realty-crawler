@@ -1980,10 +1980,10 @@ function paintCreate() {
   const refererFor = u => /zigbang\.com|cloudfront\.net|onhouse\.com/.test(u) ? 'https://www.onhouse.com/' : /pstatic\.net/.test(u) ? 'https://new.land.naver.com/' : /karroter\.net|daangn\.com/.test(u) ? 'https://realty.daangn.com/' : ''
   const imgFrom = src => new Promise((ok, bad) => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => ok(im); im.onerror = () => bad(new Error('load')); im.src = src })
   const koOnly = u => /cloudfront\.net/i.test(u)   // 온하우스 건물 사진 CDN 은 한국 밖 요청을 막는다 → Cloudflare 워커 대신 포털 서버(한국)가 받아준다
-  const viaLounge = async u => { const r = await fetch(String(CONFIG.API_BASE || '').replace(/\/$/, '') + '/img?u=' + encodeURIComponent(u) + '&r=' + encodeURIComponent(refererFor(u)), { headers: { 'x-intranet-token': token() }, cache: 'no-store' }); if (!r.ok) throw new Error('사진 ' + r.status); return imgFrom(URL.createObjectURL(await r.blob())) }
+  const viaLounge = async u => { const r = await fetch(String(CONFIG.API_BASE || '').replace(/\/$/, '') + '/img?u=' + encodeURIComponent(u) + '&r=' + encodeURIComponent(refererFor(u)) + '&w=950', { headers: { 'x-intranet-token': token() } }); if (!r.ok) throw new Error('사진 ' + r.status); return imgFrom(URL.createObjectURL(await r.blob())) }   // w=950: 서버가 줄여서 보냄 (2026-10-16)
   const loadImg = async u => {
     if (!koOnly(u)) { try { return await imgFrom(imgBase() + '/img?u=' + encodeURIComponent(u) + '&r=' + encodeURIComponent(refererFor(u))) } catch (_) { /* 워커가 못 받으면 서버로 */ } }
-    return viaLounge(u)
+    try { return await viaLounge(u) } catch (e) { await new Promise(r => setTimeout(r, 1200)); return viaLounge(u) }   // 한 번 더 (중계가 순간적으로 막힐 때)
   }
   const to950 = (im, w = 950) => new Promise(ok => { const h = Math.max(1, Math.round(im.naturalHeight * w / im.naturalWidth)); const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(im, 0, 0, w, h); c.toBlob(b => ok({ blob: b, w, h }), 'image/jpeg', 0.92) })
   const saveBlob = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove() }, 2000) }
@@ -2035,7 +2035,7 @@ function paintCreate() {
       msg.textContent = `사진 ${done}/${urls.length}장 준비됨${fail ? ` · 실패 ${fail}장` : ''} — 끌어서 순서 변경 · ✕ 빼기 · 첫 장이 대표 — 이 순서대로 당근에 올라갑니다 (⬇ 한 장씩, 또는 전부 zip)`
     }
     const queue = urls.slice()
-    await Promise.all(Array.from({ length: Math.min(4, queue.length) }, async () => { while (queue.length) { if (run !== P950.run) return; await one(queue.shift()) } }))
+    await Promise.all(Array.from({ length: Math.min(6, queue.length) }, async () => { while (queue.length) { if (run !== P950.run) return; await one(queue.shift()) } }))
   }
   $('c_photo950_zip').onclick = async () => {
     if (!P950.items.length) return toast('변환된 사진이 없습니다')
@@ -3256,7 +3256,7 @@ function naMount(){
 if(!(window.NA_CFG&&NA_CFG.deferred)) naMount();
 /*NA_JS_END*/
 const NA_MARKUP = "<div class=\"page-head\"><h1>네이버 광고정리</h1><span class=\"small muted\">위: 링크 넣으면 광고용 정보 자동 정리 · 아래: 지번으로 우리 DB + 지금 네이버에 걸린 매물 찾기 (줄을 누르면 그 매물이 바로 정리됩니다)</span></div>\n<div class=\"na-stack\">\n  <section class=\"panel green\">\n    <h2>⚡ 링크 자동 정리</h2>\n    <textarea id=\"na_links\" rows=\"4\" placeholder=\"아무 링크나 넣어주세요. 정리해드릴게요!  여러 개면 줄바꿈·쉼표·공백으로 구분&#10;https://new.land.naver.com/houses?articleNo=2653867465\"></textarea>\n    <div class=\"na-bar\"><button class=\"btn btn-primary\" id=\"na_go\">자동 정리</button><button class=\"btn\" id=\"na_clip\">📋 클립보드에서</button><span class=\"small muted\" id=\"na_msg\"></span></div>\n    <div class=\"na-bar\" id=\"na_tools\" style=\"display:none\"><button class=\"btn btn-primary\" id=\"na_save\">체크한 줄 DB에 저장</button><button class=\"btn\" id=\"na_dgbulk\" style=\"display:none\" title=\"체크한 줄의 링크를 당근 올리기 탭의 '여러 매물 한 번에' 목록에 넣습니다\">🥕 체크한 줄 당근 일괄 목록으로</button><button class=\"btn\" id=\"na_clear\" title=\"정리한 목록을 비웁니다 (DB 에 저장한 것은 그대로)\">목록 지우기</button><button class=\"btn\" id=\"na_xl\">엑셀 다운로드</button><button class=\"btn\" id=\"na_copyall\">전체 광고문구 복사</button><label class=\"small\"><input type=\"checkbox\" id=\"na_all\" checked> 전체 선택</label></div>\n    <div id=\"na_out\" class=\"na-out\"></div>\n  </section>\n  <section class=\"panel pink\">\n    <h2><span class=\"nlogo\">N</span>🔍 지번으로 매물 찾기</h2>\n    <div class=\"na-bar\"><input type=\"text\" id=\"na_q\" placeholder=\"예: 양재동 17-27 (구 이름을 붙이면 더 정확: 서초구 양재동 17-27)\" style=\"flex:1;min-width:240px\"><button class=\"btn btn-primary\" id=\"na_find\">찾기</button><label class=\"small\" style=\"display:flex;align-items:center;gap:5px;margin:0;white-space:nowrap\" title=\"같은 매물(종류·거래·금액·층·면적이 같은 것)을 여러 부동산이 올렸으면 한 줄로 묶어 'N곳' 으로 보여줍니다\"><input type=\"checkbox\" id=\"na_group\" checked style=\"width:16px;height:16px;margin:0\"> 중복매물 묶기</label></div>\n    <div class=\"small muted\" id=\"na_fmsg\">우리 DB 에 쌓인 줄은 바로, 네이버는 그 지번 자리(60m 안)의 매물을 모아 지번을 확인합니다 (5~15초). 줄을 누르면 오른쪽에 바로 정리됩니다.</div>\n    <div class=\"na-split\">\n      <div id=\"na_fout\" class=\"na-out\"></div>\n      <div class=\"na-pick\"><div id=\"na_pick\"><div class=\"small muted\" style=\"padding:14px\">← 결과 줄을 누르면 그 매물의 광고 정보가 여기에 정리됩니다 (위 링크 자동 정리와는 별개)</div></div><div id=\"na_bldg\" class=\"na-bldg\"></div></div>\n    </div>\n  </section>\n</div>"
-const BUILD = '2026-10-16 23:06 당근'
+const BUILD = '2026-10-16 23:20 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()

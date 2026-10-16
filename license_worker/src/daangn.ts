@@ -375,9 +375,20 @@ async function apiHandler(c: any) {
     const p = new URLSearchParams(); for (const k of ["address", "dong", "ho", "nearby"]) if (q(k)) p.set(k, q(k));   // nearby=1 → 주변 정보(지하철·버스 도보)
     const r = await engineJson(c, "/building?" + p.toString(), undefined, "GET"); return json(c, r.data, r.status);
   }
-  if (action === "img") {
-    const r = await engine(c, "/img?u=" + encodeURIComponent(q("u")) + "&r=" + encodeURIComponent(q("r")), { method: "GET" });
-    return new Response(r.body, { status: r.status, headers: { "content-type": r.headers.get("content-type") || "application/octet-stream", "cache-control": "private, max-age=600" } });
+  if (action === "img") {   // 사진 중계(엔진 경유) — 엣지 캐시 1일 + 엔진에서 w 폭으로 줄여 받음 (2026-10-16: 미리보기 느림·일부 실패 지적)
+    const w = /^\d{2,4}$/.test(q("w")) ? q("w") : "";
+    const path = "/img?u=" + encodeURIComponent(q("u")) + "&r=" + encodeURIComponent(q("r")) + (w ? "&w=" + w : "");
+    const cache = (caches as any).default as Cache | undefined;   // workers.dev 주소에선 Cache API 가 무동작(히트 없음) — 커스텀 도메인을 붙이면 그때부터 엣지 캐시
+    const key = new Request("https://img-cache.local" + path, { method: "GET" });
+    if (cache) { const hit = await cache.match(key).catch(() => null); if (hit) return hit; }
+    let r: Response;
+    try { r = await engine(c, path, { method: "GET" }); }
+    catch (e) { console.warn("[img] 엔진 연결 실패", String(e).slice(0, 200), q("u").slice(0, 120)); return json(c, { error: "사진 서버 연결 실패" }, 502); }
+    if (!r.ok) { console.warn("[img] 엔진 " + r.status, q("u").slice(0, 120)); return new Response(r.body, { status: r.status, headers: { "content-type": r.headers.get("content-type") || "application/json", "cache-control": "no-store" } }); }
+    const buf = await r.arrayBuffer();
+    const res = new Response(buf, { status: 200, headers: { "content-type": r.headers.get("content-type") || "image/jpeg", "cache-control": "public, max-age=86400" } });
+    if (cache) c.executionCtx?.waitUntil?.(cache.put(key, res.clone()).catch(() => {}));
+    return res;
   }
   if (action === "daangn-connect") {   // POST {step:'start'|'poll'|'cancel', session_id?}
     const body = await c.req.json().catch(() => ({}));
