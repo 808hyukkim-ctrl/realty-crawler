@@ -198,11 +198,11 @@ export async function proxyImage(c: any, u: string, ref: string): Promise<Respon
   const headers: Record<string, string> = { "User-Agent": BROWSER_HEADERS["User-Agent"], Accept: "image/avif,image/webp,image/*,*/*;q=0.8" };
   if (ref) headers.Referer = ref;
   // 온하우스 사진 서버(cloudfront)는 한국 밖 요청을 막아 Cloudflare 엣지에서는 못 받는다 → 라운지 서버(한국)의 엔진 /img 로 받는다 (2026-10-08). 다른 호스트도 직접 실패하면 엔진으로 한 번 더.
-  const viaEngine = async (): Promise<Response | null> => {
+  const viaEngine = async (extra = ""): Promise<Response | null> => {
     const base = String(c.env.ENGINE_URL || "").replace(/\/$/, "");
     if (!base || !c.env.ENGINE_SECRET) return null;
     try {
-      const er = await fetch(`${base}/img?u=${encodeURIComponent(target.toString())}&r=${encodeURIComponent(ref)}`, { headers: { Authorization: `Bearer ${c.env.ENGINE_SECRET}` }, cf: { cacheTtl: 3600, cacheEverything: true } } as any);
+      const er = await fetch(`${base}/img?u=${encodeURIComponent(target.toString())}&r=${encodeURIComponent(ref)}${extra}`, { headers: { Authorization: `Bearer ${c.env.ENGINE_SECRET}` }, cf: { cacheTtl: 3600, cacheEverything: true } } as any);
       if (!er.ok) return null;
       let ect = er.headers.get("content-type") || "";
       if (!/^image\//i.test(ect)) ect = /\.png(\?|$)/i.test(target.pathname) ? "image/png" : /\.webp(\?|$)/i.test(target.pathname) ? "image/webp" : "image/jpeg";
@@ -211,6 +211,8 @@ export async function proxyImage(c: any, u: string, ref: string): Promise<Respon
   };
   const geoBlocked = /\.cloudfront\.net$/i.test(target.hostname) || /onhouse\.com$/i.test(target.hostname);
   if (geoBlocked) { const e = await viaEngine(); if (e) return e; }
+  // 네이버 사진은 한가운데 중개업소 로고가 찍혀 있다 → 엔진이 그 자리만 살짝 흐려서 준다 (2026-10-19). 엔진이 안 되면 그냥 원본.
+  if (/(^|\.)pstatic\.net$/i.test(target.hostname)) { const e = await viaEngine("&wm=1"); if (e) return e; }
   let r: Response | null = null;
   try {
     r = await fetch(target.toString(), { headers, cf: { cacheTtl: 3600, cacheEverything: true } } as any);
