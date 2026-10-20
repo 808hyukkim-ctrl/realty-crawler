@@ -237,6 +237,21 @@ class Worker(QObject):
     def cancel(self):
         self._cancel = True
 
+    def _dump_block_html(self, crawler, html: Optional[str] = None):
+        """상세 대신 받은 차단 화면(로그인 벽·IP 불일치·빈 페이지) 원문을 data 폴더에 남긴다 — 다음에 원인 볼 때 쓴다."""
+        try:
+            body = getattr(crawler, "last_block_html", None) or html
+            if not body:
+                return
+            out_dir = self.p.get("out_dir") or os.path.join(base_dir(), "data")
+            os.makedirs(out_dir, exist_ok=True)
+            path = os.path.join(out_dir, "온하우스_차단화면_진단.html")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(body)
+            self.log.emit(f"  (진단용으로 받은 화면을 저장했습니다: {path})")
+        except Exception:
+            pass
+
     def _sleep_between(self):
         lo = float(self.p.get("delay_min", 0))
         hi = float(self.p.get("delay_max", 0))
@@ -341,6 +356,7 @@ class Worker(QObject):
             stopped = False
             checked_access = False
             login_lost = ""   # 수집 중 로그인 세션이 끊긴 이유 (있으면 멈추고 모은 것까지만 저장)
+            empty_streak = 0  # 상세가 연속으로 비어 있는 건수(5건이면 세션 문제로 보고 중단)
 
             for ri, region in enumerate(regions, 1):
                 if self._cancel:
@@ -509,15 +525,25 @@ class Worker(QObject):
                         except OnhouseLoginError as e:
                             login_lost = str(e)
                             self.log.emit(f"  중단: {e}")
+                            self._dump_block_html(crawler)
                             stopped = True
                             break
                         except Exception as e:
                             row = {"매물ID": hid, "URL": f"{crawler.DETAIL_URL}/{hid}", **({} if by_reg else {"확인일": it["chk"][:19]}), "지역": region, "오류": str(e)}
                         if not login_lost and not row.get("오류") and not (row.get("전체주소") or row.get("주소_호실") or row.get("물건번호")):
                             # 상세가 비어 있는 행(로그인 벽·빈 페이지)은 저장하지 않는다
+                            empty_streak += 1
                             self.log.emit(f"  {hid} 상세 내용이 비어 있어 건너뜀")
+                            if empty_streak >= 5:
+                                # 5건 연속 비면 세션 문제(다른 PC 로그인·IP 불일치 등)로 보고 멈춘다 — 빈 행 수백 개를 쌓지 않는다 (2026-10-20)
+                                login_lost = "상세가 5건 연속 비어 있습니다. 온하우스 세션이 끊겼거나(다른 PC에서 같은 사무실 계정 로그인 → 접속 IP 불일치) 사이트 화면이 바뀐 것 같습니다. 온하우스에 직접 로그인해 확인한 뒤 다시 수집하세요."
+                                self.log.emit(f"  중단: {login_lost}")
+                                self._dump_block_html(crawler, html)
+                                stopped = True
+                                break
                             self._sleep_between()
                             continue
+                        empty_streak = 0
                         if self.p.get("short_term") and not row.get("오류") and not is_short_term_row(row):
                             self._sleep_between()
                             continue   # 단기만: 상세에 단기 거래가 없는 매물은 뺀다

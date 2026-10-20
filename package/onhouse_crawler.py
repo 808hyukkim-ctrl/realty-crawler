@@ -19,6 +19,21 @@ def is_login_wall(html: str) -> bool:
     return len(h) < 600 and ("로그인후 이용" in h or "login=true" in h)
 
 
+def is_ip_mismatch_page(html: str, url: str = "") -> bool:
+    """온하우스 '해당 부동산의 접속 아이피가 불일치합니다' 화면(2026-10-20).
+    같은 사무실 계정을 다른 PC(다른 IP)에서 로그인하면 사무실 등록 IP가 바뀌어, 그 뒤 이쪽 요청은
+    상세 대신 이 화면(사유 선택 → 변경하기)이 온다. 로그인 벽처럼 짧지 않아 is_login_wall 로는 못 잡는다."""
+    h = html or ""
+    if "login_opt" in (url or ""):
+        return True
+    return ("접속 아이피" in h or "접속아이피" in h) and ("불일치" in h or "변경하기" in h)
+
+
+def is_session_block(html: str, url: str = "") -> bool:
+    """상세 대신 온 응답인지(로그인 벽·IP 불일치 화면). 둘 다 다시 로그인하면 보통 풀린다."""
+    return is_login_wall(html) or is_ip_mismatch_page(html, url)
+
+
 def is_short_term_row(row: dict) -> bool:
     """상세에 '단기' 거래(단기 금액 칸·태그)가 있는 매물인가 — 온하우스 목록 필터(shortTermYn)는 결과가 안 줄어 상세로 거른다 (2026-10-11)"""
     try:
@@ -66,6 +81,7 @@ class OnhouseCrawler:
         self.pwd = pwd
         self._logged_in = False
         self.verbose = verbose
+        self.last_block_html: Optional[str] = None   # 마지막으로 상세 대신 받은 차단 화면(로그인 벽·IP 불일치) 원문
 
     def _log(self, msg: str):
         if not self.verbose:
@@ -369,15 +385,27 @@ class OnhouseCrawler:
         r = self.session.get(url, impersonate="chrome", timeout=self.timeout_sec)
         r.raise_for_status()
         self._log(f"fetch_detail done id={id} status={r.status_code} body_len={len(r.text)}")
-        if is_login_wall(r.text):
-            # 수집 중 세션이 끊김(다른 곳에서 같은 계정 로그인 등). 한 번 다시 로그인해 보고, 그래도 안 되면 멈춘다 — 빈 행을 쌓지 않는다
-            self._log(f"fetch_detail id={id}: login wall → re-login")
+        final_url = str(getattr(r, "url", "") or "")
+        if is_session_block(r.text, final_url):
+            # 수집 중 세션이 끊김(다른 곳에서 같은 계정 로그인 등) 또는 IP 불일치 화면.
+            # 한 번 다시 로그인해 보고, 그래도 안 되면 멈춘다 — 빈 행을 쌓지 않는다
+            ip_page = is_ip_mismatch_page(r.text, final_url)
+            self.last_block_html = r.text   # 진단용(앱이 파일로 남김)
+            self._log(f"fetch_detail id={id}: {'ip mismatch page' if ip_page else 'login wall'} → re-login")
             if not (self.id and self.pwd):
                 raise OnhouseLoginError("온하우스 로그인이 풀렸습니다 — 다시 로그인하세요.")
             self.login()
             r = self.session.get(url, impersonate="chrome", timeout=self.timeout_sec)
             r.raise_for_status()
-            if is_login_wall(r.text):
+            final_url = str(getattr(r, "url", "") or "")
+            if is_session_block(r.text, final_url):
+                self.last_block_html = r.text
+                if is_ip_mismatch_page(r.text, final_url):
+                    raise OnhouseLoginError(
+                        "온하우스가 '접속 아이피 불일치' 화면을 띄워 상세를 열 수 없습니다. "
+                        "같은 사무실 계정을 다른 PC(다른 인터넷)에서 로그인하면 이렇게 됩니다. "
+                        "온하우스 사이트에서 직접 로그인해 '변경하기'를 누른 뒤 다시 수집하세요. 여기서 멈춥니다."
+                    )
                 raise OnhouseLoginError("온하우스 로그인 세션이 끊겼습니다 (다른 기기에서 같은 계정으로 로그인했거나 사이트가 로그아웃시킴). 다시 로그인해도 상세를 열 수 없어 여기서 멈춥니다.")
         return r.text
 
