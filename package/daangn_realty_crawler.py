@@ -10,6 +10,7 @@ import json
 import asyncio
 import urllib.parse
 from datetime import datetime as dt, date, timedelta, timezone
+from daangn_tsr import extract_relay_store  # 2026-10 당근 개편(TanStack $tsr) 대응 파서
 
 
 class DaangnNotFound(RuntimeError):
@@ -519,11 +520,10 @@ class DaangnRealtyCrawler():
                     raise DaangnNotFound(url)
                 if r.status_code != 200:
                     raise RuntimeError(f"HTTP {r.status_code}")
-                m = re.search(r'window\.RELAY_STORE\s*=\s*"(.*?)";</script>', r.text, re.S)
-                if not m:
+                # 2026-10 개편: window.RELAY_STORE(JSON) → $tsr-stream-barrier(JS 식). 둘 다 daangn_tsr 가 처리
+                store = extract_relay_store(r.text)
+                if store is None:
                     return None
-                js_str = json.loads('"' + m.group(1) + '"')
-                store = json.loads(js_str)
                 # client:root 의 articlesCount(...) 에 해당 조건의 전체 매물 수가 들어있다
                 root = store.get("client:root") or {}
                 for k, v in root.items():
@@ -619,11 +619,9 @@ class DaangnRealtyCrawler():
                 r = curl_req.get(url, headers=self.headers, impersonate="chrome", timeout=self.timeout_sec)
                 if r.status_code != 200:
                     raise RuntimeError(f"HTTP {r.status_code}")
-                m = re.search(r'window\.RELAY_STORE\s*=\s*"(.*?)";</script>', r.text, re.S)
-                if not m:
+                store = extract_relay_store(r.text)  # 구·신 형식 모두 지원 (daangn_tsr)
+                if store is None:
                     return None
-                js_str = json.loads('"' + m.group(1) + '"')
-                store = json.loads(js_str)
                 article = None
                 for node in store.values():
                     if (
