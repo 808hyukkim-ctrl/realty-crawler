@@ -157,7 +157,7 @@
   table.bulk .btn{padding:3px 8px; font-size:11px}
   table.bulk tr.done td{background:#f7fdf9; color:#4b5563}
 </style>
-<style>#csubmit,#cdaangn,#bregister,label:has(#blgall),label:has(input[data-lg]){display:none!important}.tab[data-t=photo] .n,.tab[data-t=db] .n,.tab[data-t=fill] .n,.tab[data-t=log] .n,.tab[data-t=brief] .n,.tab[data-t=naverad] .n,.tab[data-t=routine] .n{display:none}</style>
+<style>#csubmit,#cdaangn,#bregister,label:has(#blgall),label:has(input[data-lg]){display:none!important}.tab[data-t=photo] .n,.tab[data-t=db] .n,.tab[data-t=fill] .n,.tab[data-t=log] .n,.tab[data-t=brief] .n,.tab[data-t=naverad] .n,.tab[data-t=routine] .n,.tab[data-t=dup] .n{display:none}</style>
 <style>
   .bf-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px}
   .bf-head h1{margin:0;font-size:22px;color:var(--accent-dark)}
@@ -279,6 +279,35 @@
   #na_root input[type=text],#na_root textarea{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text)}
   #na_root .page-head h1{margin:0;font-size:20px;color:var(--accent-dark)} #na_root .small{font-size:12px} #na_root .muted{color:var(--muted)}
 </style>
+<style>
+.dc{max-width:1400px}
+.dc textarea{width:100%;min-height:120px;font:inherit;font-size:13px;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;box-sizing:border-box;resize:vertical}
+.dc .dcbar{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:8px 0}
+.dc .dcbtn{display:inline-block;padding:6px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;font:inherit;font-size:13px;line-height:1.3}
+.dc .dcbtn:hover{background:#f3f4f6}
+.dc .dcbtn.go{background:#ff6f0f;border-color:#ff6f0f;color:#fff;font-weight:700}
+.dc .dcbtn:disabled{opacity:.5;cursor:default}
+.dc .dchint{font-size:12px;color:#6b7280}
+.dc table.dct{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+.dc table.dct th,.dc table.dct td{border-bottom:1px solid #e5e7eb;padding:6px 7px;vertical-align:top;text-align:left}
+.dc table.dct th{background:#f9fafb;font-size:12px;white-space:nowrap}
+.dc .cp{display:inline-block;padding:1px 6px;margin-left:4px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;line-height:1.4;vertical-align:middle;white-space:nowrap}
+.dc .cp:hover{background:#fff7ed;border-color:#fdba74}
+.dc .vd{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.dc .vd.dup{background:#fee2e2;color:#b42318}
+.dc .vd.bldg{background:#ffedd5;color:#c2410c}
+.dc .vd.dg{background:#fef3c7;color:#92400e}
+.dc .vd.none{background:#dcfce7;color:#15803d}
+.dc .vd.fail{background:#f3f4f6;color:#6b7280}
+.dc .vd.wait{background:#eff6ff;color:#1d4ed8}
+.dc tr.dup td{background:#fff5f5}
+.dc tr.bldg td{background:#fffaf5}
+.dc .ln{line-height:1.5;white-space:normal}
+.dc .ln .hit{color:#b42318;font-weight:700}
+.dc .ln a{color:#1d4ed8}
+.dc .sm{font-size:11.5px;color:#6b7280}
+.dc .dcsum{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;margin:6px 0}
+</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -355,6 +384,9 @@ const KIND = { joint:'중개사 공동중개', lounge:'직공급', etc:'기타' 
 const pill = s => `<span class="pill ${['pending','active','rejected'].includes(s) ? s : 'etc'}">${esc(STAT[s] ?? s ?? '')}</span>`
 
 let toastT
+/* 📋 복사 버튼(data-cp) — 일괄 목록·업로드 기록의 지번/도로명을 당근 검색창에 붙여넣기 좋게. 캡처 단계라 칸 클릭 수정보다 먼저 잡는다 (2026-10-18) */
+document.addEventListener('click', e => { const b = e.target && e.target.closest && e.target.closest('[data-cp]'); if (!b) return; e.preventDefault(); e.stopPropagation(); copyText(b.dataset.cp || '') }, true)
+async function copyText(t) { if (!t) return; try { await navigator.clipboard.writeText(t); toast('복사: ' + t) } catch (_) { const ta = document.createElement('textarea'); ta.value = t; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('복사: ' + t) } catch (e) { toast('복사 실패 — 직접 드래그해서 복사하세요') } ta.remove() } }
 function toast(msg) {
   document.querySelectorAll('.toast').forEach(n => n.remove())
   const d = document.createElement('div'); d.className = 'toast'; d.textContent = msg
@@ -441,7 +473,7 @@ async function boot() {
   try { S.me = await api('summary') } catch (e) { if (e.message !== '401') renderGate(e.message); return }
   await loadPrefs()
   S.dg = CONFIG.DAANGN_API ? await dapi('summary').catch(() => null) : S.me   // 당근 광고 서버의 내 정보(권한·연결·안전장치)
-  const fts = S.me.features || []; const order = [].concat(fts.includes('routine') ? ['routine'] : [], fts.includes('brief') ? ['brief'] : [], fts.includes('naverad') ? ['naverad'] : [], fts.includes('daangn') ? ['create', 'uploads'] : [], fts.includes('photo') ? ['photo'] : [], fts.includes('db') ? ['db'] : [])   // 직원에겐 '내 활동'·'매물중복DB대조' 탭 없음 (사용자 결정 2026-10-10) · routine = 은주루틴 (2026-10-13)
+  const fts = S.me.features || []; const order = [].concat(fts.includes('routine') ? ['routine'] : [], fts.includes('brief') ? ['brief'] : [], fts.includes('naverad') ? ['naverad'] : [], fts.includes('daangn') ? ['create', 'uploads', 'dup'] : [], fts.includes('photo') ? ['photo'] : [], fts.includes('db') ? ['db'] : [])   // 직원에겐 '내 활동'·'매물중복DB대조' 탭 없음 (사용자 결정 2026-10-10) · routine = 은주루틴 (2026-10-13)
   if (!fts.includes('daangn') && !fts.includes('photo') && !fts.includes('brief') && !fts.includes('db') && !fts.includes('naverad') && !fts.includes('routine')) setTimeout(() => toast('이 계정에는 아직 켜진 기능이 없습니다. 관리자(사용자 관리)에게 요청하세요.'), 400)
   if (CONFIG.DAANGN_API && dgMine()) order.splice(Math.max(1, order.indexOf('uploads') + 1), 0, 'daangn')   // 권한 있는 사람만 '🥕 당근 광고' 탭
   if (!order.length) return renderGate('이 계정에는 아직 켜진 기능이 없습니다. 관리자(사용자 관리)에서 손님 브리핑·당근 광고·사진950·DB 조회 중 필요한 기능을 켜 달라고 하세요.')
@@ -458,7 +490,7 @@ async function refresh() {
 }
 
 /* ── 껍데기 ───────────────────────────────────────────── */
-const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', daangn:'🥕 당근 광고', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함', photo:'사진 950', db:'지번 조회', fill:'매물중복DB대조', brief:'🧾 손님 브리핑', naverad:'N 광고정리', routine:'🗓 은주루틴', log:'내 활동' }
+const TAB_NAME = { create:'당근 올리기', uploads:'업로드 기록', daangn:'🥕 당근 광고', supply:'공급 현황', review:'검수·승인', cs:'CS 접수함', photo:'사진 950', db:'지번 조회', fill:'매물중복DB대조', brief:'🧾 손님 브리핑', naverad:'N 광고정리', routine:'🗓 은주루틴', dup:'🔍 중복 대조', log:'내 활동' }
 function renderShell(order) {
   el.innerHTML = `
     <header>
@@ -522,7 +554,8 @@ async function load(tab, quiet) {
     S.painted = 'create'; return
   }
   if (tab === 'daangn') { paintDaangnTab(); S.painted = 'daangn'; return }
-  const paint = { supply: paintSupply, review: paintReview, cs: paintCS, uploads: paintUploads, photo: paintPhoto, db: paintDb, fill: paintFill, brief: paintBrief, naverad: paintNaverad, routine: paintRoutine, log: paintLog }[tab]
+  const paint = { supply: paintSupply, review: paintReview, cs: paintCS, uploads: paintUploads, photo: paintPhoto, db: paintDb, fill: paintFill, brief: paintBrief, naverad: paintNaverad, routine: paintRoutine, dup: paintDup, log: paintLog }[tab]
+  if (tab === 'dup') { paintDup(); S.painted = 'dup'; return }
   if (tab === 'routine') { paintRoutine(); S.painted = 'routine'; return }
   if (tab === 'naverad') { paintNaverad(); S.painted = 'naverad'; return }
   if (tab === 'brief') { paintBrief(); S.painted = 'brief'; return }
@@ -767,7 +800,7 @@ function paintUploads() {
   const bys = [...new Set(rows.map(r => r.by).filter(Boolean))]
   const q = (f.q || '').replace(/\s+/g, '').toLowerCase()
   const shown = rows.filter(r => (!f.where || r.where === f.where) && (!f.by || r.by === f.by) && (!f.hideClosed || !r.closed)
-    && (!q || [r.addr, r.ho, r.phone, r.price, r.deal, r.by, r.daangn && r.daangn.no].filter(Boolean).join(' ').replace(/\s+/g, '').toLowerCase().includes(q)))
+    && (!q || [r.addr, r.road, r.ho, r.phone, r.price, r.deal, r.by, r.daangn && r.daangn.no].filter(Boolean).join(' ').replace(/\s+/g, '').toLowerCase().includes(q)))
   const cnt = w => rows.filter(r => r.where === w && !r.closed).length
   const stL = s => ({ pending: '승인대기', active: '공급중', rejected: '반려', draft: '숨김', done: '거래완료' })[s] || s || ''
   const roleL = r => ({ manager: '관리업체', tenant: '세입자' }[r] || '임대인')
@@ -794,7 +827,7 @@ function paintUploads() {
         <td><input type="checkbox" data-close="${esc(r.key)}" ${r.closed ? 'checked' : ''} style="width:auto;margin:0" title="${r.closed ? '나간 매물 (체크 해제하면 표시만 풀림)' : '나간 매물로 표시'}"></td>
         <td class="nowrap ed" data-ed="source" data-key="${esc(r.key)}" title="눌러서 링크 수정">${r.source ? `<a href="${esc(r.source)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">원문 ↗</a>${r.src_state === 'gone' ? `<span class="pill rejected" style="margin-left:4px" title="자동 확인: 원문이 삭제·내려감 — 당근에서 내리고 나감 체크하세요 (${esc(dt(r.src_gone_at || r.src_checked_at))})">⚠️ 확인 요망 · 원문 내려감</span>` : r.src_state === 'ok' ? `<span class="small" style="color:var(--ok);margin-left:4px" title="원문 살아 있음 (확인 ${esc(dt(r.src_checked_at))})">✓</span>` : r.src_state === 'unknown' ? `<span class="small" style="color:var(--dim);margin-left:4px" title="원문 확인 못함 (${esc(dt(r.src_checked_at))})">?</span>` : ''} <span class="small" data-pen style="color:var(--dim);cursor:pointer" title="링크 수정">✎</span>` : '<span class="small" data-pen style="color:var(--dim)">링크 넣기 ✎</span>'}</td>
         <td class="nowrap ed" data-ed="phone" data-key="${esc(r.key)}" title="눌러서 연락처·구분 수정">${r.phone ? `<span class="small" style="color:var(--dim)">${esc(roleL(r.role))}</span> ${esc(r.phone)}` : '<span class="small" style="color:var(--dim)">연락처 넣기</span>'}</td>
-        <td class="ed" data-ed="addr" data-key="${esc(r.key)}" title="눌러서 주소·호수 수정"><b>${esc(r.addr || '')}</b>${r.ho ? ' ' + esc(r.ho) : ''}</td>
+        <td class="ed" data-ed="addr" data-key="${esc(r.key)}" title="눌러서 주소·호수 수정"><b>${esc(r.addr || '')}</b>${r.ho ? ' ' + esc(r.ho) : ''}${r.addr ? `<button type="button" class="cpbtn" data-cp="${esc(r.addr)}" title="복사 — 당근 검색창에 붙여넣기" style="padding:0 5px;margin-left:4px;font-size:11px;line-height:1.5;border:1px solid var(--line);border-radius:5px;background:#fff;cursor:pointer;vertical-align:middle">📋</button>` : ''}${r.road ? `<small style="display:block;color:var(--dim)">도로명 ${esc(roadShort(r.road))}<button type="button" class="cpbtn" data-cp="${esc(roadShort(r.road))}" title="복사 — 당근 검색창에 붙여넣기" style="padding:0 5px;margin-left:4px;font-size:11px;line-height:1.5;border:1px solid var(--line);border-radius:5px;background:#fff;cursor:pointer;vertical-align:middle">📋</button></small>` : ''}</td>
         <td class="nowrap num">${esc(r.price || '')}</td>
         <td class="nowrap">${esc(r.deal || '')}</td>
         <td class="nowrap small" title="${esc(dt(r.first_at || r.at))}">${esc((r.first_at || r.at || '').slice(5, 10))} <b>${dplus(r.first_at || r.at)}</b></td>
@@ -1024,7 +1057,11 @@ function parseListingText(text) {
   if ((m = one.match(/([가-힣A-Za-z0-9]{2,20}(?:아파트|빌라|타워|캐슬|팰리스|자이|푸르지오|래미안|힐스테이트|아이파크|e편한세상|더샵|빌딩|프라자|플라자|오피스텔))/))) put('bd_nm', m[1], '건물명')
   const firstLine = t.trim().split('\n')[0].trim()
   if (firstLine && firstLine.length <= 40) put('headline', firstLine, '제목')
-  out.description = tNoPhone.replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').trim().slice(0, 2000)   // 설명에는 전화번호를 남기지 않는다(연락처 칸에만)
+  { const INFO = /^\s*(입주(?:가능일)?|관리비|사용승인일|준공(?:년)?|주차|총주차대수|세대당(?:주차)?|엘리베이터|엘베)\s*[:：]/   // 포털: 부가 정보 줄은 '원문 상세설명'으로 (2026-10-20)
+    const lines = tNoPhone.replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').trim().split('\n')
+    const info = lines.filter(l => INFO.test(l)), rest = lines.filter(l => !INFO.test(l))
+    out.description = rest.join('\n').trim().slice(0, 2000)   // 설명에는 전화번호를 남기지 않는다(연락처 칸에만)
+    if (info.length) { out.source_text = info.join('\n').slice(0, 3000); out._extra_text = info.join('\n'); out._fields.push('원문 상세설명') } }
   return out
 }
 
@@ -1099,7 +1136,8 @@ function parseExcelRows(text) {
     })
     if (!out.owner_phone && phone2) put('owner_phone', phone2, '연락처')
     if (out.headline === undefined) { const hl = [out.bd_nm, out.ho_nm || (out.floor_no != null ? (out.floor_no < 0 ? 'B' + (-out.floor_no) : out.floor_no) + '층' : ''), out.property_type, out.deal_type].filter(Boolean).join(' '); if (hl) put('headline', hl.slice(0, 40), '제목') }
-    out.description = [out.description, ...extras, '엑셀 한 줄에서 정리'].filter(Boolean).join('\n').slice(0, 2000)
+    out.description = [out.description, '엑셀 한 줄에서 정리'].filter(Boolean).join('\n').slice(0, 2000)   // 포털: 부가 정보 줄은 설명 기본값에서 뺀다 (2026-10-20)
+    if (extras.length) { out.source_text = [out.source_text, ...extras].filter(Boolean).join('\n').slice(0, 3000); out._extra_text = extras.join('\n'); out._fields.push('원문 상세설명') }
     return out
   }
   const row = cells[0]; const nums = []
@@ -1161,11 +1199,19 @@ async function parseListingUrl(url) {
   put('direction', DIRS.includes(j.facing) ? j.facing : '', '향')
   if (Array.isArray(j.photos) && j.photos.length) put('photos', j.photos, '사진')
   if (j.unit && String(j.unit).trim()) put('ho_nm', String(j.unit).trim(), '호수')   // 온하우스 등 호수가 있는 사이트
-  if (j.detail_text) put('source_text', String(j.detail_text).slice(0, 3000), '원문 상세설명')   // '원문 상세설명' 칸 (2026-10-11)
+  if (j.detail_text) put('source_text', String(j.detail_text).slice(0, 3000), '원문 상세설명')
+  if (j.brief_text) put('brief_text', String(j.brief_text).slice(0, 500), '간략설명')   // '원문 상세설명' 칸 (2026-10-11)
   const head = String(j.memo || '').split('\n').find(l => /^\[(네이버|당근|온하우스)\]/.test(l)) || ''
   put('headline', head.replace(/^\[(네이버|당근|온하우스)\]\s*/, '').slice(0, 40), '제목')
-  out.description = [cleanDesc(j.memo), j.realtor ? `등록 중개사: ${j.realtor}${j.realtor_phone ? ' ' + j.realtor_phone : ''}` : '']
-    .filter(Boolean).join('\n').slice(0, 2000)
+  const won = v => (v == null || v === '' || isNaN(Number(v))) ? '' : Number(v).toLocaleString('ko-KR')   // 만원 단위 숫자 → 1,000
+  const sq = v => (v == null || v === '' || isNaN(Number(v))) ? '' : String(Math.round(Number(v) * 100) / 100)
+  const money = deal === '매매' ? won(j.price) : [won(j.deposit), deal === '전세' ? '' : won(j.rent)].filter(Boolean).join('/')
+  const has = v => v != null && v !== ''
+  out.description = [   // 포털: 방/욕실 · 거래 · 전용/공급 요약만 (2026-10-19). 원문 글은 '원문 상세설명' 칸 → [넣기]
+    (has(j.rooms) || has(j.baths)) ? `방 ${has(j.rooms) ? j.rooms : '-'} / 욕실 ${has(j.baths) ? j.baths : '-'}` : '',
+    deal ? `거래: ${deal}${money ? ' ' + money + ' (만원)' : ''}` : '',
+    (sq(j.area_m2) || sq(j.supply_m2)) ? `전용 ${sq(j.area_m2) || '-'}㎡ / 공급 ${sq(j.supply_m2) || '-'}㎡` : '',
+  ].filter(Boolean).join('\n')
   return out
 }
 
@@ -1178,6 +1224,7 @@ async function parsePasted(raw) {
     if (got.url) {   // 엑셀 줄에 링크가 있으면 링크로 더 정확히 읽고, 엑셀 값으로 빈 곳을 채운다
       try { const fromUrl = await parseListingUrl(got.url)
         for (const k of Object.keys(got)) { if (k.startsWith('_') || k === 'url') continue; if (fromUrl[k] == null || fromUrl[k] === '') fromUrl[k] = got[k] }
+        if (got._extra_text && !String(fromUrl.source_text || '').includes(got._extra_text)) fromUrl.source_text = [fromUrl.source_text, got._extra_text].filter(Boolean).join('\n').slice(0, 3000)   // 포털 (2026-10-20)
         fromUrl._fields = [...new Set([...(fromUrl._fields || []), ...got._fields])]; fromUrl._source = fromUrl._source + '+excel'; return fromUrl }
       catch (e) { got.note = '링크는 못 읽었고 엑셀 값만 정리했습니다: ' + e.message }
     }
@@ -1196,6 +1243,7 @@ function mergeLinkText(fromUrl, s) {
   const SKIP = new Set(['description', 'headline', 'source_url', 'photos', 'url'])
   let added = false
   for (const k of Object.keys(extra)) { if (k.startsWith('_') || SKIP.has(k)) continue; if (fromUrl[k] == null || fromUrl[k] === '') { fromUrl[k] = extra[k]; added = true } }
+  if (extra._extra_text && !String(fromUrl.source_text || '').includes(extra._extra_text)) { fromUrl.source_text = [fromUrl.source_text, extra._extra_text].filter(Boolean).join('\n').slice(0, 3000); added = true }   // 포털 (2026-10-20)
   if (added) { fromUrl._fields = [...new Set([...(fromUrl._fields || []), ...(extra._fields || [])])]; fromUrl._source = String(fromUrl._source || '') + '+text' }
   return fromUrl
 }
@@ -1297,6 +1345,7 @@ const bulkCheck = r => {
   return ''
 }
 /* 지번 키: "서울 강남구 역삼동 606, 1층" → "역삼동 606" (번지 뒤 숫자가 더 붙은 606-28 과 구분). 후보 목록에서 정확히 같은 지번을 찾을 때 쓴다 (2026-10-08: 온하우스 '역삼동 606' 이 '606-28' 로 들어가던 문제) */
+const roadShort = s => String(s || '').replace(/\s*\([^)]*\)\s*$/, '').trim()   // "송파대로 123 (삼전동)" → "송파대로 123" (당근 검색창용, 2026-10-18)
 function lotKey(s) { const m = String(s || '').match(/([가-힣]+(?:동|리|가))\s*(산\s*)?(\d{1,4}(?:-\d{1,4})?)(?![\d-])/); return m ? m[1] + ' ' + (m[2] ? '산' : '') + m[3] : '' }
 function addrExactIdx(items, q) { const k = lotKey(q); if (!k) return -1; return (items || []).findIndex(it => lotKey(it.jibunAddr || '') === k) }
 function addrExactCount(items, q) { const k = lotKey(q); if (!k) return 0; return (items || []).filter(it => lotKey(it.jibunAddr || '') === k).length }   // 같은 지번에 건물이 여럿이면 2 이상 → 사람이 골라야 함
@@ -1651,12 +1700,12 @@ function paintBulk() {
     const lgLabel = ''
     const dgLabel = (r.ok && !(r.dg && r.dg.state === 'done') ? `<label style="display:flex;align-items:center;gap:5px;margin:4px 0 0;font-size:12px;font-weight:${r.dgOn ? 700 : 400};color:${r.dgOn ? '#c2410c' : 'inherit'}" title="체크하면 [당근으로 올리기]에 포함됩니다 "><input type="checkbox" data-dg="${r.n}" ${r.dgOn ? 'checked' : ''} ${BULK.dgRun ? 'disabled' : ''} style="width:auto;margin:0"> 🥕 당근으로 올리기${r.ok && !r.lgOn && r.status !== 'done' ? '' : ''}</label>` : '')
     const dgLabel2 = lgLabel + dgLabel
-    if (r.status === 'done') { const it = r.addrItems[r.addrIdx] || {}; return `<b>${esc(it.jibunAddr || it.roadAddr || '')}</b><small style="display:block;color:var(--dim)">${esc(it.roadAddr || '')}</small>${r.daangnOnly ? '<div class="memo">당근 전용</div>' : ''}${dgLabel2}` }
+    if (r.status === 'done') { const it = r.addrItems[r.addrIdx] || {}; return `<b>${esc(it.jibunAddr || it.roadAddr || '')}</b>${it.jibunAddr ? `<button type="button" class="cpbtn" data-cp="${esc(it.jibunAddr)}" title="복사 — 당근 검색창에 붙여넣기" style="padding:0 5px;margin-left:4px;font-size:11px;line-height:1.5;border:1px solid var(--line);border-radius:5px;background:#fff;cursor:pointer;vertical-align:middle">📋</button>` : ''}<small style="display:block;color:var(--dim)">${esc(it.roadAddr || '')}${it.roadAddr ? `<button type="button" class="cpbtn" data-cp="${esc(roadShort(it.roadAddr))}" title="복사 — 당근 검색창에 붙여넣기" style="padding:0 5px;margin-left:4px;font-size:11px;line-height:1.5;border:1px solid var(--line);border-radius:5px;background:#fff;cursor:pointer;vertical-align:middle">📋</button>` : ''}</small>${r.daangnOnly ? '<div class="memo">당근 전용</div>' : ''}${dgLabel2}` }
     const opts = (r.addrItems || []).map((it, i) => `<option value="${i}" ${i === r.addrIdx ? 'selected' : ''}>${esc(it.jibunAddr || it.roadAddr)}${it.bdNm ? ' · ' + esc(it.bdNm) : ''}</option>`).join('')
     return `${r.addrItems.length ? `<select data-addr="${r.n}" style="width:100%;max-width:100%;font:inherit;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:6px">${opts}</select>` : ''}
       <div style="display:flex;gap:4px;margin-top:4px"><input data-addrq="${r.n}" value="${esc(r.addrQ ?? r.got.address_q ?? '')}" placeholder="주소 다시 찾기" style="flex:1;min-width:120px;font:inherit;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:6px"><button class="btn" data-addrgo="${r.n}" ${r.addrState === 'searching' ? 'disabled' : ''}>찾기</button></div>
       ${r.addrState === 'none' ? '<div class="memo" style="color:var(--warn)">주소를 못 찾았습니다 — 지번이나 도로명으로 다시 찾아주세요</div>' : ''}
-      ${r.addrItems[r.addrIdx] ? `<small style="display:block;color:var(--dim)">${esc(r.addrItems[r.addrIdx].roadAddr || '')}</small>` : ''}
+      ${r.addrItems[r.addrIdx] ? `<small style="display:block;color:var(--dim)">${r.addrItems[r.addrIdx].jibunAddr ? '지번 ' + `<button type="button" class="cpbtn" data-cp="${esc(r.addrItems[r.addrIdx].jibunAddr)}" title="복사 — 당근 검색창에 붙여넣기" style="padding:0 5px;margin-left:4px;font-size:11px;line-height:1.5;border:1px solid var(--line);border-radius:5px;background:#fff;cursor:pointer;vertical-align:middle">📋</button>` + ' · ' : ''}도로명 ${esc(r.addrItems[r.addrIdx].roadAddr || '')}<button type="button" class="cpbtn" data-cp="${esc(roadShort(r.addrItems[r.addrIdx].roadAddr))}" title="복사 — 당근 검색창에 붙여넣기" style="padding:0 5px;margin-left:4px;font-size:11px;line-height:1.5;border:1px solid var(--line);border-radius:5px;background:#fff;cursor:pointer;vertical-align:middle">📋</button></small>` : ''}
       <label style="display:flex;align-items:center;gap:5px;margin:6px 0 0;font-size:12px;font-weight:${r.photosOn ? 700 : 400};color:${r.photoCount ? 'inherit' : 'var(--dim)'}" title="체크하면 이 매물 등록에 링크의 사진이 들어갑니다 (원본 사이트 워터마크 포함)"><input type="checkbox" data-ph="${r.n}" ${r.photosOn ? 'checked' : ''} ${r.photoCount ? '' : 'disabled'} style="width:auto;margin:0"> 📷 사진 ${r.photoCount}장 가져오기</label>
       ${r.ok && r.status !== 'done' && isOneRoomRow(r) ? `<label style="display:flex;align-items:center;gap:5px;margin:4px 0 0;font-size:12px;font-weight:700;color:${/^(오픈형|분리형)/.test(String((r.got || {}).room_type || '')) ? 'inherit' : 'var(--bad)'}" title="당근은 원룸을 오픈형/분리형으로 나눠 받습니다 — 고르지 않으면 올라가지 않습니다">원룸 유형 <select data-rt="${r.n}" style="width:auto;padding:2px 6px;font-size:12px"><option value="">선택 (당근 필수)</option><option value="오픈형" ${(r.got || {}).room_type === '오픈형' ? 'selected' : ''}>오픈형 (방·주방 한 공간)</option><option value="분리형" ${(r.got || {}).room_type === '분리형' ? 'selected' : ''}>분리형 (방과 주방 분리)</option></select></label>` : ''}
       ${dgLabel2}`
@@ -1686,7 +1735,7 @@ function paintBulk() {
       <td class="nowrap">${esc([g.dong_nm, g.ho_nm].filter(Boolean).join(' ') || '-')}</td>
       <td style="min-width:88px">${r.ok ? `<b>${esc(g.deal_type || '?')}</b> ${esc(moneyLabel(g))}${g.manage_prc ? `<div class="memo">관리 ${esc(g.manage_prc)}</div>` : ''}` : '-'}</td>
       <td style="min-width:78px">${r.ok ? esc([g.property_type, g.floor_no != null ? g.floor_no + (g.total_floors ? '/' + g.total_floors : '') + '층' : '', g.area_exclusive ? g.area_exclusive + '㎡' : ''].filter(Boolean).join(' · ') || '-') : '-'}</td>
-      <td style="min-width:120px;max-width:220px"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.headline || '')}</div><div class="memo" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.input || '')}">${r.ok ? `<b style="color:${r.photoCount ? '#1d4ed8' : 'var(--dim)'}">사진${r.photoCount || 0}</b>${r.photoTotal > (r.photoCount || 0) ? ` <b style="color:var(--bad)">⚠ 원본 ${r.photoTotal}장 — 못 읽음, 알려주세요</b>` : ''} · ` : ''}${esc(({ naver: '네이버', daangn: '당근', generic: '링크', excel: '엑셀', text: '글', onhouse: '온하우스' })[String(g._source || '').replace('+excel', '')] || '')}${g.views != null ? ` · <span title="당근 조회수 · 관심 · 채팅" style="color:#c2410c">👁 ${esc(g.views)}${g.watches != null ? ' ♥' + esc(g.watches) : ''}${g.chats != null ? ' 💬' + esc(g.chats) : ''}</span>` : ''}${g.owner_phone ? ' · ' + ({ manager: '관리업체', tenant: '세입자' }[g.contact_role] || '임대인') + ' 연락처 ✓' : ''} · ${esc((r.input || '').slice(0, 60))}</div>${r.msg ? `<div class="memo" style="color:${r.status === 'done' ? 'var(--ok)' : 'var(--bad)'}">${esc(r.msg)}</div>` : ''}${r.ok ? `<div class="memo" data-areadiff="${r.n}" style="color:#b45309;white-space:normal;${areaDiffText(r) ? '' : 'display:none'}">${esc(areaDiffText(r))}</div>` : ''}${r.ok && r.status !== 'done' ? `<div class="memo" data-missmemo="${r.n}" style="color:#b45309;white-space:normal;${bulkMemoText(r) ? '' : 'display:none'}" title="당근부동산에 올리려면 채워야 하는 칸 — [설명 수정]·[폼에 넣기]로 채우세요">${esc(bulkMemoText(r))}</div>` : ''}</td>
+      <td style="min-width:120px;max-width:220px"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.headline || '')}</div><div class="memo" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.input || '')}">${r.ok ? `<b style="color:${r.photoCount ? '#1d4ed8' : 'var(--dim)'}">사진${r.photoCount || 0}</b>${r.photoTotal > (r.photoCount || 0) ? ` <b style="color:var(--bad)">⚠ 원본 ${r.photoTotal}장 — 못 읽음, 알려주세요</b>` : ''} · ` : ''}${esc(({ naver: '네이버', daangn: '당근', generic: '링크', excel: '엑셀', text: '글', onhouse: '온하우스' })[String(g._source || '').replace('+excel', '')] || '')}${g.views != null ? ` · <span title="당근 조회수 · 관심 · 채팅" style="color:#c2410c">👁 ${esc(g.views)}${g.watches != null ? ' ♥' + esc(g.watches) : ''}${g.chats != null ? ' 💬' + esc(g.chats) : ''}</span>` : ''}${g.owner_phone ? ' · ' + ({ manager: '관리업체', tenant: '세입자' }[g.contact_role] || '임대인') + ' 연락처 ✓' : ''} · ${/^https?:\/\//.test(r.input || '') ? `<a href="${esc(r.input)}" target="_blank" rel="noopener" title="원문 열기 (새 창)" style="color:#1d4ed8;text-decoration:underline">${esc(r.input.slice(0, 60))} ↗</a>` : esc((r.input || '').slice(0, 60))}</div>${r.msg ? `<div class="memo" style="color:${r.status === 'done' ? 'var(--ok)' : 'var(--bad)'}">${esc(r.msg)}</div>` : ''}${r.ok ? `<div class="memo" data-areadiff="${r.n}" style="color:#b45309;white-space:normal;${areaDiffText(r) ? '' : 'display:none'}">${esc(areaDiffText(r))}</div>` : ''}${r.ok && r.status !== 'done' ? `<div class="memo" data-missmemo="${r.n}" style="color:#b45309;white-space:normal;${bulkMemoText(r) ? '' : 'display:none'}" title="당근부동산에 올리려면 채워야 하는 칸 — [설명 수정]·[폼에 넣기]로 채우세요">${esc(bulkMemoText(r))}</div>` : ''}</td>
       <td>${r.ok && r.status !== 'done' && bpUrls(r).length ? `<div style="margin-bottom:4px"><button class="btn ${r.photoOpen ? 'b' : ''}" data-phopen="${r.n}" title="이 줄 바로 아래에 사진을 펼쳐 순서를 정합니다 (폼까지 안 내려가도 됨)">${r.photoOpen ? '📷 접기 ▲' : '📷 사진 정렬 ' + bpUrls(r).length}</button></div>` : ''}${stPill(r)}${dgPill(r)}${officeBlock(r)}</td>
       <td style="min-width:104px"><div class="row-acts" style="flex-direction:column;align-items:stretch">
         ${r.status === 'dup' ? `` : ''}
@@ -1834,7 +1883,7 @@ function paintCreate() {
       <label id="l_sale">매매가 (만원)<input id="c_sale_price" inputmode="numeric"></label>
       <label id="l_dep">보증금 (만원)<input id="c_deposit" inputmode="numeric"></label>
       <label id="l_rent">월세 (만원)<input id="c_monthly_rent" inputmode="numeric"></label>
-      <label>관리비 (만원)<input id="c_manage_prc" inputmode="numeric"></label>
+      <label>관리비 (만원 · 예: 10만원 → 10)<input id="c_manage_prc" inputmode="numeric" placeholder="만원"></label>
       <label>건물 종류<select id="c_property_type"><option value="">선택</option>${opt(PTYPES, '')}</select></label>
       <label>층<input id="c_floor_no" inputmode="numeric" placeholder="지하는 -1"></label>
       <label>총층<input id="c_total_floors" inputmode="numeric"></label>
@@ -1854,17 +1903,24 @@ function paintCreate() {
       <label>총 주차대수 <span style="font-weight:400;color:var(--dim)">(당근 필수 · 대장에서 자동)</span><input id="c_parking_total" inputmode="numeric" placeholder="예) 8"></label>
       <label class="wide">제목 (한 줄)<input id="c_headline" maxlength="60" placeholder="예) 개포동 리모델링 완료 컨디션 좋은 1.5룸"></label>
       <label class="wide">설명<textarea id="c_description" rows="5"></textarea></label>
-      <div class="wide" id="c_src_box" style="margin-top:-6px">
+      <div class="wide" id="c_src_box" style="margin-top:-6px;display:grid;grid-template-columns:minmax(220px,1fr) 2fr;gap:12px;align-items:start">
+       <div id="c_brief_box">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:13px">간략설명</b><span class="hint" style="margin:0;flex:1">링크의 한 줄 소개(네이버 매물특징 · 당근 글 제목) · [넣기]는 설명 맨 앞에</span><button type="button" class="btn b" id="c_brief_use" style="padding:5px 12px;font-size:12px">넣기</button><button type="button" class="btn" id="c_brief_copy" style="padding:5px 12px;font-size:12px">복사</button></div>
+        <textarea id="c_brief_desc" rows="4" placeholder="링크를 정리하면 간략설명이 여기에 들어옵니다 (없는 매물도 있습니다)" style="margin-top:6px"></textarea>
+       </div>
+       <div id="c_srcdesc_box">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:13px">원문 상세설명</b><span class="hint" style="margin:0;flex:1">링크(온하우스·네이버·당근)에 적혀 있던 설명 그대로 · [넣기]를 누르면 설명 끝에 붙고, 참고만 하려면 그대로 두면 됩니다 (당근에는 안 올라감)</span><button type="button" class="btn b" id="c_src_use" style="padding:5px 12px;font-size:12px">넣기</button><button type="button" class="btn" id="c_src_copy" style="padding:5px 12px;font-size:12px">복사</button></div>
         <textarea id="c_src_desc" rows="4" placeholder="링크를 정리하면 원문 상세설명이 여기에 들어옵니다 (직접 붙여 넣어도 됩니다)" style="margin-top:6px"></textarea>
+       </div>
       </div>
+      <style>@media (max-width:760px){#c_src_box{grid-template-columns:1fr !important}}</style>
       <div class="wide" id="c_phr" style="margin-top:-6px">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:13px">자주 쓰는 문구</b><span class="hint" style="margin:0;flex:1">[넣기]를 누르면 설명 끝에 붙습니다 · 문구는 여기서 바로 고치면 저장됩니다 (이 브라우저에 보관)</span><label style="display:flex;align-items:center;gap:5px;margin:0;font-size:12.5px;font-weight:700;color:#1d4ed8"><input type="checkbox" id="c_phr_all" style="width:auto;margin:0"> 전체 넣기 <span style="font-weight:400;color:var(--dim);font-size:12px">(켜 두면 매물을 넣을 때마다 문구 전부가 설명 끝에 붙습니다)</span></label><button type="button" class="btn" id="c_phr_add" style="padding:4px 10px;font-size:12px">+ 문구 추가</button></div>
         <div id="c_phr_list"></div>
       </div>
       <label class="wide">특이사항 (내부 메모)<textarea id="c_special_notes" rows="2"></textarea></label>
       <div class="wide" id="c_photo950" style="display:none">
-        <div style="font-weight:800;margin-bottom:6px">📷 사진 950 <span style="font-weight:400;color:var(--dim);font-size:12px">링크의 사진을 가로 950px 로 바꿔 둡니다 — 한 장씩 저장하거나 전부 zip 으로</span></div>
+        <div style="font-weight:800;margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">📷 사진 950 <span style="font-weight:400;color:var(--dim);font-size:12px;flex:1">링크의 사진을 가로 950px 로 바꿔 둡니다 — 한 장씩 저장하거나 전부 zip 으로</span><a id="c_photo950_src" href="#" target="_blank" rel="noopener" style="display:none;font-weight:700;font-size:12.5px;color:#1d4ed8;text-decoration:underline">원문 열기 ↗</a></div>
         <div id="c_photo950_list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px"></div>
         <div class="row-acts" style="margin-top:8px;align-items:center"><button type="button" class="btn" id="c_photo950_zip">전부 zip 으로 저장</button><span class="hint" id="c_photo950_msg" style="margin:0"></span></div>
       </div>
@@ -1893,6 +1949,11 @@ function paintCreate() {
   $('c_deal_type').onchange = showMoney; showMoney()
   ;['c_sale_price', 'c_deposit', 'c_monthly_rent', 'c_manage_prc'].forEach(id => {
     $(id).oninput = e => { const d = e.target.value.replace(/[^0-9]/g, ''); e.target.value = d ? Number(d).toLocaleString('ko-KR') : '' } })
+  /* 월세·관리비는 만원 단위 — 10,000 이상(=1억 만원, 현실에 없음)은 원으로 적은 것이라 보고 만원으로 (2026-10-19 당근 거절 방지) */
+  const manWon = v => { const n = Number(String(v ?? '').replace(/[^0-9.]/g, '')); return Number.isFinite(n) && n >= 10000 ? Math.round(n / 10000) : n }
+  ;[['c_monthly_rent', '월세'], ['c_manage_prc', '관리비']].forEach(([id, label]) => {
+    $(id).onblur = e => { const d = e.target.value.replace(/[^0-9]/g, ''); if (!d || Number(d) < 10000) return
+      const m = manWon(d); e.target.value = m ? m.toLocaleString('ko-KR') : ''; toast(`${label}는 만원 단위입니다 — ${Number(d).toLocaleString('ko-KR')}원 → ${m}만원으로 바꿨습니다`) } })
   $('c_owner_phone').oninput = e => { const d = e.target.value.replace(/[^0-9]/g, '').slice(0, 11); const a = d.startsWith('02') ? 2 : 3   // 02 는 2자리 국번
     e.target.value = d.length <= a ? d : d.length < a + 5 ? d.slice(0, a) + '-' + d.slice(a) : d.slice(0, a) + '-' + d.slice(a, d.length - 4) + '-' + d.slice(-4) }
 
@@ -1949,6 +2010,7 @@ function paintCreate() {
     if (got.direction && DIRS.includes(got.direction) && !$('c_direction').value) { $('c_direction').value = got.direction; filled.push('향') }
     setV('c_owner_phone', got.owner_phone, '연락처'); if (got.contact_role) { $('c_contact_role').value = got.contact_role; filled.push('연락처 구분') } setV('c_headline', got.headline, '제목'); setV('c_description', got.description, '설명')
     if (got.source_text) { $('c_src_desc').value = got.source_text; $('c_src_desc').classList.add('filled'); filled.push('원문 상세설명') }   // 원문은 늘 덮어쓴다
+    if ($('c_brief_desc')) { $('c_brief_desc').value = got.brief_text || ''; $('c_brief_desc').classList.toggle('filled', !!got.brief_text); if (got.brief_text) filled.push('간략설명') }   // 간략설명은 매물마다 새로(없으면 비움)
     if (got.source_url) F.source_url = got.source_url
     // 사진은 '사진도 가져오기' 체크(기본 꺼짐)일 때만 채운다. 링크에 사진이 있었는데 건너뛰면 안내 문구만 남긴다
     if (Array.isArray(got.photos) && got.photos.length && !$('c_photos').value) {
@@ -1991,7 +2053,7 @@ function paintCreate() {
     g.bd_nm = tx('c_bd_nm'); g.dong_nm = tx('c_dong_nm'); g.ho_nm = tx('c_ho_nm'); g.property_type = tx('c_property_type')
     g.floor_no = nn('c_floor_no'); g.total_floors = nn('c_total_floors'); g.area_exclusive = nn('c_area_exclusive'); g.area_supply = nn('c_area_supply')
     g.room_count = nn('c_room_count'); g.bathroom_count = nn('c_bathroom_count'); g.direction = tx('c_direction'); g.available_date = tx('c_available_date'); g.room_type = tx('c_room_type'); g.building_use = BLDG.floorUse || undefined
-    g.headline = tx('c_headline'); g.description = tx('c_description'); g.source_text = tx('c_src_desc'); g.owner_phone = tx('c_owner_phone'); g.address_q = v('c_addr_q') || g.address_q
+    g.headline = tx('c_headline'); g.description = tx('c_description'); g.source_text = tx('c_src_desc'); g.brief_text = tx('c_brief_desc'); g.owner_phone = tx('c_owner_phone'); g.address_q = v('c_addr_q') || g.address_q
     { const cur = v('c_photos') ? v('c_photos').split('\n').map(x => x.trim()).filter(x => /^https?:\/\//.test(x)) : (P950.srcUrls || []); if (P950.edited || cur.length) g.photos = cur.slice() }   // 사진 순서·삭제도 그 줄에 저장 (2026-10-11)
     g.is_parking = tx('c_is_parking'); g.is_pet = tx('c_is_pet'); g.contact_role = $('c_contact_role').value || 'landlord'; g.parking_total = nn('c_parking_total')
     if (v('c_road_addr')) { r.addrItems = [{ roadAddr: v('c_road_addr'), jibunAddr: v('c_jibun_addr'), bdNm: v('c_bd_nm') }]; r.addrIdx = 0; r.addrState = 'ok'; r.addrQ = v('c_addr_q') }
@@ -2009,7 +2071,7 @@ function paintCreate() {
   const imgBase = () => String(CONFIG.PARSE_API || '').trim().replace(/\/parse\/?(\?.*)?$/, '')
   const refererFor = u => /zigbang\.com|cloudfront\.net|onhouse\.com/.test(u) ? 'https://www.onhouse.com/' : /pstatic\.net/.test(u) ? 'https://new.land.naver.com/' : /karroter\.net|daangn\.com/.test(u) ? 'https://realty.daangn.com/' : ''
   const imgFrom = src => new Promise((ok, bad) => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => ok(im); im.onerror = () => bad(new Error('load')); im.src = src })
-  const koOnly = u => /cloudfront\.net/i.test(u)   // 온하우스 건물 사진 CDN 은 한국 밖 요청을 막는다 → Cloudflare 워커 대신 포털 서버(한국)가 받아준다
+  const koOnly = u => /cloudfront\.net|pstatic\.net/i.test(u)   // 네이버(pstatic)는 엔진이 가운데 워터마크를 흐려서 줌 (2026-10-19) · 온하우스 건물 사진 CDN 은 한국 밖 요청을 막는다 → Cloudflare 워커 대신 포털 서버(한국)가 받아준다
   const viaLounge = async u => { const r = await fetch(String(CONFIG.API_BASE || '').replace(/\/$/, '') + '/img?u=' + encodeURIComponent(u) + '&r=' + encodeURIComponent(refererFor(u)) + '&w=950', { headers: { 'x-intranet-token': token() } }); if (!r.ok) throw new Error('사진 ' + r.status); return imgFrom(URL.createObjectURL(await r.blob())) }   // w=950: 서버가 줄여서 보냄 (2026-10-16)
   const loadImg = async u => {
     if (!koOnly(u)) { try { return await imgFrom(imgBase() + '/img?u=' + encodeURIComponent(u) + '&r=' + encodeURIComponent(refererFor(u))) } catch (_) { /* 워커가 못 받으면 서버로 */ } }
@@ -2050,7 +2112,8 @@ function paintCreate() {
     else if (msg) msg.textContent = `사진 ${P950.items.length}/${P950.srcUrls.length}장 · 첫 장이 대표 · 끌어서 순서 변경, ✕ 빼기 — 이 순서대로 당근에 올라갑니다`
   }
   S.set950 = set950   // 일괄 목록의 줄 아래 사진 패널이 폼에 올라와 있는 줄을 고칠 때 폼 쪽도 같이 (2026-10-16)
-  const photo950 = async (urls) => {
+  const photo950 = async (urls, srcUrl) => {
+  { const a = $('c_photo950_src'); if (a) { const u = String(srcUrl || '').trim(); if (/^https?:\/\//.test(u)) { a.href = u; a.style.display = '' } else a.style.display = 'none' } }   // 원문 열기 (2026-10-19)
     const box = $('c_photo950'), msg = $('c_photo950_msg'); if (!box) return
     const run = (P950.run = (P950.run || 0) + 1)
     box.style.display = ''; P950.srcUrls = urls.slice(); P950.cache = new Map(); P950.items = []; P950.edited = false; paint950()
@@ -2293,6 +2356,16 @@ function paintCreate() {
     const t = $('c_src_desc').value.trim(); if (!t) return toast('원문 상세설명이 비어 있습니다')
     try { await navigator.clipboard.writeText(t); toast('복사했습니다') } catch (_) { $('c_src_desc').select(); toast('자동 복사가 안 됩니다 — 선택해 두었으니 Ctrl+C') }
   }
+  /* 간략설명 → [넣기] 설명 맨 앞에 · [복사] (2026-10-19) */
+  $('c_brief_use').onclick = () => {
+    const t = $('c_brief_desc').value.trim(); if (!t) return toast('간략설명이 비어 있습니다 — 링크를 정리하면 들어옵니다 (없는 매물도 있습니다)')
+    const d = $('c_description'); if (normTxt(d.value).includes(normTxt(t))) return toast('이미 설명에 들어 있습니다')
+    d.value = t + (d.value.trim() ? '\n' + d.value.replace(/^\s+/, '') : ''); d.classList.add('filled'); d.focus(); d.scrollTop = 0; fire(d); toast('간략설명을 설명 맨 앞에 넣었습니다')
+  }
+  $('c_brief_copy').onclick = async () => {
+    const t = $('c_brief_desc').value.trim(); if (!t) return toast('간략설명이 비어 있습니다')
+    try { await navigator.clipboard.writeText(t); toast('복사했습니다') } catch (_) { $('c_brief_desc').select(); toast('자동 복사가 안 됩니다 — 선택해 두었으니 Ctrl+C') }
+  }
   $('c_phr_add').onclick = () => { const l = loadPhr(); l.push(''); savePhr(l); paintPhr(); const tas = $('c_phr_list').querySelectorAll('textarea'); if (tas.length) tas[tas.length - 1].focus() }
   paintPhr()
   /* 전체 넣기: 문구 전부를 설명 끝에(중복 없이) 붙이기 / 빼기. 상태 저장 → 매물이 들어올 때마다 자동 */
@@ -2385,7 +2458,7 @@ function paintCreate() {
     if ($('c_hq_kind').value === 'lounge' && !(F.daangn === true && F.daangnOnly === true) && $('c_owner_phone').value.replace(/[^0-9]/g, '').length < 9) { F.daangn = false; $('c_owner_phone').classList.add('miss'); $('c_owner_phone').scrollIntoView({ behavior: 'smooth', block: 'center' }); $('c_owner_phone').focus(); if (typeof paintMissing === 'function') paintMissing(true); return toast('직공급 매물은 임대인 연락처가 필수입니다. 연락처를 적어주세요.') }
     const body = {
       road_addr: $('c_road_addr').value, jibun_addr: txt('c_jibun_addr'), bd_nm: txt('c_bd_nm'), dong_nm: txt('c_dong_nm'), ho_nm: txt('c_ho_nm'),
-      deal_type: $('c_deal_type').value, sale_price: num('c_sale_price'), deposit: num('c_deposit'), monthly_rent: num('c_monthly_rent'), manage_prc: num('c_manage_prc'),
+      deal_type: $('c_deal_type').value, sale_price: num('c_sale_price'), deposit: num('c_deposit'), monthly_rent: num('c_monthly_rent') == null ? undefined : manWon(num('c_monthly_rent')), manage_prc: num('c_manage_prc') == null ? undefined : manWon(num('c_manage_prc')),
       property_type: txt('c_property_type'), room_type: txt('c_room_type'), building_use: BLDG.floorUse || undefined, floor_no: num('c_floor_no'), total_floors: num('c_total_floors'),
       area_exclusive: num('c_area_exclusive'), area_supply: num('c_area_supply'), room_count: num('c_room_count'), bathroom_count: num('c_bathroom_count'),
       direction: txt('c_direction'), available_date: txt('c_available_date'), owner_name: txt('c_owner_name'), owner_phone: txt('c_owner_phone'), contact_role: $('c_contact_role').value || 'landlord', parking_total: num('c_parking_total'),
@@ -2551,6 +2624,14 @@ async function paintDaangnTab() {
 
 /* ── 직원 포털 탭: 사진 950 (기능 photo) · 내 활동 ── build_daangn_html.py 가 daangn.html 에 끼워 넣는다 */
 const APP_KO = { daangn: '당근 광고', photo: '사진950', crawl: '매물 수집기', db: 'DB 조회', routine: '은주루틴' }
+/* 당근 중복 대조 탭 (기능 daangn, 2026-10-18): dupcheck_ui.html 의 dcMount — 지번·도로명 여러 줄 → 1차 지번·2차 도로명(우리 기록 전원) + 당근 사무소 공개 글(좌표) */
+function paintDup() {
+  S.painted = 'dup'
+  const body = document.getElementById('body')
+  if (document.getElementById('dc_root')) return   // 대조 중인 화면은 다시 그리지 않는다
+  body.innerHTML = '<div class="card" style="padding:12px 14px"><div id="dc_root"></div></div>'
+  dcMount(document.getElementById('dc_root'), { call: (path, body) => dapi(path, body) })
+}
 function paintLog() {
   S.painted = 'log'
   const rows = (S.data.log && S.data.log.rows) || []
@@ -3111,6 +3192,210 @@ brLoadList()
 if (!root._brTimer) root._brTimer = setInterval(() => { if (!document.hidden && document.body.contains(root)) brLoadList(true) }, 60000)   // 손님 제출을 1분마다 확인
 }
 /*BRIEF_JS_END*/
+/*DC_JS_START*/
+/*DC_PURE_START*/
+// ── 순수 함수(화면 없이 node 테스트 가능) ──
+function dcLotKey(s) { var m = String(s || '').match(/([가-힣]+(?:동|리|가))\s*(산\s*)?(\d{1,4}(?:-\d{1,4})?)(?![\d-])/); return m ? m[1] + ' ' + (m[2] ? '산' : '') + m[3] : '' }
+function dcNorm(s) { return String(s || '').replace(/\s+/g, '').toLowerCase() }
+function dcRoadShort(road) { return String(road || '').replace(/\s*\([^)]*\)\s*$/, '').trim() }   // "송파대로 123 (삼전동)" → "송파대로 123" (당근 검색창용)
+function dcRoadKey(road) { return dcNorm(dcRoadShort(road)).replace(/^서울특별시|^서울시|^서울/, '') }   // 괄호 부분·'서울특별시' 유무와 상관없이 같은 도로명
+function dcHoKey(v) { var t = String(v || '').trim(); if (!t) return ''; var parts = t.split(/\s+/); return parts[parts.length - 1].replace(/호$/, '').toLowerCase() }
+function dcLotAddr(jibun) { var m = String(jibun || '').match(/^(.*?[가-힣]+(?:동|리|가)\s*(?:산\s*)?\d{1,4}(?:-\d{1,4})?)(?![\d-])/); return m ? m[1].trim() : String(jibun || '').trim() }   // "… 대치동 891-28 우정에쉐르1" → "… 대치동 891-28" (지오코딩용)
+function dcPriceKey(v) { return String(v == null ? '' : v).replace(/[\s,]/g, '').replace(/만원?/g, '') }   // "430 / 430" → "430/430"
+/** 주소 검색어 후보 — 줄에 건물명·메모·엑셀 다른 칸이 섞여 JUSO 가 0건이면 '동 번지'·'도로명 번호'만으로 다시 찾는다 (2026-10-18) */
+function dcAddrCandidates(q) {
+  q = String(q || '').trim(); var out = []; var push = function (v) { v = String(v || '').replace(/\s+/g, ' ').trim(); if (v.length >= 2 && out.indexOf(v) < 0) out.push(v) }
+  push(q)
+  var m = q.match(/^(.*?[가-힣]+(?:동|리|가)\s*(?:산\s*)?\d{1,4}(?:-\d{1,4})?)(?![\d-])/); if (m) push(m[1])   // 앞부분(시·구 포함) + 동 번지
+  var lot = dcLotKey(q); if (lot) push(lot)                                                                 // 동 번지만
+  m = q.match(/((?:[가-힣]+(?:시|구|군)\s+)*[가-힣A-Za-z0-9·]+(?:로|길)\s*\d+(?:-\d+)?)(?![\d-])/); if (m) { push(m[1]); var r2 = m[1].match(/([가-힣A-Za-z0-9·]+(?:로|길)\s*\d+(?:-\d+)?)$/); if (r2) push(r2[1]) }   // 도로명 번호
+  return out
+}
+function dcIsRoad(q) { return /(로|길)\s*\d/.test(String(q || '')) }
+/** 한 줄 → { q(주소 검색어), ho, hoKey, dong(건물 동), floor, raw } — "삼전동 13-6 302호", "송파대로 123 101동 302호", "석촌동 1-2 3층" */
+function dcParseLine(raw) {
+  var t = String(raw || '').replace(/\t/g, ' ').replace(/\s+/g, ' ').trim()
+  var out = { raw: raw, q: '', ho: '', hoKey: '', dong: '', floor: null }
+  if (!t) return out
+  var m = t.match(/([A-Za-z]?\d+[A-Za-z]?)\s*호(?![수실])/); if (m) { out.ho = m[1]; out.hoKey = m[1].toLowerCase(); t = t.replace(m[0], ' ') }
+  m = t.match(/(?:^|\s)((?:\d{1,3}|[A-Za-z]|[가-힣]))동(?=\s|$)/); if (m && !/^[가-힣]{2,}동$/.test(m[1] + '동')) { out.dong = m[1]; t = t.replace(m[0], ' ') }
+  m = t.match(/(지하\s*\d+|반지하|B\d+|\d+)\s*층/i); if (m) { var f = m[1].replace(/\s+/g, ''); out.floor = /^반지하$/.test(f) ? -1 : /^지하|^B/i.test(f) ? -parseInt(f.replace(/\D/g, ''), 10) : parseInt(f, 10); t = t.replace(m[0], ' ') }
+  // 거래·금액: "월세 1000/50", "전세 42000", "3억" — 같은 층이라도 금액이 다르면 다른 매물 (사용자 규칙 2026-10-18)
+  out.deal = ''; out.priceKey = ''
+  m = t.match(/(매매|전세|월세|연세|단기)/); if (m) { out.deal = m[1]; t = t.replace(m[0], ' ') }
+  m = t.match(/(\d[\d,]*)\s*(?:만원?)?\s*\/\s*(\d[\d,]*)/); if (m) { out.priceKey = m[1].replace(/,/g, '') + '/' + m[2].replace(/,/g, ''); t = t.replace(m[0], ' ') }
+  else { m = t.match(/(?:^|\s)(\d{3,}[\d,]*)\s*(만원?)?(?=\s|$)/); if (m && (out.deal || m[2])) { out.priceKey = m[1].replace(/,/g, ''); t = t.replace(m[0], ' ') } }
+  out.q = t.replace(/[,·]/g, ' ').replace(/\s+/g, ' ').trim()
+  return out
+}
+/** JUSO 후보 중 고르기 → { item, idx, multi(같은 지번 건물 여럿), note } */
+function dcPickItem(p, items) {
+  items = items || []
+  if (!items.length) return { item: null, idx: -1, multi: 0, note: '주소를 못 찾았습니다' }
+  var lot = dcLotKey(p.q)
+  if (lot) {
+    var same = []; for (var i = 0; i < items.length; i++) if (dcLotKey(items[i].jibunAddr || '') === lot) same.push(i)
+    if (same.length === 1) return { item: items[same[0]], idx: same[0], multi: 0, note: '' }
+    if (same.length > 1) return { item: items[same[0]], idx: same[0], multi: same.length, note: '같은 지번에 건물 ' + same.length + '개 — 첫 건물 기준' }
+    return { item: items[0], idx: 0, multi: 0, note: '정확한 지번 후보가 없어 첫 후보 기준' }
+  }
+  if (dcIsRoad(p.q)) {
+    var rk = dcRoadKey(p.q)
+    for (var j = 0; j < items.length; j++) { var k = dcRoadKey(items[j].roadAddr || ''); if (k === rk || k.indexOf(rk) >= 0 || rk.indexOf(k) >= 0) return { item: items[j], idx: j, multi: 0, note: '' } }
+    return { item: items[0], idx: 0, multi: 0, note: '도로명이 꼭 같은 후보가 없어 첫 후보 기준' }
+  }
+  return { item: items[0], idx: 0, multi: 0, note: items.length > 1 ? '후보 ' + items.length + '개 중 첫 건물 기준' : '' }
+}
+/** 우리 업로드 기록(살아 있는 당근 글) 대조 — 1차 지번, 2차 도로명. rows: daangn-office-list.rows (addr·ho·key·road·floor…) */
+function dcMatchOurs(p, item, rows) {
+  var lot = dcLotKey(item.jibunAddr || ''); var rk = dcRoadKey(item.roadAddr || ''); var rfull = dcNorm(item.roadAddr || '')
+  var out = []
+  for (var i = 0; i < (rows || []).length; i++) {
+    var x = rows[i]; var via = []
+    if (lot && dcLotKey(x.addr || '') === lot) via.push('1차')
+    var xr = x.road ? dcRoadKey(x.road) : ''; var xk = String(x.key || '').split('|')[0]
+    if (rk && ((xr && xr === rk) || (xk && (xk === rfull || dcRoadKey(xk) === rk)))) via.push('2차')
+    if (!via.length) continue
+    var sameHo = !!(p.hoKey && dcHoKey(x.ho) === p.hoKey)
+    if (sameHo && p.dong) { var xd = String(x.ho || '').trim().split(/\s+/); if (xd.length > 1 && xd[0].replace(/동$/, '') !== p.dong) sameHo = false }
+    var xf = x.floor == null || x.floor === '' ? null : parseInt(String(x.floor).replace(/층$/, ''), 10)
+    var floorEq = !!(!p.hoKey && p.floor != null && xf != null && !isNaN(xf) && xf === p.floor && !dcHoKey(x.ho))
+    var priceEq = p.priceKey && x.price ? dcPriceKey(x.price) === p.priceKey : null; var dealEq = p.deal && x.deal ? x.deal === p.deal : null
+    var sameFloor = floorEq && priceEq === true && dealEq !== false   // 같은 층(호수 없음)이어도 금액이 다르면 다른 매물
+    out.push({ row: x, via: via.join('·'), sameHo: sameHo, sameFloor: sameFloor, floorOnly: floorEq && !sameFloor, priceDiff: floorEq && priceEq === false })
+  }
+  out.sort(function (a, b) { return (b.sameHo - a.sameHo) || (b.sameFloor - a.sameFloor) || (b.floorOnly - a.floorOnly) })
+  return out
+}
+function dcGeoDist(la, lo, lb, lob) { la = +la; lo = +lo; lb = +lb; lob = +lob; if (!la || !lo || !lb || !lob) return null; var dy = (la - lb) * 111320, dx = (lo - lob) * 111320 * Math.cos(la * Math.PI / 180); return Math.sqrt(dx * dx + dy * dy) }
+/** 당근 사무소 공개 글(주소 없음·좌표만) — 우리 지번 좌표와 70m 안. byNo: 당근 매물번호 → 우리 기록 */
+function dcMatchDaangn(p, geo, daangn, byNo, item) {
+  if (!daangn) return []
+  var out = []
+  var bd = item && item.bdNm ? dcNorm(item.bdNm) : ''; var dong = item ? ((String(item.jibunAddr || '').match(/([가-힣]+동)(?=\s)/) || [])[1] || '') : ''
+  for (var i = 0; i < daangn.length; i++) { var x = daangn[i]; if (x.hide) continue
+    var d = geo ? dcGeoDist(geo.lat, geo.lng, x.lat, x.lon) : null
+    var byGeo = d != null && d <= 70
+    var byName = !!(bd && x.building && dcNorm(x.building) === bd && (!dong || !x.dong || x.dong === dong))   // 좌표가 없거나 멀어도 동+건물명이 같으면 같은 건물로 본다 (2026-10-18)
+    if (!byGeo && !byName) continue
+    var xf = parseInt(String(x.floor || ''), 10); var floorEq = p.floor != null && !isNaN(xf) && xf === p.floor
+    var priceEq = p.priceKey && x.price ? dcPriceKey(x.price) === p.priceKey : null; var dealEq = p.deal && x.deal ? x.deal === p.deal : null
+    var sameFloor = floorEq && priceEq === true && dealEq !== false
+    out.push({ art: x, dist: d == null ? null : Math.round(d), approx: !byGeo, sameFloor: sameFloor, floorOnly: floorEq && !sameFloor, ours: byNo && byNo[String(x.no)] || null }) }
+  out.sort(function (a, b) { return (b.sameFloor - a.sameFloor) || (b.floorOnly - a.floorOnly) || ((a.dist == null ? 1e9 : a.dist) - (b.dist == null ? 1e9 : b.dist)) })
+  return out
+}
+/** 판정 */
+function dcVerdict(L) {
+  if (L.error) return { level: 'fail', text: '⚠ ' + L.error }
+  if (!L.item) return { level: 'fail', text: '주소 못 찾음' }
+  var ours = L.ours || [], dg = L.dg || []
+  if (ours.some(function (o) { return o.sameHo })) return { level: 'dup', text: '🔴 중복 — 같은 호수 기록 ' + ours.filter(function (o) { return o.sameHo }).length + '건' }
+  if (ours.some(function (o) { return o.sameFloor })) return { level: 'dup', text: '🔴 중복 — 호수 없는 매물, 같은 층·같은 거래·금액 기록' }
+  if (ours.some(function (o) { return o.floorOnly })) return { level: 'bldg', text: '🟠 같은 건물·같은 층 기록 ' + ours.filter(function (o) { return o.floorOnly }).length + '건' + (ours.some(function (o) { return o.priceDiff }) ? ' (금액 달라 다른 매물로 봄)' : ' (금액을 넣으면 가려짐)') }
+  if (ours.length) return { level: 'bldg', text: '🟠 같은 건물 기록 ' + ours.length + '건' + (L.hoKey ? ' (호수 다름 → 중복 아님)' : ' (호수를 넣으면 더 정확)') }
+  if (dg.some(function (d) { return d.sameFloor })) return { level: 'bldg', text: '🟠 당근 사무소 글 같은 위치·같은 층·같은 금액 ' + dg.filter(function (d) { return d.sameFloor }).length + '건' }
+  if (dg.length) return { level: 'dg', text: '🟡 당근 사무소 글 같은 위치(70m) ' + dg.length + '건' }
+  return { level: 'none', text: '🟢 기록 없음' }
+}
+/*DC_PURE_END*/
+
+window.__DC = window.__DC || { lines: [], text: '', running: false, office: null, useDg: true, geo: {} }
+function dcMount(root, cfg) {
+  var ST = window.__DC; var call = cfg.call
+  var esc = function (v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] }) }
+  var $ = function (sel) { return root.querySelector(sel) }
+  var kst = function (iso) { var t = Date.parse(iso || ''); return isNaN(t) ? '' : new Date(t + 9 * 3600e3).toISOString().slice(5, 16).replace('T', ' ') }
+  root.innerHTML = '<div class="dc">'
+    + '<div style="font-weight:800;font-size:15px">🔍 당근 중복 대조 <span class="dchint" style="font-weight:400">지번이든 도로명이든 한 줄에 하나씩 넣으세요 (뒤에 동·호수·층·거래·금액을 붙이면 더 정확: <code>삼전동 13-6 302호</code>, <code>송파대로 123 3층 월세 1000/50</code>). 줄마다 ① 주소 확정 → ② <b>1차 지번</b> 대조 → ③ <b>2차 도로명</b> 대조(우리 사무실 직원 전원의 살아 있는 당근 기록) → ④ 당근 사무소 공개 글(앱에서 직접 올린 것 포함, 좌표 70m).</span></div>'
+    + '<textarea id="dc_in" placeholder="삼전동 13-6 302호&#10;서울 송파구 송파대로 123&#10;석촌동 1-2 3층 월세 1000/50&#10;(엑셀 열을 그대로 붙여넣어도 됩니다)"></textarea>'
+    + '<div class="dcbar"><button class="dcbtn go" id="dc_go">🔍 대조하기</button>'
+    + '<label style="display:flex;align-items:center;gap:5px;margin:0;font-size:12.5px;font-weight:400"><input type="checkbox" id="dc_usedg" style="width:auto;margin:0"> 당근 사무소 공개 글도 대조(좌표)</label>'
+    + '<span class="dchint" id="dc_prog"></span><span style="flex:1"></span>'
+    + '<button class="dcbtn" id="dc_cpj" title="확정된 지번을 한 줄에 하나씩">지번 전체 복사</button><button class="dcbtn" id="dc_cpr" title="확정된 도로명을 한 줄에 하나씩 — 당근 검색창에 하나씩 붙여넣어 2차로 눈으로 확인">도로명 전체 복사</button><button class="dcbtn" id="dc_cpres" title="판정 결과를 글로">결과 복사</button><button class="dcbtn" id="dc_clear">지우기</button></div>'
+    + '<div class="dcsum" id="dc_sum"></div><div id="dc_office" class="dchint"></div><div id="dc_tbl"></div></div>'
+  $('#dc_in').value = ST.text || ''; $('#dc_usedg').checked = ST.useDg !== false
+  $('#dc_in').oninput = function () { ST.text = $('#dc_in').value }
+  $('#dc_usedg').onchange = function () { ST.useDg = $('#dc_usedg').checked }
+  var copy = function (t, msg) { var done = function () { if (window.toast) toast(msg || '복사했습니다'); else { var p = $('#dc_prog'); if (p) { p.textContent = msg || '복사했습니다'; setTimeout(function () { p.textContent = '' }, 1500) } } }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done).catch(function () { fallback() }); else fallback()
+    function fallback() { var ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done() } catch (e) { alert('복사 실패 — 직접 드래그해서 복사하세요') } ta.remove() } }
+  var vdOf = function (L) { return L.state === 'wait' ? { level: 'wait', text: '대기' } : L.state === 'busy' ? { level: 'wait', text: '확인 중…' } : dcVerdict(L) }
+  var rowHtml = function (L, i) {
+    var v = vdOf(L); var it = L.item || {}
+    var jib = it.jibunAddr || ''; var road = dcRoadShort(it.roadAddr || '')
+    var oursHtml = (L.ours || []).slice(0, 8).map(function (o) { var x = o.row; return '<div class="' + (o.sameHo || o.sameFloor ? 'hit' : '') + '">' + (o.sameHo ? '⚠️ 같은 호수 · ' : o.sameFloor ? '⚠️ 같은 층·같은 금액 · ' : o.priceDiff ? '같은 층·금액 다름 · ' : o.floorOnly ? '같은 층 · ' : '') + '<span class="sm">[' + esc(o.via) + ']</span> ' + esc(x.by || '') + ' · ' + esc(x.ho || '호수 없음') + ' · ' + esc(x.deal || '') + ' ' + esc(x.price || '') + (x.floor != null && x.floor !== '' ? ' · ' + esc(x.floor) + '층' : '') + (x.area ? ' ' + esc(x.area) + '㎡' : '') + ' · <a href="' + esc(x.url || '#') + '" target="_blank" rel="noopener">당근 ' + esc(x.article_no) + '</a> <span class="sm">' + esc(kst(x.at)) + '</span></div>' }).join('') + ((L.ours || []).length > 8 ? '<div class="sm">… 외 ' + (L.ours.length - 8) + '건</div>' : '')
+    var dgHtml = (L.dg || []).slice(0, 6).map(function (d) { var x = d.art; return '<div class="' + (d.sameFloor ? 'hit' : '') + '">' + (d.sameFloor ? '⚠️ 같은 층·같은 금액 · ' : d.floorOnly ? '같은 층 · ' : '') + esc(x.writer || '') + ' · ' + esc(x.kind || '') + ' ' + esc(x.floor || '') + '층' + (x.area ? ' ' + esc(x.area) + '㎡' : '') + (x.building ? ' · ' + esc(x.building) : '') + ' · ' + esc(x.deal || '') + ' ' + esc(x.price || '') + ' · <a href="' + esc(x.url) + '" target="_blank" rel="noopener">당근 ' + esc(x.no) + '</a> <span class="sm">' + (d.dist == null ? '건물명 일치' : d.dist + 'm') + '</span>' + (d.ours ? ' <span class="sm">(우리 기록: ' + esc(d.ours.by) + ' ' + esc(d.ours.ho || '') + ')</span>' : ' <b style="color:#c2410c">직접 올림</b>') + '</div>' }).join('') + ((L.dg || []).length > 6 ? '<div class="sm">… 외 ' + (L.dg.length - 6) + '건</div>' : '')
+    var ours1 = (L.ours || []).filter(function (o) { return o.via.indexOf('1차') >= 0 }).length, ours2 = (L.ours || []).filter(function (o) { return o.via.indexOf('2차') >= 0 }).length
+    return '<tr class="' + v.level + '"><td>' + (i + 1) + '</td><td class="ln">' + esc(L.raw) + (L.hoKey || L.floor != null || L.deal || L.priceKey ? '<div class="sm">' + [(L.dong ? L.dong + '동 ' : '') + (L.ho ? L.ho + '호' : ''), L.floor != null ? L.floor + '층' : '', [L.deal, L.priceKey].filter(Boolean).join(' ')].filter(Boolean).join(' · ') + '</div>' : '') + '</td>'
+      + '<td class="ln">' + (jib ? esc(jib) + '<button class="cp" data-cp="' + esc(jib) + '">📋</button>' : '<span class="sm">-</span>') + (it.bdNm ? '<div class="sm">' + esc(it.bdNm) + '</div>' : '') + (L.note ? '<div class="sm" style="color:#c2410c">' + esc(L.note) + '</div>' : '') + '</td>'
+      + '<td class="ln">' + (road ? esc(road) + '<button class="cp" data-cp="' + esc(road) + '" title="당근 검색창에 붙여넣기">📋</button>' : '<span class="sm">-</span>') + '</td>'
+      + '<td class="ln"><div class="sm">1차 지번 ' + ours1 + '건 · 2차 도로명 ' + ours2 + '건</div>' + (oursHtml || '<span class="sm">없음</span>') + '</td>'
+      + '<td class="ln">' + (L.state === 'done' ? (L.dgSkipped ? '<span class="sm">' + esc(L.dgSkipped) + '</span>' : (dgHtml || '<span class="sm">없음</span>')) : '') + '</td>'
+      + '<td><span class="vd ' + v.level + '">' + esc(v.text) + '</span></td></tr>'
+  }
+  var paint = function () {
+    var ls = ST.lines
+    var sum = $('#dc_sum'); var cnt = { dup: 0, bldg: 0, dg: 0, none: 0, fail: 0 }
+    ls.forEach(function (L) { if (L.state === 'done') { var v = dcVerdict(L); cnt[v.level] = (cnt[v.level] || 0) + 1 } })
+    sum.innerHTML = ls.length ? '<span>' + ls.length + '줄</span><span class="vd dup">🔴 중복 ' + cnt.dup + '</span><span class="vd bldg">🟠 같은 건물 ' + cnt.bldg + '</span><span class="vd dg">🟡 당근 같은 위치 ' + cnt.dg + '</span><span class="vd none">🟢 없음 ' + cnt.none + '</span>' + (cnt.fail ? '<span class="vd fail">주소 못 찾음 ' + cnt.fail + '</span>' : '') : ''
+    $('#dc_tbl').innerHTML = ls.length ? '<table class="dct"><thead><tr><th>#</th><th>입력</th><th>지번 (1차)</th><th>도로명 (2차 · 당근 검색용)</th><th>우리 사무실 당근 기록</th><th>당근 사무소 공개 글 (70m)</th><th>판정</th></tr></thead><tbody>' + ls.map(rowHtml).join('') + '</tbody></table><div class="dchint" style="margin-top:6px">🔴 중복 = 같은 호수로 이미 올라간 글이 있음(호수 없는 매물은 같은 층 + 같은 거래·금액일 때) → 올리면 당근 계정 제재. 같은 층이라도 호수가 다르거나 금액이 다르면 중복이 아닙니다. 🟠 같은 건물 = 다른 호실로 보이지만 참고. 🟡 = 우리 사무소 글이 같은 위치에 있음(당근 글엔 주소가 없어 좌표로만 봄). 마지막 확인은 도로명을 복사해 당근 검색창에 넣어 보세요.</div>' : ''
+    root.querySelectorAll('[data-cp]').forEach(function (b) { b.onclick = function (e) { e.preventDefault(); e.stopPropagation(); copy(b.dataset.cp, '복사: ' + b.dataset.cp) } })
+  }
+  var loadOffice = async function () {
+    var j = await call('daangn-office-list')
+    var byNo = {}; (j.rows || []).forEach(function (x) { byNo[String(x.article_no)] = x })
+    ST.office = { rows: j.rows || [], daangn: Array.isArray(j.daangn) ? j.daangn : null, err: j.daangn_err || '', office: j.office || '', byNo: byNo, at: Date.now() }
+    $('#dc_office').innerHTML = '우리 기록(살아 있는 당근 글) <b>' + ST.office.rows.length + '건</b>' + (ST.office.daangn ? ' · 당근 사무소 공개 글 <b>' + ST.office.daangn.length + '건</b>' + (ST.office.office ? ' (' + esc(ST.office.office) + ')' : '') : ' · <span style="color:#b42318">당근 사무소 공개 글은 못 읽음: ' + esc(ST.office.err || '') + '</span>')
+  }
+  var geoOf = async function (q) { if (!q) return null; if (ST.geo[q] !== undefined) return ST.geo[q]; var g = null; try { var j = await call('daangn-geocode?q=' + encodeURIComponent(q)); if (j && j.ok && j.lat && j.lng) g = { lat: +j.lat, lng: +j.lng } } catch (e) { g = null } ST.geo[q] = g; return g }
+  var runOne = async function (L) {
+    L.state = 'busy'; paint()
+    try {
+      if (!L.q) throw new Error('주소가 비어 있습니다')
+      var items = []; var cands = dcAddrCandidates(L.q); var usedQ = ''
+      for (var ci = 0; ci < cands.length && !items.length; ci++) { var j = await call('address?q=' + encodeURIComponent(cands[ci])); items = (j && j.items) || []; usedQ = cands[ci] }
+      var pk = dcPickItem(L, items); L.item = pk.item; L.note = pk.note; L.multi = pk.multi
+      if (L.item && usedQ !== cands[0]) L.note = ('"' + usedQ + '"로 찾음' + (pk.note ? ' · ' + pk.note : ''))
+      if (!L.item && !pk.note.indexOf('주소를 못 찾았습니다')) L.note = '주소 검색 0건 (' + cands.map(function (c) { return '"' + c + '"' }).join(', ') + ') — 동 번지 또는 도로명 번호가 들어 있는지 확인'
+      if (L.item) {
+        L.ours = dcMatchOurs(L, L.item, ST.office ? ST.office.rows : [])
+        if (ST.useDg !== false && ST.office && ST.office.daangn && ST.office.daangn.length) {
+          var g = (await geoOf(dcLotAddr(L.item.jibunAddr))) || (await geoOf(L.item.jibunAddr)) || (await geoOf(dcRoadShort(L.item.roadAddr)))   // 건물명 뗀 지번 → 전체 지번 → 도로명
+          L.dg = dcMatchDaangn(L, g, ST.office.daangn, ST.office.byNo, L.item); L.geoOk = !!g
+          if (!g) L.dgSkipped = L.dg.length ? '' : '좌표 못 구함 · 건물명 일치도 없음 — 도로명으로 당근에서 직접 확인'
+        }
+        else { L.dg = []; L.dgSkipped = ST.useDg === false ? '(끔)' : ST.office && !ST.office.daangn ? '공개 글 못 읽음' : '' }
+      }
+    } catch (e) { L.error = e.message || String(e) }
+    L.state = 'done'; paint()
+  }
+  var run = async function () {
+    if (ST.running) return
+    var text = $('#dc_in').value; var raws = text.split(/\r?\n/).map(function (s) { return s.trim() }).filter(Boolean)
+    if (!raws.length) { $('#dc_in').focus(); return }
+    if (raws.length > 200) { alert('한 번에 200줄까지입니다 (' + raws.length + '줄)'); return }
+    ST.running = true; $('#dc_go').disabled = true; $('#dc_go').textContent = '대조 중…'
+    ST.lines = raws.map(function (r) { var p = dcParseLine(r); p.state = 'wait'; p.item = null; p.ours = []; p.dg = []; p.note = ''; p.error = ''; p.dgSkipped = ''; return p })
+    paint()
+    try { $('#dc_prog').textContent = '우리 기록·당근 사무소 글 읽는 중…'; await loadOffice() } catch (e) { $('#dc_office').innerHTML = '<span style="color:#b42318">기록을 읽지 못했습니다: ' + esc(e.message || e) + '</span>'; ST.office = ST.office || { rows: [], daangn: null, byNo: {}, err: '' } }
+    var idx = 0, done = 0; var N = ST.lines.length
+    var worker = async function () { while (idx < N) { var L = ST.lines[idx++]; await runOne(L); done++; $('#dc_prog').textContent = done + ' / ' + N } }
+    await Promise.all([worker(), worker(), worker()])
+    ST.running = false; $('#dc_go').disabled = false; $('#dc_go').textContent = '🔍 대조하기'; $('#dc_prog').textContent = '완료 ' + N + '줄'
+    paint()
+  }
+  $('#dc_go').onclick = run
+  $('#dc_in').onkeydown = function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) run() }
+  var lineText = function (L, i) { var v = dcVerdict(L); var it = L.item || {}; return (i + 1) + '. ' + L.raw + ' → ' + (it.jibunAddr || '?') + ' | ' + dcRoadShort(it.roadAddr || '') + ' | ' + v.text + ((L.ours || []).length ? ' | ' + L.ours.map(function (o) { var x = o.row; return (o.sameHo ? '[같은 호수] ' : '') + x.by + ' ' + (x.ho || '호수없음') + ' ' + (x.deal || '') + ' ' + (x.price || '') + ' 당근' + x.article_no }).join(' / ') : '') + ((L.dg || []).length ? ' | 당근공개 ' + L.dg.map(function (d) { return d.art.writer + ' ' + d.art.floor + '층 ' + d.art.no }).join(' / ') : '') }
+  $('#dc_cpj').onclick = function () { var t = ST.lines.map(function (L) { return L.item ? L.item.jibunAddr || '' : '' }).filter(Boolean).join('\n'); if (!t) return alert('아직 결과가 없습니다'); copy(t, '지번 ' + t.split('\n').length + '줄 복사') }
+  $('#dc_cpr').onclick = function () { var t = ST.lines.map(function (L) { return L.item ? dcRoadShort(L.item.roadAddr || '') : '' }).filter(Boolean).join('\n'); if (!t) return alert('아직 결과가 없습니다'); copy(t, '도로명 ' + t.split('\n').length + '줄 복사') }
+  $('#dc_cpres').onclick = function () { if (!ST.lines.length) return alert('아직 결과가 없습니다'); copy(ST.lines.map(lineText).join('\n'), '결과 복사') }
+  $('#dc_clear').onclick = function () { if (ST.running) return; ST.lines = []; ST.text = ''; $('#dc_in').value = ''; $('#dc_prog').textContent = ''; $('#dc_office').textContent = ''; paint() }
+  paint()
+  if (ST.office) $('#dc_office').innerHTML = '우리 기록 <b>' + ST.office.rows.length + '건</b>' + (ST.office.daangn ? ' · 당근 사무소 공개 글 <b>' + ST.office.daangn.length + '건</b>' : '')
+}
+/*DC_JS_END*/
 window.NA_CFG = { deferred: true }
 /*NA_JS_START*/
 
@@ -3287,7 +3572,7 @@ function naMount(){
 if(!(window.NA_CFG&&NA_CFG.deferred)) naMount();
 /*NA_JS_END*/
 const NA_MARKUP = "<div class=\"page-head\"><h1>네이버 광고정리</h1><span class=\"small muted\">위: 링크 넣으면 광고용 정보 자동 정리 · 아래: 지번으로 우리 DB + 지금 네이버에 걸린 매물 찾기 (줄을 누르면 그 매물이 바로 정리됩니다)</span></div>\n<div class=\"na-stack\">\n  <section class=\"panel green\">\n    <h2>⚡ 링크 자동 정리</h2>\n    <textarea id=\"na_links\" rows=\"4\" placeholder=\"아무 링크나 넣어주세요. 정리해드릴게요!  여러 개면 줄바꿈·쉼표·공백으로 구분&#10;https://new.land.naver.com/houses?articleNo=2653867465\"></textarea>\n    <div class=\"na-bar\"><button class=\"btn btn-primary\" id=\"na_go\">자동 정리</button><button class=\"btn\" id=\"na_clip\">📋 클립보드에서</button><span class=\"small muted\" id=\"na_msg\"></span></div>\n    <div class=\"na-bar\" id=\"na_tools\" style=\"display:none\"><button class=\"btn btn-primary\" id=\"na_save\">체크한 줄 DB에 저장</button><button class=\"btn\" id=\"na_dgbulk\" style=\"display:none\" title=\"체크한 줄의 링크를 당근 올리기 탭의 '여러 매물 한 번에' 목록에 넣습니다\">🥕 체크한 줄 당근 일괄 목록으로</button><button class=\"btn\" id=\"na_clear\" title=\"정리한 목록을 비웁니다 (DB 에 저장한 것은 그대로)\">목록 지우기</button><button class=\"btn\" id=\"na_xl\">엑셀 다운로드</button><button class=\"btn\" id=\"na_copyall\">전체 광고문구 복사</button><label class=\"small\"><input type=\"checkbox\" id=\"na_all\" checked> 전체 선택</label></div>\n    <div id=\"na_out\" class=\"na-out\"></div>\n  </section>\n  <section class=\"panel pink\">\n    <h2><span class=\"nlogo\">N</span>🔍 지번으로 매물 찾기</h2>\n    <div class=\"na-bar\"><input type=\"text\" id=\"na_q\" placeholder=\"예: 양재동 17-27 (구 이름을 붙이면 더 정확: 서초구 양재동 17-27)\" style=\"flex:1;min-width:240px\"><button class=\"btn btn-primary\" id=\"na_find\">찾기</button><label class=\"small\" style=\"display:flex;align-items:center;gap:5px;margin:0;white-space:nowrap\" title=\"같은 매물(종류·거래·금액·층·면적이 같은 것)을 여러 부동산이 올렸으면 한 줄로 묶어 'N곳' 으로 보여줍니다\"><input type=\"checkbox\" id=\"na_group\" checked style=\"width:16px;height:16px;margin:0\"> 중복매물 묶기</label></div>\n    <div class=\"small muted\" id=\"na_fmsg\">우리 DB 에 쌓인 줄은 바로, 네이버는 그 지번 자리(60m 안)의 매물을 모아 지번을 확인합니다 (5~15초). 줄을 누르면 오른쪽에 바로 정리됩니다.</div>\n    <div class=\"na-split\">\n      <div id=\"na_fout\" class=\"na-out\"></div>\n      <div class=\"na-pick\"><div id=\"na_pick\"><div class=\"small muted\" style=\"padding:14px\">← 결과 줄을 누르면 그 매물의 광고 정보가 여기에 정리됩니다 (위 링크 자동 정리와는 별개)</div></div><div id=\"na_bldg\" class=\"na-bldg\"></div></div>\n    </div>\n  </section>\n</div>"
-const BUILD = '2026-10-16 23:54 당근'
+const BUILD = '2026-10-20 18:36 당근'
 async function watchBuild() {
   try {
     const t = await (await fetch(location.pathname || '/', { cache: 'no-store' })).text()

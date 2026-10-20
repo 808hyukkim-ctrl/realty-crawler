@@ -7,7 +7,7 @@
 //   당근 로그인·글 등록은 엔진(ENGINE_URL, Bearer ENGINE_SECRET)이 하고, 사용자별 당근 세션(암호문)·기록은 이 서버의 D1 에만 둔다.
 //   활동 기록: 로그인·당근 등록·사진950 을 activity_log(app=daangn/photo)에 남긴다 → 어드민 활동 기록 탭과 포털 '내 활동' 탭.
 import { Hono } from "hono";
-import { html } from "hono/html";
+import { html, raw } from "hono/html";
 import { cors } from "hono/cors";
 import { setCookie } from "hono/cookie";
 import DAANGN_HTML from "./daangn.html";
@@ -19,6 +19,7 @@ import { matchUnits, parsePastedText, ingest, kst } from "./listings";   // 은�
 import { staffLookup } from "./staffdb";
 import { briefApi } from "./brief";   // 손님 브리핑 (포털 탭, 2026-10-10)
 import { naverad } from "./naverad";   // 네이버 광고정리 (포털 탭, 2026-10-10)
+import DC_UI from "./dupcheck_ui.html";   // 당근 중복 대조 화면 (어드민 /admin/daangn/dup + 포털 탭, 2026-10-18)
 
 type Bindings = { DB: D1Database; ADMIN_USER: string; ADMIN_PASSWORD: string; ENGINE_URL: string; ENGINE_SECRET: string; LOUNGE_INTRANET_API?: string };
 export const daangn = new Hono<{ Bindings: Bindings }>();
@@ -48,7 +49,7 @@ export async function ensure(db: D1Database) {
     "CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, username TEXT NOT NULL, app TEXT NOT NULL, action TEXT NOT NULL, detail TEXT, count INTEGER, mac TEXT)",
     "CREATE INDEX IF NOT EXISTS activity_log_at ON activity_log(at DESC)",
   ], {
-    daangn_uploads: ["src_state TEXT", "src_checked_at TEXT", "src_gone_at TEXT", "close_reason TEXT"],   // 원문 자동 확인 (2026-10-10)
+    daangn_uploads: ["src_state TEXT", "src_checked_at TEXT", "src_gone_at TEXT", "close_reason TEXT", "road TEXT"],   // 원문 자동 확인 (2026-10-10) · road = 도로명주소 원문(당근 검색·2차 대조용, 2026-10-18; 옛 기록은 key 의 앞 토막)
     users: ["daangn_guard TEXT"],   // 계정별 안전장치 {daily,min,max} (비면 공통 설정)
   });
   ready = true;
@@ -363,21 +364,15 @@ async function apiHandler(c: any) {
 
   // ---- 당근 (기능 daangn)
   if (!hasDaangn) return json(c, { error: "이 계정에는 '당근 광고' 이용권이 없습니다." }, 403);
-  if (action === "daangn-geocode") {   // 지번 → 좌표 (일괄 목록의 당근 글 같은 건물 판정용, 2026-10-11)
-    if (q("q").length < 2) return json(c, { ok: false, error: "주소가 짧습니다" }, 400);
-    const r = await engineJson(c, "/geocode?q=" + encodeURIComponent(q("q")), undefined, "GET"); return json(c, r.data, r.status === 404 ? 200 : r.status);
-  }
-  if (action === "address") {
-    if (q("q").length < 2) return json(c, { error: "검색어는 2글자 이상." }, 400);
-    const r = await engineJson(c, "/address?q=" + encodeURIComponent(q("q")), undefined, "GET"); return json(c, r.data, r.status);
-  }
+  { const r = await readAction(c, action); if (r) return r; }   // address · daangn-geocode · daangn-office-list (어드민 중복 대조와 공용, 2026-10-18)
   if (action === "building") {
     const p = new URLSearchParams(); for (const k of ["address", "dong", "ho", "nearby"]) if (q(k)) p.set(k, q(k));   // nearby=1 → 주변 정보(지하철·버스 도보)
     const r = await engineJson(c, "/building?" + p.toString(), undefined, "GET"); return json(c, r.data, r.status);
   }
   if (action === "img") {   // 사진 중계(엔진 경유) — 엣지 캐시 1일 + 엔진에서 w 폭으로 줄여 받음 (2026-10-16: 미리보기 느림·일부 실패 지적)
     const w = /^\d{2,4}$/.test(q("w")) ? q("w") : "";
-    const path = "/img?u=" + encodeURIComponent(q("u")) + "&r=" + encodeURIComponent(q("r")) + (w ? "&w=" + w : "");
+    const wm = /^[01]$/.test(q("wm")) ? q("wm") : "";   // 가운데 워터마크 흐림 (엔진: 네이버 기본 켬, 0 끔, 1 강제) 2026-10-19
+    const path = "/img?u=" + encodeURIComponent(q("u")) + "&r=" + encodeURIComponent(q("r")) + (w ? "&w=" + w : "") + (wm ? "&wm=" + wm : "");
     const cache = (caches as any).default as Cache | undefined;   // workers.dev 주소에선 Cache API 가 무동작(히트 없음) — 커스텀 도메인을 붙이면 그때부터 엣지 캐시
     const key = new Request("https://img-cache.local" + path, { method: "GET" });
     if (cache) { const hit = await cache.match(key).catch(() => null); if (hit) return hit; }
@@ -464,19 +459,13 @@ async function apiHandler(c: any) {
     if (guard.on) await guardBump(db, me.username, guard);   // 성공·실패 상관없이 당근에 시도했으면 다음 간격을 둔다
     const d = r.data || {};
     const status = d.ok ? "ok" : d.code === "daangn_dup" ? "dup" : "fail";
-    await db.prepare("INSERT INTO daangn_uploads (username, key, created_at, addr, ho, deal, price, phone, role, source, status, article_no, url, reason, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(me.username, key, nowIso(), label.addr, label.ho, label.deal, label.price, label.phone, label.role, label.source, status, str(d.articleNo || d.articleId), str(d.url), status === "ok" ? null : str(d.error || d.reason).slice(0, 500), JSON.stringify({ summary: d.summary ?? null, variant: d.variant ?? null, by: d.by ?? null, fields: { property_type: body.property_type, area_exclusive: body.area_exclusive, floor_no: body.floor_no, total_floors: body.total_floors, room_count: body.room_count, bathroom_count: body.bathroom_count, available_date: body.available_date, photos: Array.isArray(body.photos) ? body.photos.length : 0 } }).slice(0, 4000)).run();
+    await db.prepare("INSERT INTO daangn_uploads (username, key, created_at, addr, ho, deal, price, phone, role, source, status, article_no, url, reason, data, road) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(me.username, key, nowIso(), label.addr, label.ho, label.deal, label.price, label.phone, label.role, label.source, status, str(d.articleNo || d.articleId), str(d.url), status === "ok" ? null : str(d.error || d.reason).slice(0, 500), JSON.stringify({ summary: d.summary ?? null, variant: d.variant ?? null, by: d.by ?? null, fields: { property_type: body.property_type, area_exclusive: body.area_exclusive, floor_no: body.floor_no, total_floors: body.total_floors, room_count: body.room_count, bathroom_count: body.bathroom_count, available_date: body.available_date, photos: Array.isArray(body.photos) ? body.photos.length : 0 } }).slice(0, 4000), str(body.road_addr).slice(0, 200)).run();
     await addLog(db, me.username, "daangn", status === "ok" ? "당근 등록" : status === "dup" ? "당근 중복" : "당근 등록 실패", `${label.addr} ${label.ho} ${label.deal} ${label.price}`.trim() + (status === "ok" ? ` → ${str(d.articleNo || d.articleId)}` : ` — ${str(d.error || d.reason).slice(0, 160)}`), status === "ok" ? 1 : 0);
     if (d.code === "no_session") await db.prepare("DELETE FROM daangn_sessions WHERE username = ?").bind(me.username).run();
     return json(c, d.ok ? { ok: true, url: d.url ?? null, articleId: d.articleNo ?? d.articleId ?? null, articleNo: d.articleNo ?? null, direct: true, variant: d.variant } : { ...d, code: d.code === "no_session" ? "no_cookies" : d.code }, r.status === 200 ? 200 : r.status);
   }
 
-  if (action === "daangn-office-list") {   // 사무실 전원 살아 있는 당근 광고 — 포털 일괄 목록 지번 대조용 (2026-10-11)
-    const { results } = await db.prepare("SELECT id, username, key, addr, ho, deal, price, article_no, url, created_at, data FROM daangn_uploads WHERE status = 'ok' AND closed = 0 AND article_no != '' ORDER BY id DESC LIMIT 3000").all();
-    const rows = (results ?? []).map((r: any) => { let f: any = {}, sm: any = {}; try { const d = JSON.parse(String(r.data || "{}")); f = d.fields || {}; sm = d.summary || {}; } catch { /* */ } return { id: r.id, by: r.username, key: r.key, addr: r.addr, ho: r.ho, deal: r.deal, price: r.price, article_no: String(r.article_no), url: r.url, at: r.created_at, area: f.area_exclusive ?? null, floor: f.floor_no ?? null, rooms: f.room_count ?? null, kind: sm.salesType || "" }; });
-    const o = await officeDaangnList(c, false);
-    return json(c, { ok: true, rows, daangn: o.rows, daangn_at: o.at, daangn_err: o.err, office: o.office, at: nowIso() });
-  }
   if (action === "uploads") {
     const days = Math.min(400, Math.max(1, parseInt(q("days") || "30", 10) || 30));
     const since = new Date(Date.now() - days * 86400e3).toISOString();
@@ -485,6 +474,7 @@ async function apiHandler(c: any) {
     for (const r of [...(results ?? [])].reverse() as any[]) {
       const it = byKey.get(r.key) ?? { key: r.key, first_at: r.created_at, at: r.created_at, by: r.username, addr: "", ho: "", deal: "", price: "", phone: "", role: "", source: "", lounge: null, daangn: null, closed: false, closed_at: null, id: r.id };
       it.at = r.created_at; it.id = r.id; it.addr = r.addr || it.addr; it.ho = r.ho || it.ho; it.deal = r.deal || it.deal; it.price = r.price || it.price; it.phone = r.phone || it.phone; it.role = r.role || it.role; it.source = r.source || it.source;
+      it.road = r.road || it.road || String(r.key || "").split("|")[0];   // 도로명(당근 검색용) — 옛 기록은 key 앞 토막(띄어쓰기 없음) (2026-10-18)
       it.src_state = r.src_state || it.src_state || null; it.src_checked_at = r.src_checked_at || it.src_checked_at || null; it.src_gone_at = r.src_gone_at || it.src_gone_at || null; it.close_reason = r.close_reason || it.close_reason || null;
       if (r.status === "ok") it.daangn = { no: r.article_no || "", url: r.url || "", at: r.created_at, direct: true };
       else if (!it.daangn || !it.daangn.no) it.daangn = { no: "", fail: r.reason || "", at: r.created_at, direct: true, dup: r.status === "dup" ? (String(r.reason || "").match(/(\d{5,})/) || [])[1] || "" : "" };
@@ -602,8 +592,41 @@ export async function scanOfficeOverlaps(env: any, opts: { by?: string } = {}) {
   return out;
 }
 // 어드민 리스트업용 업로드 조회 — live: 살아 있는 것(성공·나감 아님) 전부, 아니면 최근 100건(직원별 300건) (2026-10-11)
+// 읽기 전용 창구 — 포털(/daangn/api, 기능 daangn)과 어드민 중복 대조(/admin/daangn/dup-api, 관리자 인증)가 같이 쓴다 (2026-10-18)
+async function readAction(c: any, action: string): Promise<Response | null> {
+  const q = (k: string) => str(c.req.query(k));
+  if (action === "daangn-geocode") {   // 지번 → 좌표 (일괄 목록·중복 대조의 당근 글 같은 건물 판정용, 2026-10-11)
+    if (q("q").length < 2) return json(c, { ok: false, error: "주소가 짧습니다" }, 400);
+    const r = await engineJson(c, "/geocode?q=" + encodeURIComponent(q("q")), undefined, "GET"); return json(c, r.data, r.status === 404 ? 200 : r.status);
+  }
+  if (action === "address") {
+    if (q("q").length < 2) return json(c, { error: "검색어는 2글자 이상." }, 400);
+    const r = await engineJson(c, "/address?q=" + encodeURIComponent(q("q")), undefined, "GET"); return json(c, r.data, r.status);
+  }
+  if (action === "daangn-office-list") {   // 사무실 전원 살아 있는 당근 광고 — 포털 일괄 목록 지번 대조·중복 대조용 (2026-10-11)
+    const db: D1Database = c.env.DB;
+    const { results } = await db.prepare("SELECT id, username, key, addr, ho, deal, price, article_no, url, created_at, data, road FROM daangn_uploads WHERE status = 'ok' AND closed = 0 AND article_no != '' ORDER BY id DESC LIMIT 3000").all();
+    const rows = (results ?? []).map((r: any) => { let f: any = {}, sm: any = {}; try { const d = JSON.parse(String(r.data || "{}")); f = d.fields || {}; sm = d.summary || {}; } catch { /* */ } return { id: r.id, by: r.username, key: r.key, addr: r.addr, ho: r.ho, road: r.road || String(r.key || "").split("|")[0], deal: r.deal, price: r.price, article_no: String(r.article_no), url: r.url, at: r.created_at, area: f.area_exclusive ?? null, floor: f.floor_no ?? null, rooms: f.room_count ?? null, kind: sm.salesType || "" }; });
+    const o = await officeDaangnList(c, false);
+    return json(c, { ok: true, rows, daangn: o.rows, daangn_at: o.at, daangn_err: o.err, office: o.office, at: nowIso() });
+  }
+  return null;
+}
+daangn.all("/admin/daangn/dup-api/:action", async (c) => {   // 어드민 중복 대조 화면이 부르는 읽기 전용 창구 (index.ts 의 /admin/* 인증)
+  await ensure(c.env.DB);
+  try { const r = await readAction(c, c.req.param("action")); return r ?? json(c, { error: "없는 창구" }, 404); }
+  catch (e) { return json(c, { error: "서버 오류: " + (e instanceof Error ? e.message : String(e)) }, 500); }
+});
+daangn.get("/admin/daangn/dup", async (c) => {   // 당근 중복 대조 — 지번·도로명 여러 줄 → 1차 지번·2차 도로명(우리 기록) + 당근 사무소 공개 글(좌표) (2026-10-18)
+  await ensure(c.env.DB);
+  return c.html(layout("당근 중복 대조", html`${raw(DC_UI)}
+    <h1>🔍 당근 중복 대조</h1>
+    <p class="muted" style="margin:0 0 10px">당근에 올리기 전에 우리 사무실(직원 전원)이 이미 올린 매물인지 거릅니다. 당근 검색은 지번으로 찾으면 빠지는 글이 있어 <b>도로명</b>을 함께 보여 줍니다 — 복사해서 당근 검색창에 넣어 보세요. 직원 포털에도 같은 탭('중복 대조')이 있습니다.</p>
+    <div id="dc_root"></div>
+    <script>dcMount(document.getElementById('dc_root'), { call: async function (path, body) { const res = await fetch('/admin/daangn/dup-api/' + path, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin', cache: 'no-store' }); let j = {}; try { j = await res.json() } catch (_) {} if (!res.ok) throw new Error(j.error || ('요청 실패 ' + res.status)); return j } })</script>`));
+});
 async function adminUploadRows(db: D1Database, pickUser: string, live: boolean) {
-  const cols = "username, created_at, addr, ho, deal, price, phone, source, status, article_no, url, reason, closed, closed_at, src_state, src_checked_at";
+  const cols = "username, created_at, addr, ho, road, key, deal, price, phone, source, status, article_no, url, reason, closed, closed_at, src_state, src_checked_at";
   if (live) {
     const q = pickUser ? db.prepare(`SELECT ${cols} FROM daangn_uploads WHERE status = 'ok' AND closed = 0 AND username = ? ORDER BY id DESC LIMIT 3000`).bind(pickUser) : db.prepare(`SELECT ${cols} FROM daangn_uploads WHERE status = 'ok' AND closed = 0 ORDER BY id DESC LIMIT 3000`);
     return (await q.all()).results ?? [];
@@ -654,6 +677,7 @@ daangn.get("/admin/daangn", async (c) => {
   const engineOk = html`<span id="eng_ok">확인 중…</span><script>fetch('/admin/daangn/engine-health',{credentials:'same-origin'}).then(r=>r.text()).then(t=>{document.getElementById('eng_ok').textContent=t}).catch(()=>{document.getElementById('eng_ok').textContent='확인 안 됨'})</script>`;
   return c.html(layout("당근 광고자동화", html`
     <h1>🥕 당근 광고자동화</h1>
+    <p style="margin:0 0 10px"><a class="btn" href="/admin/daangn/dup"><b>🔍 당근 중복 대조</b></a> <span class="small muted">지번·도로명 여러 줄 → 1차 지번·2차 도로명으로 우리 사무실(직원 전원) 기록 + 당근 사무소 공개 글 대조, 도로명 복사</span></p>
     <p class="muted">직원 화면: <a href="/daangn" target="_blank">/daangn</a> (라이선스 계정으로 로그인 · 기능 '당근 광고' 또는 '사진950' 권한이 있는 계정만, 탭은 가진 기능만 보임) · 엔진: ${engineOk}</p>
     <p class="small muted" style="margin:0 0 16px">🛡 자동 등록 안전장치(하루 상한·불규칙 간격): 지금 ${guard.on ? html`<b>켬</b> · 공통 하루 ${guard.daily ? guard.daily + "건" : "제한 없음"} · 간격 ${guard.min}~${guard.max}초` : html`<b style="color:#b42318">꺼짐</b>`} — 공통값과 계정별 값은 <a href="/admin/dashboard">사용자 관리</a>에서 정합니다. 상한은 한국 시간 0시에 초기화되고 성공한 등록만 셉니다.</p>
     <p class="small muted" style="margin:0 0 16px">🔁 원문 자동 확인: 매일 오전 11시·오후 6시에 업로드 기록의 원문 링크(네이버·당근·온하우스)를 열어 보고, 삭제·내려간 매물은 업로드 기록에 <b>확인 요망</b>으로 표시합니다(나감 처리는 사람이, 활동 기록 '원문 내려감'). ${srcLast ? html`마지막: ${dt(srcLast.at)} · ${srcLast.checked}건 중 내려감 ${srcLast.gone}건${srcLast.unknown ? ` · 확인 못함 ${srcLast.unknown}건` : ""}` : "아직 돈 적 없음"}. <form method="post" action="/admin/daangn/src-check" class="inline-form"><button class="btn btn-sm">지금 확인 (40건)</button></form>${srcMsg ? html` <b style="color:#2f9e6e">${srcMsg}</b>` : ""}</p>
@@ -683,7 +707,7 @@ daangn.get("/admin/daangn", async (c) => {
     <form method="get" action="/admin/daangn" class="search-form" style="margin:0 0 10px">${live ? html`<input type="hidden" name="live" value="1">` : ""}<select name="user" onchange="this.form.submit()"><option value="">전체 직원</option>${(users ?? []).map((u: any) => html`<option value="${u.username}" ${u.username === pickUser ? "selected" : ""}>${u.username}${u.ok_n ? ` (${u.ok_n}건)` : ""}</option>`)}</select> <span class="small muted">직원을 고르면 그 사람이 어디에(당근 매물번호·링크) 무엇을 올렸는지만 보입니다. 직원 본인은 포털 '업로드 기록' 탭에서 자기 것만 봅니다.</span></form>
     <table><thead><tr><th>일시</th><th>아이디</th><th>주소 · 호수</th><th>거래</th><th>금액</th><th>임대인 연락처</th><th>원본 링크</th><th>원문 상태</th><th>결과</th><th>당근 매물번호</th><th>나감</th></tr></thead><tbody>
     ${(recent ?? []).map((r: any) => html`<tr style="${r.closed ? "opacity:.5" : ""}">
-      <td class="small">${dt(r.created_at)}</td><td><a href="/admin/daangn?user=${r.username}">${r.username}</a></td><td>${r.addr} ${r.ho ?? ""}</td><td>${r.deal ?? ""}</td><td>${r.price ?? ""}</td><td class="small">${r.phone ?? ""}</td><td class="small">${r.source ? html`<a href="${r.source}" target="_blank" rel="noopener">원본</a>` : ""}</td><td class="small">${srcBadge(r)}</td>
+      <td class="small">${dt(r.created_at)}</td><td><a href="/admin/daangn?user=${r.username}">${r.username}</a></td><td>${r.addr} ${r.ho ?? ""}<br><span class="small muted" title="도로명 (당근 검색용)">${r.road || String(r.key || "").split("|")[0]}</span></td><td>${r.deal ?? ""}</td><td>${r.price ?? ""}</td><td class="small">${r.phone ?? ""}</td><td class="small">${r.source ? html`<a href="${r.source}" target="_blank" rel="noopener">원본</a>` : ""}</td><td class="small">${srcBadge(r)}</td>
       <td>${r.status === "ok" ? "성공" : r.status === "dup" ? html`<span class="muted" title="${r.reason ?? ""}">중복</span>` : html`<span style="color:#b42318" title="${r.reason ?? ""}">실패</span>`}</td>
       <td>${r.article_no ? html`<a href="${r.url}" target="_blank" rel="noopener">${r.article_no}</a>` : ""}</td><td class="small muted">${r.closed ? dt(r.closed_at) : ""}</td></tr>`)}
     </tbody></table>`));

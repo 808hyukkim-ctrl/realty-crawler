@@ -1,0 +1,239 @@
+<!-- 당근 중복 대조 화면 — 어드민(/admin/daangn/dup, daangn.ts)과 직원 포털 탭 '중복 대조'(build_daangn_html.py 가 style+script 를 끼움)가 같은 파일. 2026-10-18
+     지번·도로명을 여러 줄 넣으면 줄마다 ① 주소 확정(JUSO) → ② 1차 지번 대조(우리 업로드 기록) → ③ 2차 도로명 대조(우리 업로드 기록의 도로명 key)
+     → ④ 당근 사무소 공개 글(앱에서 직접 올린 글 포함)을 좌표 70m 로 대조. 도로명은 당근 검색창에 붙여넣기 좋게 복사 버튼.
+     dcMount(root, { call(path, body) }) — call 은 포털 dapi 또는 어드민 /admin/daangn/dup-api/<action> fetch. -->
+<style>
+.dc{max-width:1400px}
+.dc textarea{width:100%;min-height:120px;font:inherit;font-size:13px;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;box-sizing:border-box;resize:vertical}
+.dc .dcbar{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:8px 0}
+.dc .dcbtn{display:inline-block;padding:6px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;font:inherit;font-size:13px;line-height:1.3}
+.dc .dcbtn:hover{background:#f3f4f6}
+.dc .dcbtn.go{background:#ff6f0f;border-color:#ff6f0f;color:#fff;font-weight:700}
+.dc .dcbtn:disabled{opacity:.5;cursor:default}
+.dc .dchint{font-size:12px;color:#6b7280}
+.dc table.dct{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+.dc table.dct th,.dc table.dct td{border-bottom:1px solid #e5e7eb;padding:6px 7px;vertical-align:top;text-align:left}
+.dc table.dct th{background:#f9fafb;font-size:12px;white-space:nowrap}
+.dc .cp{display:inline-block;padding:1px 6px;margin-left:4px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:11px;line-height:1.4;vertical-align:middle;white-space:nowrap}
+.dc .cp:hover{background:#fff7ed;border-color:#fdba74}
+.dc .vd{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.dc .vd.dup{background:#fee2e2;color:#b42318}
+.dc .vd.bldg{background:#ffedd5;color:#c2410c}
+.dc .vd.dg{background:#fef3c7;color:#92400e}
+.dc .vd.none{background:#dcfce7;color:#15803d}
+.dc .vd.fail{background:#f3f4f6;color:#6b7280}
+.dc .vd.wait{background:#eff6ff;color:#1d4ed8}
+.dc tr.dup td{background:#fff5f5}
+.dc tr.bldg td{background:#fffaf5}
+.dc .ln{line-height:1.5;white-space:normal}
+.dc .ln .hit{color:#b42318;font-weight:700}
+.dc .ln a{color:#1d4ed8}
+.dc .sm{font-size:11.5px;color:#6b7280}
+.dc .dcsum{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;margin:6px 0}
+</style>
+<script>
+/*DC_JS_START*/
+/*DC_PURE_START*/
+// ── 순수 함수(화면 없이 node 테스트 가능) ──
+function dcLotKey(s) { var m = String(s || '').match(/([가-힣]+(?:동|리|가))\s*(산\s*)?(\d{1,4}(?:-\d{1,4})?)(?![\d-])/); return m ? m[1] + ' ' + (m[2] ? '산' : '') + m[3] : '' }
+function dcNorm(s) { return String(s || '').replace(/\s+/g, '').toLowerCase() }
+function dcRoadShort(road) { return String(road || '').replace(/\s*\([^)]*\)\s*$/, '').trim() }   // "송파대로 123 (삼전동)" → "송파대로 123" (당근 검색창용)
+function dcRoadKey(road) { return dcNorm(dcRoadShort(road)).replace(/^서울특별시|^서울시|^서울/, '') }   // 괄호 부분·'서울특별시' 유무와 상관없이 같은 도로명
+function dcHoKey(v) { var t = String(v || '').trim(); if (!t) return ''; var parts = t.split(/\s+/); return parts[parts.length - 1].replace(/호$/, '').toLowerCase() }
+function dcLotAddr(jibun) { var m = String(jibun || '').match(/^(.*?[가-힣]+(?:동|리|가)\s*(?:산\s*)?\d{1,4}(?:-\d{1,4})?)(?![\d-])/); return m ? m[1].trim() : String(jibun || '').trim() }   // "… 대치동 891-28 우정에쉐르1" → "… 대치동 891-28" (지오코딩용)
+function dcPriceKey(v) { return String(v == null ? '' : v).replace(/[\s,]/g, '').replace(/만원?/g, '') }   // "430 / 430" → "430/430"
+/** 주소 검색어 후보 — 줄에 건물명·메모·엑셀 다른 칸이 섞여 JUSO 가 0건이면 '동 번지'·'도로명 번호'만으로 다시 찾는다 (2026-10-18) */
+function dcAddrCandidates(q) {
+  q = String(q || '').trim(); var out = []; var push = function (v) { v = String(v || '').replace(/\s+/g, ' ').trim(); if (v.length >= 2 && out.indexOf(v) < 0) out.push(v) }
+  push(q)
+  var m = q.match(/^(.*?[가-힣]+(?:동|리|가)\s*(?:산\s*)?\d{1,4}(?:-\d{1,4})?)(?![\d-])/); if (m) push(m[1])   // 앞부분(시·구 포함) + 동 번지
+  var lot = dcLotKey(q); if (lot) push(lot)                                                                 // 동 번지만
+  m = q.match(/((?:[가-힣]+(?:시|구|군)\s+)*[가-힣A-Za-z0-9·]+(?:로|길)\s*\d+(?:-\d+)?)(?![\d-])/); if (m) { push(m[1]); var r2 = m[1].match(/([가-힣A-Za-z0-9·]+(?:로|길)\s*\d+(?:-\d+)?)$/); if (r2) push(r2[1]) }   // 도로명 번호
+  return out
+}
+function dcIsRoad(q) { return /(로|길)\s*\d/.test(String(q || '')) }
+/** 한 줄 → { q(주소 검색어), ho, hoKey, dong(건물 동), floor, raw } — "삼전동 13-6 302호", "송파대로 123 101동 302호", "석촌동 1-2 3층" */
+function dcParseLine(raw) {
+  var t = String(raw || '').replace(/\t/g, ' ').replace(/\s+/g, ' ').trim()
+  var out = { raw: raw, q: '', ho: '', hoKey: '', dong: '', floor: null }
+  if (!t) return out
+  var m = t.match(/([A-Za-z]?\d+[A-Za-z]?)\s*호(?![수실])/); if (m) { out.ho = m[1]; out.hoKey = m[1].toLowerCase(); t = t.replace(m[0], ' ') }
+  m = t.match(/(?:^|\s)((?:\d{1,3}|[A-Za-z]|[가-힣]))동(?=\s|$)/); if (m && !/^[가-힣]{2,}동$/.test(m[1] + '동')) { out.dong = m[1]; t = t.replace(m[0], ' ') }
+  m = t.match(/(지하\s*\d+|반지하|B\d+|\d+)\s*층/i); if (m) { var f = m[1].replace(/\s+/g, ''); out.floor = /^반지하$/.test(f) ? -1 : /^지하|^B/i.test(f) ? -parseInt(f.replace(/\D/g, ''), 10) : parseInt(f, 10); t = t.replace(m[0], ' ') }
+  // 거래·금액: "월세 1000/50", "전세 42000", "3억" — 같은 층이라도 금액이 다르면 다른 매물 (사용자 규칙 2026-10-18)
+  out.deal = ''; out.priceKey = ''
+  m = t.match(/(매매|전세|월세|연세|단기)/); if (m) { out.deal = m[1]; t = t.replace(m[0], ' ') }
+  m = t.match(/(\d[\d,]*)\s*(?:만원?)?\s*\/\s*(\d[\d,]*)/); if (m) { out.priceKey = m[1].replace(/,/g, '') + '/' + m[2].replace(/,/g, ''); t = t.replace(m[0], ' ') }
+  else { m = t.match(/(?:^|\s)(\d{3,}[\d,]*)\s*(만원?)?(?=\s|$)/); if (m && (out.deal || m[2])) { out.priceKey = m[1].replace(/,/g, ''); t = t.replace(m[0], ' ') } }
+  out.q = t.replace(/[,·]/g, ' ').replace(/\s+/g, ' ').trim()
+  return out
+}
+/** JUSO 후보 중 고르기 → { item, idx, multi(같은 지번 건물 여럿), note } */
+function dcPickItem(p, items) {
+  items = items || []
+  if (!items.length) return { item: null, idx: -1, multi: 0, note: '주소를 못 찾았습니다' }
+  var lot = dcLotKey(p.q)
+  if (lot) {
+    var same = []; for (var i = 0; i < items.length; i++) if (dcLotKey(items[i].jibunAddr || '') === lot) same.push(i)
+    if (same.length === 1) return { item: items[same[0]], idx: same[0], multi: 0, note: '' }
+    if (same.length > 1) return { item: items[same[0]], idx: same[0], multi: same.length, note: '같은 지번에 건물 ' + same.length + '개 — 첫 건물 기준' }
+    return { item: items[0], idx: 0, multi: 0, note: '정확한 지번 후보가 없어 첫 후보 기준' }
+  }
+  if (dcIsRoad(p.q)) {
+    var rk = dcRoadKey(p.q)
+    for (var j = 0; j < items.length; j++) { var k = dcRoadKey(items[j].roadAddr || ''); if (k === rk || k.indexOf(rk) >= 0 || rk.indexOf(k) >= 0) return { item: items[j], idx: j, multi: 0, note: '' } }
+    return { item: items[0], idx: 0, multi: 0, note: '도로명이 꼭 같은 후보가 없어 첫 후보 기준' }
+  }
+  return { item: items[0], idx: 0, multi: 0, note: items.length > 1 ? '후보 ' + items.length + '개 중 첫 건물 기준' : '' }
+}
+/** 우리 업로드 기록(살아 있는 당근 글) 대조 — 1차 지번, 2차 도로명. rows: daangn-office-list.rows (addr·ho·key·road·floor…) */
+function dcMatchOurs(p, item, rows) {
+  var lot = dcLotKey(item.jibunAddr || ''); var rk = dcRoadKey(item.roadAddr || ''); var rfull = dcNorm(item.roadAddr || '')
+  var out = []
+  for (var i = 0; i < (rows || []).length; i++) {
+    var x = rows[i]; var via = []
+    if (lot && dcLotKey(x.addr || '') === lot) via.push('1차')
+    var xr = x.road ? dcRoadKey(x.road) : ''; var xk = String(x.key || '').split('|')[0]
+    if (rk && ((xr && xr === rk) || (xk && (xk === rfull || dcRoadKey(xk) === rk)))) via.push('2차')
+    if (!via.length) continue
+    var sameHo = !!(p.hoKey && dcHoKey(x.ho) === p.hoKey)
+    if (sameHo && p.dong) { var xd = String(x.ho || '').trim().split(/\s+/); if (xd.length > 1 && xd[0].replace(/동$/, '') !== p.dong) sameHo = false }
+    var xf = x.floor == null || x.floor === '' ? null : parseInt(String(x.floor).replace(/층$/, ''), 10)
+    var floorEq = !!(!p.hoKey && p.floor != null && xf != null && !isNaN(xf) && xf === p.floor && !dcHoKey(x.ho))
+    var priceEq = p.priceKey && x.price ? dcPriceKey(x.price) === p.priceKey : null; var dealEq = p.deal && x.deal ? x.deal === p.deal : null
+    var sameFloor = floorEq && priceEq === true && dealEq !== false   // 같은 층(호수 없음)이어도 금액이 다르면 다른 매물
+    out.push({ row: x, via: via.join('·'), sameHo: sameHo, sameFloor: sameFloor, floorOnly: floorEq && !sameFloor, priceDiff: floorEq && priceEq === false })
+  }
+  out.sort(function (a, b) { return (b.sameHo - a.sameHo) || (b.sameFloor - a.sameFloor) || (b.floorOnly - a.floorOnly) })
+  return out
+}
+function dcGeoDist(la, lo, lb, lob) { la = +la; lo = +lo; lb = +lb; lob = +lob; if (!la || !lo || !lb || !lob) return null; var dy = (la - lb) * 111320, dx = (lo - lob) * 111320 * Math.cos(la * Math.PI / 180); return Math.sqrt(dx * dx + dy * dy) }
+/** 당근 사무소 공개 글(주소 없음·좌표만) — 우리 지번 좌표와 70m 안. byNo: 당근 매물번호 → 우리 기록 */
+function dcMatchDaangn(p, geo, daangn, byNo, item) {
+  if (!daangn) return []
+  var out = []
+  var bd = item && item.bdNm ? dcNorm(item.bdNm) : ''; var dong = item ? ((String(item.jibunAddr || '').match(/([가-힣]+동)(?=\s)/) || [])[1] || '') : ''
+  for (var i = 0; i < daangn.length; i++) { var x = daangn[i]; if (x.hide) continue
+    var d = geo ? dcGeoDist(geo.lat, geo.lng, x.lat, x.lon) : null
+    var byGeo = d != null && d <= 70
+    var byName = !!(bd && x.building && dcNorm(x.building) === bd && (!dong || !x.dong || x.dong === dong))   // 좌표가 없거나 멀어도 동+건물명이 같으면 같은 건물로 본다 (2026-10-18)
+    if (!byGeo && !byName) continue
+    var xf = parseInt(String(x.floor || ''), 10); var floorEq = p.floor != null && !isNaN(xf) && xf === p.floor
+    var priceEq = p.priceKey && x.price ? dcPriceKey(x.price) === p.priceKey : null; var dealEq = p.deal && x.deal ? x.deal === p.deal : null
+    var sameFloor = floorEq && priceEq === true && dealEq !== false
+    out.push({ art: x, dist: d == null ? null : Math.round(d), approx: !byGeo, sameFloor: sameFloor, floorOnly: floorEq && !sameFloor, ours: byNo && byNo[String(x.no)] || null }) }
+  out.sort(function (a, b) { return (b.sameFloor - a.sameFloor) || (b.floorOnly - a.floorOnly) || ((a.dist == null ? 1e9 : a.dist) - (b.dist == null ? 1e9 : b.dist)) })
+  return out
+}
+/** 판정 */
+function dcVerdict(L) {
+  if (L.error) return { level: 'fail', text: '⚠ ' + L.error }
+  if (!L.item) return { level: 'fail', text: '주소 못 찾음' }
+  var ours = L.ours || [], dg = L.dg || []
+  if (ours.some(function (o) { return o.sameHo })) return { level: 'dup', text: '🔴 중복 — 같은 호수 기록 ' + ours.filter(function (o) { return o.sameHo }).length + '건' }
+  if (ours.some(function (o) { return o.sameFloor })) return { level: 'dup', text: '🔴 중복 — 호수 없는 매물, 같은 층·같은 거래·금액 기록' }
+  if (ours.some(function (o) { return o.floorOnly })) return { level: 'bldg', text: '🟠 같은 건물·같은 층 기록 ' + ours.filter(function (o) { return o.floorOnly }).length + '건' + (ours.some(function (o) { return o.priceDiff }) ? ' (금액 달라 다른 매물로 봄)' : ' (금액을 넣으면 가려짐)') }
+  if (ours.length) return { level: 'bldg', text: '🟠 같은 건물 기록 ' + ours.length + '건' + (L.hoKey ? ' (호수 다름 → 중복 아님)' : ' (호수를 넣으면 더 정확)') }
+  if (dg.some(function (d) { return d.sameFloor })) return { level: 'bldg', text: '🟠 당근 사무소 글 같은 위치·같은 층·같은 금액 ' + dg.filter(function (d) { return d.sameFloor }).length + '건' }
+  if (dg.length) return { level: 'dg', text: '🟡 당근 사무소 글 같은 위치(70m) ' + dg.length + '건' }
+  return { level: 'none', text: '🟢 기록 없음' }
+}
+/*DC_PURE_END*/
+
+window.__DC = window.__DC || { lines: [], text: '', running: false, office: null, useDg: true, geo: {} }
+function dcMount(root, cfg) {
+  var ST = window.__DC; var call = cfg.call
+  var esc = function (v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] }) }
+  var $ = function (sel) { return root.querySelector(sel) }
+  var kst = function (iso) { var t = Date.parse(iso || ''); return isNaN(t) ? '' : new Date(t + 9 * 3600e3).toISOString().slice(5, 16).replace('T', ' ') }
+  root.innerHTML = '<div class="dc">'
+    + '<div style="font-weight:800;font-size:15px">🔍 당근 중복 대조 <span class="dchint" style="font-weight:400">지번이든 도로명이든 한 줄에 하나씩 넣으세요 (뒤에 동·호수·층·거래·금액을 붙이면 더 정확: <code>삼전동 13-6 302호</code>, <code>송파대로 123 3층 월세 1000/50</code>). 줄마다 ① 주소 확정 → ② <b>1차 지번</b> 대조 → ③ <b>2차 도로명</b> 대조(우리 사무실 직원 전원의 살아 있는 당근 기록) → ④ 당근 사무소 공개 글(앱에서 직접 올린 것 포함, 좌표 70m).</span></div>'
+    + '<textarea id="dc_in" placeholder="삼전동 13-6 302호&#10;서울 송파구 송파대로 123&#10;석촌동 1-2 3층 월세 1000/50&#10;(엑셀 열을 그대로 붙여넣어도 됩니다)"></textarea>'
+    + '<div class="dcbar"><button class="dcbtn go" id="dc_go">🔍 대조하기</button>'
+    + '<label style="display:flex;align-items:center;gap:5px;margin:0;font-size:12.5px;font-weight:400"><input type="checkbox" id="dc_usedg" style="width:auto;margin:0"> 당근 사무소 공개 글도 대조(좌표)</label>'
+    + '<span class="dchint" id="dc_prog"></span><span style="flex:1"></span>'
+    + '<button class="dcbtn" id="dc_cpj" title="확정된 지번을 한 줄에 하나씩">지번 전체 복사</button><button class="dcbtn" id="dc_cpr" title="확정된 도로명을 한 줄에 하나씩 — 당근 검색창에 하나씩 붙여넣어 2차로 눈으로 확인">도로명 전체 복사</button><button class="dcbtn" id="dc_cpres" title="판정 결과를 글로">결과 복사</button><button class="dcbtn" id="dc_clear">지우기</button></div>'
+    + '<div class="dcsum" id="dc_sum"></div><div id="dc_office" class="dchint"></div><div id="dc_tbl"></div></div>'
+  $('#dc_in').value = ST.text || ''; $('#dc_usedg').checked = ST.useDg !== false
+  $('#dc_in').oninput = function () { ST.text = $('#dc_in').value }
+  $('#dc_usedg').onchange = function () { ST.useDg = $('#dc_usedg').checked }
+  var copy = function (t, msg) { var done = function () { if (window.toast) toast(msg || '복사했습니다'); else { var p = $('#dc_prog'); if (p) { p.textContent = msg || '복사했습니다'; setTimeout(function () { p.textContent = '' }, 1500) } } }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done).catch(function () { fallback() }); else fallback()
+    function fallback() { var ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done() } catch (e) { alert('복사 실패 — 직접 드래그해서 복사하세요') } ta.remove() } }
+  var vdOf = function (L) { return L.state === 'wait' ? { level: 'wait', text: '대기' } : L.state === 'busy' ? { level: 'wait', text: '확인 중…' } : dcVerdict(L) }
+  var rowHtml = function (L, i) {
+    var v = vdOf(L); var it = L.item || {}
+    var jib = it.jibunAddr || ''; var road = dcRoadShort(it.roadAddr || '')
+    var oursHtml = (L.ours || []).slice(0, 8).map(function (o) { var x = o.row; return '<div class="' + (o.sameHo || o.sameFloor ? 'hit' : '') + '">' + (o.sameHo ? '⚠️ 같은 호수 · ' : o.sameFloor ? '⚠️ 같은 층·같은 금액 · ' : o.priceDiff ? '같은 층·금액 다름 · ' : o.floorOnly ? '같은 층 · ' : '') + '<span class="sm">[' + esc(o.via) + ']</span> ' + esc(x.by || '') + ' · ' + esc(x.ho || '호수 없음') + ' · ' + esc(x.deal || '') + ' ' + esc(x.price || '') + (x.floor != null && x.floor !== '' ? ' · ' + esc(x.floor) + '층' : '') + (x.area ? ' ' + esc(x.area) + '㎡' : '') + ' · <a href="' + esc(x.url || '#') + '" target="_blank" rel="noopener">당근 ' + esc(x.article_no) + '</a> <span class="sm">' + esc(kst(x.at)) + '</span></div>' }).join('') + ((L.ours || []).length > 8 ? '<div class="sm">… 외 ' + (L.ours.length - 8) + '건</div>' : '')
+    var dgHtml = (L.dg || []).slice(0, 6).map(function (d) { var x = d.art; return '<div class="' + (d.sameFloor ? 'hit' : '') + '">' + (d.sameFloor ? '⚠️ 같은 층·같은 금액 · ' : d.floorOnly ? '같은 층 · ' : '') + esc(x.writer || '') + ' · ' + esc(x.kind || '') + ' ' + esc(x.floor || '') + '층' + (x.area ? ' ' + esc(x.area) + '㎡' : '') + (x.building ? ' · ' + esc(x.building) : '') + ' · ' + esc(x.deal || '') + ' ' + esc(x.price || '') + ' · <a href="' + esc(x.url) + '" target="_blank" rel="noopener">당근 ' + esc(x.no) + '</a> <span class="sm">' + (d.dist == null ? '건물명 일치' : d.dist + 'm') + '</span>' + (d.ours ? ' <span class="sm">(우리 기록: ' + esc(d.ours.by) + ' ' + esc(d.ours.ho || '') + ')</span>' : ' <b style="color:#c2410c">직접 올림</b>') + '</div>' }).join('') + ((L.dg || []).length > 6 ? '<div class="sm">… 외 ' + (L.dg.length - 6) + '건</div>' : '')
+    var ours1 = (L.ours || []).filter(function (o) { return o.via.indexOf('1차') >= 0 }).length, ours2 = (L.ours || []).filter(function (o) { return o.via.indexOf('2차') >= 0 }).length
+    return '<tr class="' + v.level + '"><td>' + (i + 1) + '</td><td class="ln">' + esc(L.raw) + (L.hoKey || L.floor != null || L.deal || L.priceKey ? '<div class="sm">' + [(L.dong ? L.dong + '동 ' : '') + (L.ho ? L.ho + '호' : ''), L.floor != null ? L.floor + '층' : '', [L.deal, L.priceKey].filter(Boolean).join(' ')].filter(Boolean).join(' · ') + '</div>' : '') + '</td>'
+      + '<td class="ln">' + (jib ? esc(jib) + '<button class="cp" data-cp="' + esc(jib) + '">📋</button>' : '<span class="sm">-</span>') + (it.bdNm ? '<div class="sm">' + esc(it.bdNm) + '</div>' : '') + (L.note ? '<div class="sm" style="color:#c2410c">' + esc(L.note) + '</div>' : '') + '</td>'
+      + '<td class="ln">' + (road ? esc(road) + '<button class="cp" data-cp="' + esc(road) + '" title="당근 검색창에 붙여넣기">📋</button>' : '<span class="sm">-</span>') + '</td>'
+      + '<td class="ln"><div class="sm">1차 지번 ' + ours1 + '건 · 2차 도로명 ' + ours2 + '건</div>' + (oursHtml || '<span class="sm">없음</span>') + '</td>'
+      + '<td class="ln">' + (L.state === 'done' ? (L.dgSkipped ? '<span class="sm">' + esc(L.dgSkipped) + '</span>' : (dgHtml || '<span class="sm">없음</span>')) : '') + '</td>'
+      + '<td><span class="vd ' + v.level + '">' + esc(v.text) + '</span></td></tr>'
+  }
+  var paint = function () {
+    var ls = ST.lines
+    var sum = $('#dc_sum'); var cnt = { dup: 0, bldg: 0, dg: 0, none: 0, fail: 0 }
+    ls.forEach(function (L) { if (L.state === 'done') { var v = dcVerdict(L); cnt[v.level] = (cnt[v.level] || 0) + 1 } })
+    sum.innerHTML = ls.length ? '<span>' + ls.length + '줄</span><span class="vd dup">🔴 중복 ' + cnt.dup + '</span><span class="vd bldg">🟠 같은 건물 ' + cnt.bldg + '</span><span class="vd dg">🟡 당근 같은 위치 ' + cnt.dg + '</span><span class="vd none">🟢 없음 ' + cnt.none + '</span>' + (cnt.fail ? '<span class="vd fail">주소 못 찾음 ' + cnt.fail + '</span>' : '') : ''
+    $('#dc_tbl').innerHTML = ls.length ? '<table class="dct"><thead><tr><th>#</th><th>입력</th><th>지번 (1차)</th><th>도로명 (2차 · 당근 검색용)</th><th>우리 사무실 당근 기록</th><th>당근 사무소 공개 글 (70m)</th><th>판정</th></tr></thead><tbody>' + ls.map(rowHtml).join('') + '</tbody></table><div class="dchint" style="margin-top:6px">🔴 중복 = 같은 호수로 이미 올라간 글이 있음(호수 없는 매물은 같은 층 + 같은 거래·금액일 때) → 올리면 당근 계정 제재. 같은 층이라도 호수가 다르거나 금액이 다르면 중복이 아닙니다. 🟠 같은 건물 = 다른 호실로 보이지만 참고. 🟡 = 우리 사무소 글이 같은 위치에 있음(당근 글엔 주소가 없어 좌표로만 봄). 마지막 확인은 도로명을 복사해 당근 검색창에 넣어 보세요.</div>' : ''
+    root.querySelectorAll('[data-cp]').forEach(function (b) { b.onclick = function (e) { e.preventDefault(); e.stopPropagation(); copy(b.dataset.cp, '복사: ' + b.dataset.cp) } })
+  }
+  var loadOffice = async function () {
+    var j = await call('daangn-office-list')
+    var byNo = {}; (j.rows || []).forEach(function (x) { byNo[String(x.article_no)] = x })
+    ST.office = { rows: j.rows || [], daangn: Array.isArray(j.daangn) ? j.daangn : null, err: j.daangn_err || '', office: j.office || '', byNo: byNo, at: Date.now() }
+    $('#dc_office').innerHTML = '우리 기록(살아 있는 당근 글) <b>' + ST.office.rows.length + '건</b>' + (ST.office.daangn ? ' · 당근 사무소 공개 글 <b>' + ST.office.daangn.length + '건</b>' + (ST.office.office ? ' (' + esc(ST.office.office) + ')' : '') : ' · <span style="color:#b42318">당근 사무소 공개 글은 못 읽음: ' + esc(ST.office.err || '') + '</span>')
+  }
+  var geoOf = async function (q) { if (!q) return null; if (ST.geo[q] !== undefined) return ST.geo[q]; var g = null; try { var j = await call('daangn-geocode?q=' + encodeURIComponent(q)); if (j && j.ok && j.lat && j.lng) g = { lat: +j.lat, lng: +j.lng } } catch (e) { g = null } ST.geo[q] = g; return g }
+  var runOne = async function (L) {
+    L.state = 'busy'; paint()
+    try {
+      if (!L.q) throw new Error('주소가 비어 있습니다')
+      var items = []; var cands = dcAddrCandidates(L.q); var usedQ = ''
+      for (var ci = 0; ci < cands.length && !items.length; ci++) { var j = await call('address?q=' + encodeURIComponent(cands[ci])); items = (j && j.items) || []; usedQ = cands[ci] }
+      var pk = dcPickItem(L, items); L.item = pk.item; L.note = pk.note; L.multi = pk.multi
+      if (L.item && usedQ !== cands[0]) L.note = ('"' + usedQ + '"로 찾음' + (pk.note ? ' · ' + pk.note : ''))
+      if (!L.item && !pk.note.indexOf('주소를 못 찾았습니다')) L.note = '주소 검색 0건 (' + cands.map(function (c) { return '"' + c + '"' }).join(', ') + ') — 동 번지 또는 도로명 번호가 들어 있는지 확인'
+      if (L.item) {
+        L.ours = dcMatchOurs(L, L.item, ST.office ? ST.office.rows : [])
+        if (ST.useDg !== false && ST.office && ST.office.daangn && ST.office.daangn.length) {
+          var g = (await geoOf(dcLotAddr(L.item.jibunAddr))) || (await geoOf(L.item.jibunAddr)) || (await geoOf(dcRoadShort(L.item.roadAddr)))   // 건물명 뗀 지번 → 전체 지번 → 도로명
+          L.dg = dcMatchDaangn(L, g, ST.office.daangn, ST.office.byNo, L.item); L.geoOk = !!g
+          if (!g) L.dgSkipped = L.dg.length ? '' : '좌표 못 구함 · 건물명 일치도 없음 — 도로명으로 당근에서 직접 확인'
+        }
+        else { L.dg = []; L.dgSkipped = ST.useDg === false ? '(끔)' : ST.office && !ST.office.daangn ? '공개 글 못 읽음' : '' }
+      }
+    } catch (e) { L.error = e.message || String(e) }
+    L.state = 'done'; paint()
+  }
+  var run = async function () {
+    if (ST.running) return
+    var text = $('#dc_in').value; var raws = text.split(/\r?\n/).map(function (s) { return s.trim() }).filter(Boolean)
+    if (!raws.length) { $('#dc_in').focus(); return }
+    if (raws.length > 200) { alert('한 번에 200줄까지입니다 (' + raws.length + '줄)'); return }
+    ST.running = true; $('#dc_go').disabled = true; $('#dc_go').textContent = '대조 중…'
+    ST.lines = raws.map(function (r) { var p = dcParseLine(r); p.state = 'wait'; p.item = null; p.ours = []; p.dg = []; p.note = ''; p.error = ''; p.dgSkipped = ''; return p })
+    paint()
+    try { $('#dc_prog').textContent = '우리 기록·당근 사무소 글 읽는 중…'; await loadOffice() } catch (e) { $('#dc_office').innerHTML = '<span style="color:#b42318">기록을 읽지 못했습니다: ' + esc(e.message || e) + '</span>'; ST.office = ST.office || { rows: [], daangn: null, byNo: {}, err: '' } }
+    var idx = 0, done = 0; var N = ST.lines.length
+    var worker = async function () { while (idx < N) { var L = ST.lines[idx++]; await runOne(L); done++; $('#dc_prog').textContent = done + ' / ' + N } }
+    await Promise.all([worker(), worker(), worker()])
+    ST.running = false; $('#dc_go').disabled = false; $('#dc_go').textContent = '🔍 대조하기'; $('#dc_prog').textContent = '완료 ' + N + '줄'
+    paint()
+  }
+  $('#dc_go').onclick = run
+  $('#dc_in').onkeydown = function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) run() }
+  var lineText = function (L, i) { var v = dcVerdict(L); var it = L.item || {}; return (i + 1) + '. ' + L.raw + ' → ' + (it.jibunAddr || '?') + ' | ' + dcRoadShort(it.roadAddr || '') + ' | ' + v.text + ((L.ours || []).length ? ' | ' + L.ours.map(function (o) { var x = o.row; return (o.sameHo ? '[같은 호수] ' : '') + x.by + ' ' + (x.ho || '호수없음') + ' ' + (x.deal || '') + ' ' + (x.price || '') + ' 당근' + x.article_no }).join(' / ') : '') + ((L.dg || []).length ? ' | 당근공개 ' + L.dg.map(function (d) { return d.art.writer + ' ' + d.art.floor + '층 ' + d.art.no }).join(' / ') : '') }
+  $('#dc_cpj').onclick = function () { var t = ST.lines.map(function (L) { return L.item ? L.item.jibunAddr || '' : '' }).filter(Boolean).join('\n'); if (!t) return alert('아직 결과가 없습니다'); copy(t, '지번 ' + t.split('\n').length + '줄 복사') }
+  $('#dc_cpr').onclick = function () { var t = ST.lines.map(function (L) { return L.item ? dcRoadShort(L.item.roadAddr || '') : '' }).filter(Boolean).join('\n'); if (!t) return alert('아직 결과가 없습니다'); copy(t, '도로명 ' + t.split('\n').length + '줄 복사') }
+  $('#dc_cpres').onclick = function () { if (!ST.lines.length) return alert('아직 결과가 없습니다'); copy(ST.lines.map(lineText).join('\n'), '결과 복사') }
+  $('#dc_clear').onclick = function () { if (ST.running) return; ST.lines = []; ST.text = ''; $('#dc_in').value = ''; $('#dc_prog').textContent = ''; $('#dc_office').textContent = ''; paint() }
+  paint()
+  if (ST.office) $('#dc_office').innerHTML = '우리 기록 <b>' + ST.office.rows.length + '건</b>' + (ST.office.daangn ? ' · 당근 사무소 공개 글 <b>' + ST.office.daangn.length + '건</b>' : '')
+}
+/*DC_JS_END*/
+</script>
